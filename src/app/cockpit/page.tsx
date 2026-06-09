@@ -19,7 +19,7 @@ import {
 } from "lucide-react"
 
 export default function CockpitPage() {
-  const { data, isLoading, error } = useDashboard()
+  const { data, isLoading, error, source } = useDashboard()
 
   if (isLoading) {
     return (
@@ -47,7 +47,7 @@ export default function CockpitPage() {
 
   return (
     <div className="min-h-screen bg-[#F5F5F5] text-gray-900 flex flex-col select-none">
-      <StatusBar metrics={metrics} lastUpdated={last_updated} />
+      <StatusBar metrics={metrics} lastUpdated={last_updated} source={source} />
 
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200 shadow-sm">
