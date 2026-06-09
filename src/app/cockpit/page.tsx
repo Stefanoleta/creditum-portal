@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { useDashboard } from "@/hooks/useDashboard"
 import { MetricCard } from "@/components/dashboard/MetricCard"
 import { SDRRanking } from "@/components/dashboard/SDRRanking"
@@ -51,14 +52,17 @@ export default function CockpitPage() {
 
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-sm">
-            <span className="text-xs font-black text-white">CR</span>
-          </div>
-          <div>
-            <h1 className="text-base font-bold text-gray-900">Creditum Portal</h1>
-            <p className="text-xs text-gray-400">SDR Cockpit — Dashboard em tempo real</p>
-          </div>
+        <div className="flex items-center gap-4">
+          <Image
+            src="/logo-creditum.png"
+            alt="Creditum"
+            height={28}
+            width={79}
+            priority
+            className="object-contain"
+          />
+          <div className="w-px h-6 bg-gray-200" />
+          <p className="text-xs text-gray-400">SDR Cockpit — Dashboard em tempo real</p>
         </div>
         <div className="text-xs text-gray-500">
           {new Date().toLocaleDateString("pt-BR", {

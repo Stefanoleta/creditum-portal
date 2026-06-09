@@ -1,3 +1,4 @@
+import Image from "next/image"
 import Link from "next/link"
 import { ArrowRight, Monitor, Phone, BarChart3 } from "lucide-react"
 
@@ -5,13 +6,18 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[#F5F5F5] flex flex-col items-center justify-center gap-10 p-8">
       <div className="text-center">
-        <div className="flex items-center justify-center gap-3 mb-4">
-          <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center shadow-md">
-            <span className="text-xl font-black text-white">CR</span>
-          </div>
-          <h1 className="text-4xl font-black text-gray-900">Creditum Portal</h1>
+        <div className="flex items-center justify-center mb-4">
+          <Image
+            src="/logo-creditum.png"
+            alt="Creditum"
+            height={40}
+            width={112}
+            priority
+            className="object-contain"
+          />
         </div>
-        <p className="text-gray-500 text-lg">Portal de gestão interno da equipe SDR</p>
+        <h1 className="text-2xl font-bold text-gray-900 mb-1">Portal de Gestão</h1>
+        <p className="text-gray-500">Equipe SDR — uso interno</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-2xl">
