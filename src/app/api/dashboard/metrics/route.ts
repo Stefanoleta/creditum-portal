@@ -12,7 +12,7 @@ import type {
   ArgusLigacaoItem,
   ArgusTabulacaoItem,
 } from "@/types/argus"
-import type { HourlyMetric } from "@/types/dashboard"
+import type { HourlyMetric, Objection, Occurrence } from "@/types/dashboard"
 
 const BASE_URL = process.env.ARGUS_BASE_URL!
 const TOKEN    = process.env.ARGUS_TOKEN!
@@ -28,7 +28,6 @@ async function argusPost<T = Record<string, unknown>>(
       "Token-Signature": TOKEN,
     },
     body: JSON.stringify(body),
-    // Never cache — always fresh
     cache: "no-store",
   })
 
@@ -45,10 +44,44 @@ async function argusPost<T = Record<string, unknown>>(
   return json as T
 }
 
-// Build hourly buckets from the SDR performance data.
-// Argus desempenhoresumido doesn't include per-hour breakdowns, so we derive
-// the current hour's numbers from totals and fill prior hours with zeros.
-// When a proper hourly endpoint becomes available, replace this.
+// Try tabulacoesdetalhadas with idCampanha=1 fallback, then give up gracefully.
+async function fetchTabulacoes(): Promise<{
+  objections: Objection[]
+  occurrences: Occurrence[]
+  total_conversoes: number
+  tabulacoes_source: "argus" | "mock"
+}> {
+  const mock = generateMockDashboard()
+
+  // Attempt 1: standard payload
+  // Attempt 2: with idCampanha=1 (some Argus configs require campaign scope)
+  const attempts = [
+    { ultimosMinutos: 480 },
+    { ultimosMinutos: 480, idCampanha: 1 },
+  ]
+
+  for (const body of attempts) {
+    try {
+      const raw = await argusPost("report/tabulacoesdetalhadas", body)
+      const items = extractArray<ArgusTabulacaoItem>(raw, [
+        "itens", "data", "tabulacoes", "resultados",
+      ])
+      const result = adaptTabulacoes(items)
+      return { ...result, tabulacoes_source: "argus" }
+    } catch {
+      // try next attempt or fall through to mock
+    }
+  }
+
+  console.warn("[dashboard/metrics] tabulacoesdetalhadas indisponível — usando mock para objeções/ocorrências")
+  return {
+    objections: mock.top_objections,
+    occurrences: mock.occurrences,
+    total_conversoes: mock.metrics.total_conversoes,
+    tabulacoes_source: "mock",
+  }
+}
+
 function buildHourlyChart(
   totalLigacoes: number,
   totalConversoes: number,
@@ -63,18 +96,13 @@ function buildHourlyChart(
     const isCurrentHour = h === currentHour
     const minutesElapsed = isCurrentHour ? now.getMinutes() + 1 : 60
     const fraction = minutesElapsed / 60
-
-    // Distribute totals evenly as rough estimate across elapsed hours
     const hours = currentHour - startHour + 1
-    const perHourLig  = Math.round((totalLigacoes / hours) * fraction)
-    const perHourAtd  = Math.round((totalAtendidas / hours) * fraction)
-    const perHourConv = Math.round((totalConversoes / hours) * fraction)
 
     return {
       hora: `${String(h).padStart(2, "0")}h`,
-      ligacoes:   isCurrentHour ? perHourLig  : Math.round(totalLigacoes / hours),
-      contatos:   isCurrentHour ? perHourAtd  : Math.round(totalAtendidas / hours),
-      conversoes: isCurrentHour ? perHourConv : Math.round(totalConversoes / hours),
+      ligacoes:   isCurrentHour ? Math.round((totalLigacoes   / hours) * fraction) : Math.round(totalLigacoes   / hours),
+      contatos:   isCurrentHour ? Math.round((totalAtendidas  / hours) * fraction) : Math.round(totalAtendidas  / hours),
+      conversoes: isCurrentHour ? Math.round((totalConversoes / hours) * fraction) : Math.round(totalConversoes / hours),
     }
   })
 }
@@ -88,28 +116,26 @@ export async function GET() {
   }
 
   try {
-    // Fire all three Argus calls in parallel
-    const [rawDesempenho, rawLigacoes, rawTabulacoes] = await Promise.all([
-      argusPost("report/desempenhoresumido",  { ultimosMinutos: 480 }),
-      argusPost("report/ligacoesdetalhadas",  { ultimosMinutos: 5   }),
-      argusPost("report/tabulacoesdetalhadas", { ultimosMinutos: 480 }),
+    // desempenhoresumido + ligacoesdetalhadas are required — if either fails, full mock fallback.
+    // tabulacoesdetalhadas is optional — degrades gracefully to mock objections/occurrences.
+    const [rawDesempenho, rawLigacoes] = await Promise.all([
+      argusPost("report/desempenhoresumido", { ultimosMinutos: 480 }),
+      argusPost("report/ligacoesdetalhadas", { ultimosMinutos: 5   }),
     ])
 
-    // Extract arrays regardless of response envelope shape
     const desempenhoItems = extractArray<ArgusDesempenhoItem>(rawDesempenho, [
       "itens", "data", "relatorio", "agentes", "operadores",
     ])
     const ligacoesItems = extractArray<ArgusLigacaoItem>(rawLigacoes, [
       "itens", "data", "ligacoes", "chamadas",
     ])
-    const tabulacoesItems = extractArray<ArgusTabulacaoItem>(rawTabulacoes, [
-      "itens", "data", "tabulacoes", "resultados",
-    ])
 
-    // Adapt to our types
+    // Try tabulações independently — won't throw even if both attempts fail
+    const { objections, occurrences, total_conversoes, tabulacoes_source } =
+      await fetchTabulacoes()
+
     const sdrs      = adaptSDRs(desempenhoItems)
     const liveCalls = adaptLiveCalls(ligacoesItems)
-    const { objections, occurrences, total_conversoes } = adaptTabulacoes(tabulacoesItems)
     const metrics   = buildMetrics(sdrs, liveCalls, total_conversoes)
 
     const hourlyChart = buildHourlyChart(
@@ -127,17 +153,15 @@ export async function GET() {
       hourly_chart: hourlyChart,
       last_updated: new Date().toISOString(),
       source: "argus",
+      tabulacoes_source,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-
-    // Log server-side; never expose token or internal paths to client
     console.error("[dashboard/metrics] Argus error — falling back to mock:", message)
 
     const mock = generateMockDashboard()
     return NextResponse.json(
       { ...mock, source: "mock", fallback_reason: message },
-      // 200 so the client renders without error
       { status: 200 }
     )
   }
