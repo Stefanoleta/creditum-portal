@@ -1,0 +1,195 @@
+import type { DashboardData } from "@/types/dashboard"
+
+export function generateMockDashboard(): DashboardData {
+  return {
+    metrics: {
+      tme_segundos: 83,
+      tma_segundos: 245,
+      taxa_contato: 68,
+      taxa_conversao: 12,
+      total_ligacoes: 347,
+      total_conversoes: 41,
+      ligacoes_ativas: 4,
+      sdrs_disponiveis: 3,
+      sdrs_em_ligacao: 4,
+      sdrs_offline: 1,
+    },
+    sdrs: [
+      {
+        id: "1",
+        name: "Ana Beatriz",
+        status: "em_ligacao",
+        extension: "3001",
+        meta_dia: 50,
+        ligacoes_realizadas: 52,
+        ligacoes_atendidas: 36,
+        conversoes: 8,
+        tma_segundos: 210,
+        score_ia: 91,
+      },
+      {
+        id: "2",
+        name: "Carlos Mendes",
+        status: "em_ligacao",
+        extension: "3002",
+        meta_dia: 50,
+        ligacoes_realizadas: 48,
+        ligacoes_atendidas: 31,
+        conversoes: 6,
+        tma_segundos: 255,
+        score_ia: 84,
+      },
+      {
+        id: "3",
+        name: "Fernanda Lima",
+        status: "disponivel",
+        extension: "3003",
+        meta_dia: 50,
+        ligacoes_realizadas: 41,
+        ligacoes_atendidas: 28,
+        conversoes: 5,
+        tma_segundos: 198,
+        score_ia: 78,
+      },
+      {
+        id: "4",
+        name: "Rafael Costa",
+        status: "em_ligacao",
+        extension: "3004",
+        meta_dia: 50,
+        ligacoes_realizadas: 39,
+        ligacoes_atendidas: 25,
+        conversoes: 7,
+        tma_segundos: 280,
+        score_ia: 88,
+      },
+      {
+        id: "5",
+        name: "Julia Souza",
+        status: "disponivel",
+        extension: "3005",
+        meta_dia: 50,
+        ligacoes_realizadas: 44,
+        ligacoes_atendidas: 30,
+        conversoes: 6,
+        tma_segundos: 230,
+        score_ia: 82,
+      },
+      {
+        id: "6",
+        name: "Marcos Pinto",
+        status: "em_ligacao",
+        extension: "3006",
+        meta_dia: 50,
+        ligacoes_realizadas: 35,
+        ligacoes_atendidas: 22,
+        conversoes: 4,
+        tma_segundos: 310,
+        score_ia: 71,
+      },
+      {
+        id: "7",
+        name: "Larissa Neves",
+        status: "disponivel",
+        extension: "3007",
+        meta_dia: 50,
+        ligacoes_realizadas: 50,
+        ligacoes_atendidas: 34,
+        conversoes: 5,
+        tma_segundos: 220,
+        score_ia: 86,
+      },
+      {
+        id: "8",
+        name: "Diego Rocha",
+        status: "offline",
+        extension: "3008",
+        meta_dia: 50,
+        ligacoes_realizadas: 38,
+        ligacoes_atendidas: 24,
+        conversoes: 0,
+        tma_segundos: 0,
+        score_ia: 75,
+      },
+    ],
+    live_calls: [
+      {
+        id: "c1",
+        sdr_id: "1",
+        sdr_name: "Ana Beatriz",
+        school_name: "Colégio São Paulo",
+        phone: "(11) 9****-4521",
+        started_at: new Date(Date.now() - 185000).toISOString(),
+        duration_seconds: 185,
+        status: "em_andamento",
+      },
+      {
+        id: "c2",
+        sdr_id: "2",
+        sdr_name: "Carlos Mendes",
+        school_name: "Instituto Educação SP",
+        phone: "(11) 9****-7832",
+        started_at: new Date(Date.now() - 42000).toISOString(),
+        duration_seconds: 42,
+        status: "em_andamento",
+      },
+      {
+        id: "c3",
+        sdr_id: "4",
+        sdr_name: "Rafael Costa",
+        school_name: "Escola Técnica Progresso",
+        phone: "(11) 9****-1290",
+        started_at: new Date(Date.now() - 8000).toISOString(),
+        duration_seconds: 8,
+        status: "tocando",
+      },
+      {
+        id: "c4",
+        sdr_id: "6",
+        sdr_name: "Marcos Pinto",
+        school_name: "Faculdade Unimetro",
+        phone: "(11) 9****-6644",
+        started_at: new Date(Date.now() - 320000).toISOString(),
+        duration_seconds: 320,
+        status: "em_andamento",
+      },
+    ],
+    top_objections: [
+      { label: "Parcela muito alta", count: 52, percentage: 38 },
+      { label: "Vou pensar e te retorno", count: 33, percentage: 24 },
+      { label: "Já tenho financiamento", count: 21, percentage: 15 },
+      { label: "Não tenho interesse agora", count: 17, percentage: 12 },
+      { label: "Não conheço a Creditum", count: 15, percentage: 11 },
+    ],
+    hourly_chart: [
+      { hora: "08h", ligacoes: 18, conversoes: 2, contatos: 12 },
+      { hora: "09h", ligacoes: 35, conversoes: 5, contatos: 24 },
+      { hora: "10h", ligacoes: 48, conversoes: 7, contatos: 33 },
+      { hora: "11h", ligacoes: 52, conversoes: 6, contatos: 36 },
+      { hora: "12h", ligacoes: 21, conversoes: 2, contatos: 14 },
+      { hora: "13h", ligacoes: 38, conversoes: 5, contatos: 26 },
+      { hora: "14h", ligacoes: 55, conversoes: 8, contatos: 38 },
+      { hora: "15h", ligacoes: 44, conversoes: 6, contatos: 30 },
+      { hora: "16h", ligacoes: 36, conversoes: 0, contatos: 0 },
+    ],
+    last_updated: new Date().toISOString(),
+  }
+}
+
+export function simulateLiveUpdate(data: DashboardData): DashboardData {
+  const updated = JSON.parse(JSON.stringify(data)) as DashboardData
+
+  updated.metrics.total_ligacoes += Math.floor(Math.random() * 3)
+  updated.metrics.ligacoes_ativas = Math.min(
+    8,
+    Math.max(2, updated.metrics.ligacoes_ativas + (Math.random() > 0.5 ? 1 : -1))
+  )
+
+  updated.live_calls = updated.live_calls.map((call) => ({
+    ...call,
+    duration_seconds: call.duration_seconds + 5,
+  }))
+
+  updated.last_updated = new Date().toISOString()
+  return updated
+}
