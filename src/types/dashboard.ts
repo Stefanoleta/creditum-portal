@@ -44,6 +44,13 @@ export interface Objection {
   percentage: number
 }
 
+export interface Occurrence {
+  label: string
+  count: number
+  percentage: number
+  color: string // Tailwind bg-* class
+}
+
 export interface HourlyMetric {
   hora: string
   ligacoes: number
@@ -56,6 +63,7 @@ export interface DashboardData {
   sdrs: SDR[]
   live_calls: LiveCall[]
   top_objections: Objection[]
+  occurrences: Occurrence[]
   hourly_chart: HourlyMetric[]
   last_updated: string
 }

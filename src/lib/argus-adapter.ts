@@ -3,7 +3,7 @@ import type {
   ArgusLigacaoItem,
   ArgusTabulacaoItem,
 } from "@/types/argus"
-import type { SDR, SDRStatus, LiveCall, Objection, DashboardMetrics } from "@/types/dashboard"
+import type { SDR, SDRStatus, LiveCall, Objection, Occurrence, DashboardMetrics } from "@/types/dashboard"
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -99,40 +99,70 @@ export function adaptLiveCalls(items: ArgusLigacaoItem[]): LiveCall[] {
   })
 }
 
-// ─── tabulacoesdetalhadas → Objection[] + conversão total ──────────────────
+// ─── tabulacoesdetalhadas → Objection[] + Occurrence[] + conversão total ────
 
-// Labels que indicam conversão (venda/matrícula efetivada)
-const CONVERSION_LABELS = [
-  "venda", "conversao", "conversão", "matricula", "matrícula",
-  "interesse", "fechamento", "acordo", "contrato",
+// The 8 predefined occurrence categories with keyword matchers and colors.
+// Matched against tabulacaoDesc (or tabulacao/descricao) from the Argus response.
+const OCCURRENCE_CATEGORIES: {
+  label: string
+  color: string
+  keywords: string[]
+}[] = [
+  { label: "Contrato Fechado",       color: "bg-emerald-500", keywords: ["contrato", "fechado", "venda", "matric", "acordo"] },
+  { label: "Qualificação",           color: "bg-blue-500",    keywords: ["qualif"] },
+  { label: "Agendamento Confirmado", color: "bg-sky-400",     keywords: ["agend"] },
+  { label: "Cliente Desligou",       color: "bg-red-500",     keywords: ["desligou", "desconect", "ocupado", "congestion"] },
+  { label: "Não Atendeu",            color: "bg-gray-400",    keywords: ["nao atendeu", "não atendeu", "no answer", "nao atende", "não atende", "nao aten"] },
+  { label: "Caixa Postal",           color: "bg-gray-300",    keywords: ["caixa postal", "voicemail", "correio de voz", "caixa"] },
+  { label: "Retornar Ligação",       color: "bg-yellow-500",  keywords: ["retornar", "callback", "ligar depois", "retorno", "religar"] },
+  { label: "Sem Interesse",          color: "bg-orange-500",  keywords: ["sem interesse", "nao quer", "não quer", "nao tem interesse"] },
 ]
 
-function isConversion(label: string): boolean {
-  const l = label.toLowerCase()
-  return CONVERSION_LABELS.some((k) => l.includes(k))
+function matchOccurrenceCategory(label: string): typeof OCCURRENCE_CATEGORIES[number] | null {
+  const l = label.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+  for (const cat of OCCURRENCE_CATEGORIES) {
+    if (cat.keywords.some((k) => l.includes(k.normalize("NFD").replace(/[̀-ͯ]/g, "")))) {
+      return cat
+    }
+  }
+  return null
 }
 
 export function adaptTabulacoes(items: ArgusTabulacaoItem[]): {
   objections: Objection[]
+  occurrences: Occurrence[]
   total_conversoes: number
 } {
-  const totalAll = items.reduce(
-    (s, i) => s + pickNum(i.quantidade, i.qtd, i.total), 0
-  )
-
   let total_conversoes = 0
   const objectionItems: { label: string; count: number }[] = []
+  // Accumulate counts per predefined occurrence category
+  const occurrenceMap = new Map<string, number>(
+    OCCURRENCE_CATEGORIES.map((c) => [c.label, 0])
+  )
 
   for (const item of items) {
-    const label = pickStr(item.tabulacao, item.descricao, item.tipo, item.nome, "Sem tabulação")
+    // tabulacaoDesc is the primary field name used by the Argus API
+    const label = pickStr(
+      (item as Record<string, unknown>).tabulacaoDesc as string,
+      item.tabulacao,
+      item.descricao,
+      item.tipo,
+      item.nome,
+      "Sem tabulação"
+    )
     const count = pickNum(item.quantidade, item.qtd, item.total)
-    if (isConversion(label)) {
-      total_conversoes += count
+
+    const cat = matchOccurrenceCategory(label)
+    if (cat) {
+      if (cat.label === "Contrato Fechado") total_conversoes += count
+      occurrenceMap.set(cat.label, (occurrenceMap.get(cat.label) ?? 0) + count)
     } else {
+      // Unmatched tabulações fall into the objections list
       objectionItems.push({ label, count })
     }
   }
 
+  // Build Objection[]
   const objectionTotal = objectionItems.reduce((s, i) => s + i.count, 0) || 1
   const objections: Objection[] = objectionItems
     .sort((a, b) => b.count - a.count)
@@ -143,7 +173,19 @@ export function adaptTabulacoes(items: ArgusTabulacaoItem[]): {
       percentage: Math.round((o.count / objectionTotal) * 100),
     }))
 
-  return { objections, total_conversoes }
+  // Build Occurrence[] — show all 8 categories, sort by count desc
+  const occurrenceTotal = Array.from(occurrenceMap.values()).reduce((a, b) => a + b, 0) || 1
+  const occurrences: Occurrence[] = OCCURRENCE_CATEGORIES.map((cat) => {
+    const count = occurrenceMap.get(cat.label) ?? 0
+    return {
+      label: cat.label,
+      count,
+      percentage: Math.round((count / occurrenceTotal) * 100),
+      color: cat.color,
+    }
+  }).sort((a, b) => b.count - a.count)
+
+  return { objections, occurrences, total_conversoes }
 }
 
 // ─── compose full metrics ────────────────────────────────────────────────────

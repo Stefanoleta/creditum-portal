@@ -109,7 +109,7 @@ export async function GET() {
     // Adapt to our types
     const sdrs      = adaptSDRs(desempenhoItems)
     const liveCalls = adaptLiveCalls(ligacoesItems)
-    const { objections, total_conversoes } = adaptTabulacoes(tabulacoesItems)
+    const { objections, occurrences, total_conversoes } = adaptTabulacoes(tabulacoesItems)
     const metrics   = buildMetrics(sdrs, liveCalls, total_conversoes)
 
     const hourlyChart = buildHourlyChart(
@@ -123,6 +123,7 @@ export async function GET() {
       sdrs,
       live_calls: liveCalls,
       top_objections: objections,
+      occurrences,
       hourly_chart: hourlyChart,
       last_updated: new Date().toISOString(),
       source: "argus",

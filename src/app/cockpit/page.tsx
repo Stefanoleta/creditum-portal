@@ -6,6 +6,7 @@ import { MetricCard } from "@/components/dashboard/MetricCard"
 import { SDRRanking } from "@/components/dashboard/SDRRanking"
 import { LiveCalls } from "@/components/dashboard/LiveCalls"
 import { ObjectionsBar } from "@/components/dashboard/ObjectionsBar"
+import { OccurrencesBar } from "@/components/dashboard/OccurrencesBar"
 import { HourlyChart } from "@/components/dashboard/HourlyChart"
 import { StatusBar } from "@/components/dashboard/StatusBar"
 import { formatSeconds, formatPercent } from "@/lib/utils"
@@ -44,7 +45,7 @@ export default function CockpitPage() {
     )
   }
 
-  const { metrics, sdrs, live_calls, top_objections, hourly_chart, last_updated } = data
+  const { metrics, sdrs, live_calls, top_objections, occurrences, hourly_chart, last_updated } = data
 
   return (
     <div className="min-h-screen bg-[#F5F5F5] text-gray-900 flex flex-col select-none">
@@ -160,14 +161,28 @@ export default function CockpitPage() {
           </div>
         </div>
 
-        <div className="col-span-4 row-span-1 bg-white border border-gray-200 rounded-xl shadow-sm p-4 flex flex-col gap-3">
-          <div className="shrink-0">
-            <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wider">
-              Objeções Mais Comuns Hoje
-            </h2>
+        {/* Objeções + Ocorrências lado a lado dentro do mesmo col-span-4 */}
+        <div className="col-span-4 row-span-1 grid grid-cols-2 gap-3">
+          <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 flex flex-col gap-3">
+            <div className="shrink-0">
+              <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wider">
+                Objeções
+              </h2>
+            </div>
+            <div className="flex-1 flex flex-col justify-center">
+              <ObjectionsBar objections={top_objections} />
+            </div>
           </div>
-          <div className="flex-1 flex flex-col justify-center">
-            <ObjectionsBar objections={top_objections} />
+
+          <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 flex flex-col gap-3">
+            <div className="shrink-0">
+              <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wider">
+                Ocorrências
+              </h2>
+            </div>
+            <div className="flex-1 flex flex-col justify-center">
+              <OccurrencesBar occurrences={occurrences} />
+            </div>
           </div>
         </div>
 

@@ -161,6 +161,16 @@ export function generateMockDashboard(): DashboardData {
       { label: "Não tenho interesse agora", count: 17, percentage: 12 },
       { label: "Não conheço a Creditum", count: 15, percentage: 11 },
     ],
+    occurrences: [
+      { label: "Contrato Fechado",       count: 41,  percentage: 12, color: "bg-emerald-500" },
+      { label: "Qualificação",           count: 78,  percentage: 22, color: "bg-blue-500"    },
+      { label: "Agendamento Confirmado", count: 34,  percentage: 10, color: "bg-sky-400"     },
+      { label: "Cliente Desligou",       count: 29,  percentage: 8,  color: "bg-red-500"     },
+      { label: "Não Atendeu",            count: 88,  percentage: 25, color: "bg-gray-400"    },
+      { label: "Caixa Postal",           count: 45,  percentage: 13, color: "bg-gray-300"    },
+      { label: "Retornar Ligação",       count: 22,  percentage: 6,  color: "bg-yellow-500"  },
+      { label: "Sem Interesse",          count: 10,  percentage: 3,  color: "bg-orange-500"  },
+    ],
     hourly_chart: [
       { hora: "08h", ligacoes: 18, conversoes: 2, contatos: 12 },
       { hora: "09h", ligacoes: 35, conversoes: 5, contatos: 24 },
