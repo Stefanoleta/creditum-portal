@@ -2,32 +2,37 @@ import { NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase-server"
 
 const OPENAI_KEY     = process.env.OPENAI_API_KEY
+const ANTHROPIC_KEY  = process.env.ANTHROPIC_API_KEY
 const ARGUS_BASE_URL = process.env.ARGUS_BASE_URL
 const ARGUS_TOKEN    = process.env.ARGUS_TOKEN
 
-export type OpenAIStatus  = "ok" | "low" | "critical" | "error" | "unconfigured"
+export type OpenAIStatus  = "ok" | "error" | "unconfigured"
 export type ServiceStatus = "ok" | "error" | "unconfigured"
 
 export interface HealthPayload {
-  openai:      { balance: number | null; status: OpenAIStatus }
+  openai:      { status: OpenAIStatus }
+  anthropic:   { status: ServiceStatus }
   argus:       { status: ServiceStatus; latencyMs?: number }
   supabase:    { pendingCount: number; status: ServiceStatus }
   lastWebhook: { receivedAt: string | null }
 }
 
 export async function GET() {
-  const [openaiResult, argusResult, supabaseResult] = await Promise.allSettled([
+  const [openaiResult, anthropicResult, argusResult, supabaseResult] = await Promise.allSettled([
     checkOpenAI(),
+    checkAnthropic(),
     checkArgus(),
     checkSupabase(),
   ])
 
-  const openai = openaiResult.status === "fulfilled"   ? openaiResult.value   : { balance: null, status: "error" as const }
-  const argus  = argusResult.status === "fulfilled"    ? argusResult.value    : { status: "error" as const }
-  const sbData = supabaseResult.status === "fulfilled" ? supabaseResult.value : { pendingCount: 0, lastWebhook: null }
+  const openai    = openaiResult.status === "fulfilled"    ? openaiResult.value    : { status: "error" as const }
+  const anthropic = anthropicResult.status === "fulfilled" ? anthropicResult.value : { status: "error" as const }
+  const argus     = argusResult.status === "fulfilled"     ? argusResult.value     : { status: "error" as const }
+  const sbData    = supabaseResult.status === "fulfilled"  ? supabaseResult.value  : { pendingCount: 0, lastWebhook: null }
 
   return NextResponse.json<HealthPayload>({
     openai,
+    anthropic,
     argus,
     supabase: {
       pendingCount: sbData.pendingCount,
@@ -37,35 +42,37 @@ export async function GET() {
   })
 }
 
-async function checkOpenAI(): Promise<{ balance: number | null; status: OpenAIStatus }> {
-  if (!OPENAI_KEY) return { balance: null, status: "unconfigured" }
+async function checkOpenAI(): Promise<{ status: OpenAIStatus }> {
+  if (!OPENAI_KEY) return { status: "unconfigured" }
 
   try {
-    const res = await fetch("https://api.openai.com/v1/organization/balance", {
+    // /v1/models works with any valid key and doesn't require billing permissions
+    const res = await fetch("https://api.openai.com/v1/models", {
       headers: { Authorization: `Bearer ${OPENAI_KEY}` },
       signal: AbortSignal.timeout(8000),
       cache: "no-store",
     })
-
-    if (!res.ok) return { balance: null, status: "error" }
-
-    const json = await res.json() as Record<string, unknown>
-    // Response: { object: "balance", available: [{ currency: "usd", amount: 10.5 }] }
-    const available = Array.isArray(json?.available)
-      ? (json.available as Array<{ currency: string; amount: number }>)
-      : []
-    const usd = available.find((a) => a.currency === "usd")
-    const balance = usd?.amount ?? null
-
-    let status: OpenAIStatus = "ok"
-    if (balance !== null) {
-      if (balance < 2)      status = "critical"
-      else if (balance < 5) status = "low"
-    }
-
-    return { balance, status }
+    return { status: res.ok ? "ok" : "error" }
   } catch {
-    return { balance: null, status: "error" }
+    return { status: "error" }
+  }
+}
+
+async function checkAnthropic(): Promise<{ status: ServiceStatus }> {
+  if (!ANTHROPIC_KEY) return { status: "unconfigured" }
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/models", {
+      headers: {
+        "x-api-key": ANTHROPIC_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      signal: AbortSignal.timeout(8000),
+      cache: "no-store",
+    })
+    return { status: res.ok ? "ok" : "error" }
+  } catch {
+    return { status: "error" }
   }
 }
 

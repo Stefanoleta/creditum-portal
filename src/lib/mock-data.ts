@@ -185,21 +185,3 @@ export function generateMockDashboard(): DashboardData {
     last_updated: new Date().toISOString(),
   }
 }
-
-export function simulateLiveUpdate(data: DashboardData): DashboardData {
-  const updated = JSON.parse(JSON.stringify(data)) as DashboardData
-
-  updated.metrics.total_ligacoes += Math.floor(Math.random() * 3)
-  updated.metrics.ligacoes_ativas = Math.min(
-    8,
-    Math.max(2, updated.metrics.ligacoes_ativas + (Math.random() > 0.5 ? 1 : -1))
-  )
-
-  updated.live_calls = updated.live_calls.map((call) => ({
-    ...call,
-    duration_seconds: call.duration_seconds + 5,
-  }))
-
-  updated.last_updated = new Date().toISOString()
-  return updated
-}

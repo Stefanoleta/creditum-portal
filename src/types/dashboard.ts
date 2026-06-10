@@ -67,4 +67,5 @@ export interface DashboardData {
   occurrences: Occurrence[]
   hourly_chart: HourlyMetric[]
   last_updated: string
+  tabulacoes_source?: "argus" | "mock"
 }

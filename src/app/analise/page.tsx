@@ -29,7 +29,7 @@ export default function AnalisePage() {
   const [filterSdr, setFilterSdr]   = useState("todos")
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState<string | null>(null)
-  const [source, setSource]         = useState<"argus" | "mock">("mock")
+  const [source, setSource]         = useState<"argus" | "mock" | null>(null)
 
   // Webhook analyses (from /api/analyses/recent — polling every 10s)
   const [webhookAnalyses, setWebhookAnalyses]     = useState<CallAnalysis[]>([])

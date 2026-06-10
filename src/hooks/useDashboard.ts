@@ -8,11 +8,12 @@ const POLL_INTERVAL_MS = 30_000
 type DataSource = "argus" | "mock" | null
 
 export function useDashboard() {
-  const [data, setData]         = useState<DashboardData | null>(null)
-  const [isLoading, setLoading] = useState(true)
-  const [error, setError]       = useState<string | null>(null)
-  const [source, setSource]     = useState<DataSource>(null)
-  const abortRef                = useRef<AbortController | null>(null)
+  const [data, setData]                       = useState<DashboardData | null>(null)
+  const [isLoading, setLoading]               = useState(true)
+  const [error, setError]                     = useState<string | null>(null)
+  const [source, setSource]                   = useState<DataSource>(null)
+  const [tabulacoesSource, setTabulacoesSource] = useState<DataSource>(null)
+  const abortRef                              = useRef<AbortController | null>(null)
 
   const fetchMetrics = useCallback(async (isFirst = false) => {
     // Cancel any in-flight request
@@ -32,6 +33,7 @@ export function useDashboard() {
 
       setData(json)
       setSource(json.source ?? "argus")
+      setTabulacoesSource(json.tabulacoes_source ?? null)
       setError(null)
     } catch (err) {
       if ((err as Error).name === "AbortError") return
@@ -56,5 +58,5 @@ export function useDashboard() {
     return () => clearInterval(id)
   }, [fetchMetrics])
 
-  return { data, isLoading, error, source, refresh: () => fetchMetrics(false) }
+  return { data, isLoading, error, source, tabulacoesSource, refresh: () => fetchMetrics(false) }
 }

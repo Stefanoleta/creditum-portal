@@ -132,9 +132,9 @@ export async function GET() {
       "ligacoesDetalhadas", "itens", "data", "ligacoes", "chamadas",
     ])
 
-    // Total dialed = all records; attended = resultadoLigacao "ATENDIMENTO"
+    // Total dialed = all records; attended = resultadoLigacao "ATENDIMENTO" (case-insensitive)
     const totalDiscadas  = ligacoesItems.length
-    const totalAtendidas = ligacoesItems.filter((i) => i.resultadoLigacao === "ATENDIMENTO").length
+    const totalAtendidas = ligacoesItems.filter((i) => i.resultadoLigacao?.toUpperCase() === "ATENDIMENTO").length
 
     // Try tabulações independently — won't throw even if both attempts fail
     const { objections, occurrences, total_conversoes, tabulacoes_source } =
@@ -145,9 +145,9 @@ export async function GET() {
     const metrics   = buildMetrics(sdrs, liveCalls, total_conversoes, totalDiscadas)
 
     const hourlyChart = buildHourlyChart(
-      metrics.total_ligacoes,
+      totalDiscadas,
       metrics.total_conversoes,
-      metrics.total_ligacoes > 0 ? Math.round(metrics.total_ligacoes * metrics.taxa_contato / 100) : 0
+      totalAtendidas
     )
 
     return NextResponse.json({

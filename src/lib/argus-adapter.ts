@@ -72,13 +72,18 @@ export function adaptSDRs(items: ArgusDesempenhoItem[]): SDR[] {
 
 // ─── ligacoesdetalhadas → LiveCall[] ────────────────────────────────────────
 // ligacoesdetalhadas returns historical completed calls, not truly active ones.
-// Filter to human SDR calls only (exclude DISCADOR = auto-dialer) and show as
-// "recent calls" — the closest proxy for live activity the Argus API provides.
+// We keep only the last 30 min to avoid stale entries driving the CallTimer wild.
+
+const LIVE_WINDOW_MS = 30 * 60 * 1000
 
 export function adaptLiveCalls(items: ArgusLigacaoItem[]): LiveCall[] {
+  const now = Date.now()
   const sdrCalls = items.filter((item) => {
     const op = (item.usuarioOperador ?? "").toUpperCase().trim()
-    return op && op !== "DISCADOR"
+    if (!op || op === "DISCADOR") return false
+    const startStr = item.dataHoraLigacao ?? item.dataHora ?? item.horarioInicio ?? item.inicio
+    if (!startStr) return true
+    return (now - new Date(startStr).getTime()) <= LIVE_WINDOW_MS
   })
 
   return sdrCalls.map((item, idx) => {
@@ -111,13 +116,27 @@ export function adaptLiveCalls(items: ArgusLigacaoItem[]): LiveCall[] {
 // Each record = 1 call; no `quantidade` field exists in this Argus configuration.
 
 // Direct mapping from Argus categoriaTabulacao values to display labels + colors.
+// Includes both accented and unaccented variants for Argus installations that strip diacritics.
 const CATEGORIA_MAP: { key: string; label: string; color: string }[] = [
-  { key: "SUCESSO",                label: "Contrato Fechado",        color: "bg-emerald-500" },
-  { key: "AGENDAMENTO GRUPO",      label: "Agendamento Grupo",        color: "bg-blue-500"    },
-  { key: "AGENDAMENTO INDIVIDUAL", label: "Agendamento Individual",   color: "bg-sky-400"     },
-  { key: "RECUSA",                 label: "Recusa",                   color: "bg-orange-500"  },
-  { key: "NÃO TABULADO",           label: "Não Tabulado",             color: "bg-gray-400"    },
+  { key: "SUCESSO",                  label: "Contrato Fechado",        color: "bg-emerald-500" },
+  { key: "AGENDAMENTO GRUPO",        label: "Agendamento Grupo",        color: "bg-blue-500"    },
+  { key: "AGENDAMENTO INDIVIDUAL",   label: "Agendamento Individual",   color: "bg-sky-400"     },
+  { key: "AGENDAMENTO",              label: "Agendamento",              color: "bg-blue-400"    },
+  { key: "QUALIFICAÇÃO",             label: "Qualificação",             color: "bg-indigo-500"  },
+  { key: "QUALIFICACAO",             label: "Qualificação",             color: "bg-indigo-500"  },
+  { key: "RETORNAR",                 label: "Retornar Ligação",         color: "bg-yellow-500"  },
+  { key: "RETORNO",                  label: "Retornar Ligação",         color: "bg-yellow-500"  },
+  { key: "CAIXA POSTAL",             label: "Caixa Postal",             color: "bg-gray-300"    },
+  { key: "CLIENTE DESLIGOU",         label: "Cliente Desligou",         color: "bg-red-500"     },
+  { key: "NÃO ATENDEU",              label: "Não Atendeu",              color: "bg-gray-400"    },
+  { key: "NAO ATENDEU",              label: "Não Atendeu",              color: "bg-gray-400"    },
+  { key: "SEM INTERESSE",            label: "Sem Interesse",            color: "bg-orange-500"  },
+  { key: "RECUSA",                   label: "Recusa",                   color: "bg-orange-400"  },
+  { key: "NÃO TABULADO",             label: "Não Tabulado",             color: "bg-gray-200"    },
+  { key: "NAO TABULADO",             label: "Não Tabulado",             color: "bg-gray-200"    },
 ]
+
+const EXTRA_COLORS = ["bg-purple-400", "bg-teal-500", "bg-cyan-500", "bg-pink-400", "bg-lime-500"]
 
 export function adaptTabulacoes(items: ArgusTabulacaoItem[]): {
   objections: Objection[]
@@ -151,12 +170,21 @@ export function adaptTabulacoes(items: ArgusTabulacaoItem[]): {
     if (categoria === "SUCESSO") total_conversoes += count
   }
 
-  // Occurrences — one row per predefined category, sorted by count
+  // Occurrences — all categories found in actual data; known ones use CATEGORIA_MAP labels/colors.
+  // Unknown categories (campaign-specific) fall through with raw key as label.
   const occTotal = Array.from(categoriaCount.values()).reduce((a, b) => a + b, 0) || 1
-  const occurrences: Occurrence[] = CATEGORIA_MAP.map(({ key, label, color }) => {
-    const count = categoriaCount.get(key) ?? 0
-    return { label, count, percentage: Math.round((count / occTotal) * 100), color }
-  }).sort((a, b) => b.count - a.count)
+  let extraColorIdx = 0
+  const occurrences: Occurrence[] = Array.from(categoriaCount.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([key, count]) => {
+      const mapped = CATEGORIA_MAP.find((m) => m.key === key.toUpperCase().trim())
+      return {
+        label: mapped?.label ?? key,
+        count,
+        percentage: Math.round((count / occTotal) * 100),
+        color: mapped?.color ?? EXTRA_COLORS[extraColorIdx++ % EXTRA_COLORS.length],
+      }
+    })
 
   // Objections — top 5 tabulado texts
   const objTotal = Array.from(tabuladoCount.values()).reduce((a, b) => a + b, 0) || 1
@@ -186,9 +214,9 @@ export function buildMetrics(
   const available = sdrs.filter((s) => s.status === "disponivel")
   const offline = sdrs.filter((s) => s.status === "offline")
 
-  // total_ligacoes = SDR-handled calls (qtdeAtendimentoTotal from desempenhoresumido)
+  // total_ligacoes = all calls dialed by the system (from ligacoesdetalhadas length)
   const totalAtendidas = sdrs.reduce((s, r) => s + r.ligacoes_atendidas, 0)
-  const totalLigacoes  = totalAtendidas
+  const totalLigacoes  = totalDiscadasOverride ?? totalAtendidas
 
   const tmaValues = active.filter((s) => s.tma_segundos > 0).map((s) => s.tma_segundos)
   const tma = tmaValues.length ? Math.round(tmaValues.reduce((a, b) => a + b, 0) / tmaValues.length) : 0

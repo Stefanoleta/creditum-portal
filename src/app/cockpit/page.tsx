@@ -23,7 +23,7 @@ import {
 } from "lucide-react"
 
 export default function CockpitPage() {
-  const { data, isLoading, error, source } = useDashboard()
+  const { data, isLoading, error, source, tabulacoesSource } = useDashboard()
 
   if (isLoading) {
     return (
@@ -165,10 +165,13 @@ export default function CockpitPage() {
         {/* Objeções + Ocorrências lado a lado dentro do mesmo col-span-4 */}
         <div className="col-span-4 row-span-1 grid grid-cols-2 gap-3">
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 flex flex-col gap-3">
-            <div className="shrink-0">
+            <div className="shrink-0 flex items-center justify-between">
               <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wider">
                 Objeções
               </h2>
+              {tabulacoesSource === "mock" && source !== "mock" && (
+                <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">demo</span>
+              )}
             </div>
             <div className="flex-1 flex flex-col justify-center">
               <ObjectionsBar objections={top_objections} />
@@ -176,10 +179,13 @@ export default function CockpitPage() {
           </div>
 
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 flex flex-col gap-3">
-            <div className="shrink-0">
+            <div className="shrink-0 flex items-center justify-between">
               <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wider">
                 Ocorrências
               </h2>
+              {tabulacoesSource === "mock" && source !== "mock" && (
+                <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">demo</span>
+              )}
             </div>
             <div className="flex-1 flex flex-col justify-center">
               <OccurrencesBar occurrences={occurrences} />

@@ -1,5 +1,4 @@
 // Mock data for Módulo 3 — Relatórios
-// 15 working days: May 19–23, May 26–30, Jun 2–6, 2025
 // RAF = Rafael Costa (high performer), MARC = Marcos Pinto (low performer)
 
 export interface DailyRow {
@@ -46,24 +45,50 @@ export interface ReportsPayload {
   updated_at: string
 }
 
+// ─── helpers ──────────────────────────────────────────────────────────────────
+
+const PT_DAY = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"]
+
+function getRecentWorkingDays(count: number): Array<{ date: string; wd: string; dd: string }> {
+  const days: Array<{ date: string; wd: string; dd: string }> = []
+  const cursor = new Date()
+  cursor.setHours(0, 0, 0, 0)
+  cursor.setDate(cursor.getDate() - 1) // start from yesterday
+
+  while (days.length < count) {
+    const dow = cursor.getDay()
+    if (dow > 0 && dow < 6) {
+      const mm = String(cursor.getMonth() + 1).padStart(2, "0")
+      const dd = String(cursor.getDate()).padStart(2, "0")
+      days.unshift({
+        date: cursor.toISOString().split("T")[0],
+        wd: PT_DAY[dow],
+        dd: `${dd}/${mm}`,
+      })
+    }
+    cursor.setDate(cursor.getDate() - 1)
+  }
+  return days
+}
+
 // ─── base datasets ────────────────────────────────────────────────────────────
 
-const RAW_DAILY = [
-  { date: "2025-05-19", wd: "Seg", dd: "19/05", l: 348, a: 224, c: 31, tma: 231 },
-  { date: "2025-05-20", wd: "Ter", dd: "20/05", l: 337, a: 217, c: 28, tma: 244 },
-  { date: "2025-05-21", wd: "Qua", dd: "21/05", l: 361, a: 235, c: 35, tma: 226 },
-  { date: "2025-05-22", wd: "Qui", dd: "22/05", l: 329, a: 209, c: 27, tma: 238 },
-  { date: "2025-05-23", wd: "Sex", dd: "23/05", l: 294, a: 183, c: 21, tma: 252 },
-  { date: "2025-05-26", wd: "Seg", dd: "26/05", l: 356, a: 228, c: 33, tma: 229 },
-  { date: "2025-05-27", wd: "Ter", dd: "27/05", l: 343, a: 221, c: 30, tma: 241 },
-  { date: "2025-05-28", wd: "Qua", dd: "28/05", l: 371, a: 242, c: 38, tma: 219 },
-  { date: "2025-05-29", wd: "Qui", dd: "29/05", l: 338, a: 213, c: 29, tma: 237 },
-  { date: "2025-05-30", wd: "Sex", dd: "30/05", l: 301, a: 188, c: 23, tma: 248 },
-  { date: "2025-06-02", wd: "Seg", dd: "02/06", l: 362, a: 233, c: 34, tma: 223 },
-  { date: "2025-06-03", wd: "Ter", dd: "03/06", l: 349, a: 226, c: 32, tma: 235 },
-  { date: "2025-06-04", wd: "Qua", dd: "04/06", l: 375, a: 248, c: 41, tma: 217 },
-  { date: "2025-06-05", wd: "Qui", dd: "05/06", l: 321, a: 204, c: 26, tma: 243 },
-  { date: "2025-06-06", wd: "Sex", dd: "06/06", l: 308, a: 191, c: 22, tma: 251 },
+const RAW_METRICS = [
+  { l: 348, a: 224, c: 31, tma: 231 },
+  { l: 337, a: 217, c: 28, tma: 244 },
+  { l: 361, a: 235, c: 35, tma: 226 },
+  { l: 329, a: 209, c: 27, tma: 238 },
+  { l: 294, a: 183, c: 21, tma: 252 },
+  { l: 356, a: 228, c: 33, tma: 229 },
+  { l: 343, a: 221, c: 30, tma: 241 },
+  { l: 371, a: 242, c: 38, tma: 219 },
+  { l: 338, a: 213, c: 29, tma: 237 },
+  { l: 301, a: 188, c: 23, tma: 248 },
+  { l: 362, a: 233, c: 34, tma: 223 },
+  { l: 349, a: 226, c: 32, tma: 235 },
+  { l: 375, a: 248, c: 41, tma: 217 },
+  { l: 321, a: 204, c: 26, tma: 243 },
+  { l: 308, a: 191, c: 22, tma: 251 },
 ]
 
 const RAW_HOURLY = [
@@ -81,12 +106,15 @@ const RAW_HOURLY = [
 
 // ─── exported bases ───────────────────────────────────────────────────────────
 
-function makeDailyRow(r: typeof RAW_DAILY[0]): DailyRow {
-  const taxa_contato = Math.round((r.a / r.l) * 1000) / 10
+type RawMetric = typeof RAW_METRICS[0]
+type DayInfo   = ReturnType<typeof getRecentWorkingDays>[0]
+
+function makeDailyRow(r: RawMetric, day: DayInfo): DailyRow {
+  const taxa_contato   = Math.round((r.a / r.l) * 1000) / 10
   const taxa_conversao = Math.round((r.c / r.a) * 1000) / 10
   return {
-    date: r.date,
-    dia: `${r.wd} ${r.dd}`,
+    date: day.date,
+    dia: `${day.wd} ${day.dd}`,
     ligacoes: r.l,
     atendidas: r.a,
     conversoes: r.c,
@@ -108,7 +136,9 @@ function makeHourlyRow(r: typeof RAW_HOURLY[0]): HourlyRow {
   }
 }
 
-export const DAILY_BASE: DailyRow[] = RAW_DAILY.map(makeDailyRow)
+export const DAILY_BASE: DailyRow[] = getRecentWorkingDays(15).map((day, i) =>
+  makeDailyRow(RAW_METRICS[i], day)
+)
 
 export const HR_BASE: HourlyRow[] = RAW_HOURLY.map(makeHourlyRow)
 
@@ -141,7 +171,13 @@ export const MARC_BASE: OperatorRow = {
 // ─── full mock payload ────────────────────────────────────────────────────────
 
 export function generateMockReports(): ReportsPayload {
-  const hoje = makeDailyRow({ date: "2025-06-09", wd: "Seg", dd: "09/06", l: 347, a: 221, c: 41, tma: 228 })
+  const todayDate = new Date()
+  const todayDay  = getRecentWorkingDays(1)[0] ?? {
+    date: todayDate.toISOString().split("T")[0],
+    wd: PT_DAY[todayDate.getDay()],
+    dd: `${String(todayDate.getDate()).padStart(2, "0")}/${String(todayDate.getMonth() + 1).padStart(2, "0")}`,
+  }
+  const hoje = makeDailyRow({ l: 347, a: 221, c: 41, tma: 228 }, todayDay)
 
   const allOperators: OperatorRow[] = [
     { id: "ana-001",   name: "Ana Beatriz",   meta_dia: 50, ligacoes_realizadas: 52, ligacoes_atendidas: 36, conversoes: 8, tma_segundos: 210, score_ia: 91, taxa_contato: 69.2, taxa_conversao: 22.2 },
