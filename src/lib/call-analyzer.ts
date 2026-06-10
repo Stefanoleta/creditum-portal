@@ -90,15 +90,46 @@ function detectAudioFormat(buffer: Buffer, contentTypeHint: string): { filename:
 export async function transcribeAudio(base64Audio: string, contentTypeHint = ""): Promise<string> {
   if (!openaiClient) throw new Error("OPENAI_API_KEY não configurado")
   const buffer = Buffer.from(base64Audio, "base64")
-  const { filename, mimeType } = detectAudioFormat(buffer, contentTypeHint)
-  const file = new File([buffer], filename, { type: mimeType })
-  const result = await openaiClient.audio.transcriptions.create({
-    file,
-    model: "whisper-1",
-    language: "pt",
-    response_format: "text",
-  })
-  return typeof result === "string" ? result : (result as { text?: string }).text ?? ""
+
+  // Try the detected format first, then common fallbacks in order.
+  // Whisper returns HTTP 400 "could not be decoded" when the MIME type or container
+  // doesn't match the actual bytes — retry with other formats before giving up.
+  const primary = detectAudioFormat(buffer, contentTypeHint)
+  const candidates = [
+    primary,
+    { filename: "gravacao.wav",  mimeType: "audio/wav"  },
+    { filename: "gravacao.mp3",  mimeType: "audio/mpeg" },
+    { filename: "gravacao.webm", mimeType: "audio/webm" },
+  ].filter((f, i, arr) => arr.findIndex((x) => x.mimeType === f.mimeType) === i)
+
+  let lastError: Error | undefined
+  for (const { filename, mimeType } of candidates) {
+    try {
+      const file = new File([buffer], filename, { type: mimeType })
+      const result = await openaiClient.audio.transcriptions.create({
+        file,
+        model: "whisper-1",
+        language: "pt",
+        response_format: "text",
+      })
+      return typeof result === "string" ? result : (result as { text?: string }).text ?? ""
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg.includes("could not be decoded") || msg.includes("format is not supported") || msg.includes("400")) {
+        lastError = err instanceof Error ? err : new Error(msg)
+        continue  // try next format
+      }
+      throw err  // auth / rate-limit / network — don't retry
+    }
+  }
+
+  // All formats failed — include magic bytes so the caller can diagnose the container
+  const hexBytes = buffer.subarray(0, 16).toString("hex").replace(/(.{2})/g, "$1 ").trim()
+  throw new Error(
+    `Whisper rejeitou todos os formatos (wav, mp3, webm). ` +
+    `Bytes iniciais do arquivo: [${hexBytes}]. ` +
+    `Último erro: ${lastError?.message ?? "desconhecido"}`
+  )
 }
 
 // ─── Analyze transcript with Claude Opus 4.8 ────────────────────────────────
