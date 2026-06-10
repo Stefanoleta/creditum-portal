@@ -167,38 +167,26 @@ async function checkSupabase(): Promise<{
     .select("*", { count: "exact", head: true })
     .eq("status", "pendente")
 
-  // Step 3: get last row — try analisado_em first, fall back to created_at
-  const lastByAnalisado = await supabase
+  // Step 3: get last row ordered by started_at
+  const lastRes = await supabase
     .from("call_analyses")
-    .select("analisado_em")
-    .order("analisado_em", { ascending: false })
+    .select("started_at")
+    .order("started_at", { ascending: false })
     .limit(1)
 
   let lastWebhook: string | null = null
   let lastError: string | undefined
 
-  if (!lastByAnalisado.error) {
-    lastWebhook = (lastByAnalisado.data?.[0]?.analisado_em as string | undefined) ?? null
+  if (!lastRes.error) {
+    lastWebhook = (lastRes.data?.[0]?.started_at as string | undefined) ?? null
   } else {
-    lastError = `order/analisado_em: ${lastByAnalisado.error.message}`
-    // Try fallback column
-    const lastByCreated = await supabase
-      .from("call_analyses")
-      .select("created_at")
-      .order("created_at", { ascending: false })
-      .limit(1)
-    if (!lastByCreated.error) {
-      lastWebhook = (lastByCreated.data?.[0]?.created_at as string | undefined) ?? null
-      lastError += " | fallback created_at: ok"
-    } else {
-      lastError += ` | fallback created_at: ${lastByCreated.error.message}`
-    }
+    lastError = lastRes.error.message
   }
 
   return {
     pendingCount: pendingRes.count ?? 0,
     lastWebhook,
-    error:   lastError ?? (pendingRes.error?.message),
+    error:   lastError ?? pendingRes.error?.message,
     columns,
   }
 }

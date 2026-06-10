@@ -31,7 +31,7 @@ export async function updateAnalysis(
   if (!supabase) return
   const { error } = await supabase
     .from("call_analyses")
-    .update({ ...patch, analisado_em: new Date().toISOString() })
+    .update(patch)
     .eq("call_id", call_id)
   if (error) console.error("[supabase] updateAnalysis error:", error.message)
 }
@@ -44,10 +44,10 @@ export async function fetchRecentAnalyses(date?: string): Promise<DbAnalysis[]> 
   const { data, error } = await supabase
     .from("call_analyses")
     .select("*")
-    .gte("analisado_em", `${targetDate}T00:00:00`)
-    .lte("analisado_em", `${targetDate}T23:59:59`)
+    .gte("started_at", `${targetDate}T00:00:00`)
+    .lte("started_at", `${targetDate}T23:59:59`)
     .neq("status", "pendente")          // exclude pending from main list
-    .order("analisado_em", { ascending: false })
+    .order("started_at", { ascending: false })
     .limit(50)
   if (error) {
     console.error("[supabase] fetchRecentAnalyses error:", error.message)
@@ -64,7 +64,7 @@ export async function fetchPendingAnalyses(): Promise<DbAnalysis[]> {
     .from("call_analyses")
     .select("*")
     .eq("status", "pendente")
-    .order("analisado_em", { ascending: false })
+    .order("started_at", { ascending: false })
     .limit(20)
   if (error) {
     console.error("[supabase] fetchPendingAnalyses error:", error.message)
