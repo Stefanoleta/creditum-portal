@@ -55,40 +55,40 @@ function matchesAllowlist(name: string, allowlist: string[]): boolean {
 
 export function adaptSDRs(items: ArgusDesempenhoItem[], allowlist: string[] = DEFAULT_VENDAS): SDR[] {
   return items
-  .filter((item) => {
-    const name = pickStr(item.nomeUsuario, item.nomeAgente, item.nome, "")
-    return matchesAllowlist(name, allowlist)
-  })
-  .map((item, idx) => {
-    const name = pickStr(item.nomeUsuario, item.nomeAgente, item.nome, `SDR ${idx + 1}`)
-    const ramal = pickStr(item.ramal, item.ramalAgente, `300${idx + 1}`)
+    .filter((item) => {
+      const name = pickStr(item.nomeUsuario, item.nomeAgente, item.nome, "")
+      return matchesAllowlist(name, allowlist)
+    })
+    .map((item, idx) => {
+      const name = pickStr(item.nomeUsuario, item.nomeAgente, item.nome, `SDR ${idx + 1}`)
+      const ramal = pickStr(item.ramal, item.ramalAgente, `300${idx + 1}`)
 
-    // dataHoraLogout = "1899-12-30..." is Argus's sentinel for "not yet logged out"
-    const logoutStr = item.dataHoraLogout ?? ""
-    const isLoggedIn = !logoutStr || new Date(logoutStr).getFullYear() < 1900
-    // desempenhoresumido is a day-summary, not real-time — can't distinguish em_ligacao vs disponivel
-    const status: SDRStatus = isLoggedIn ? "disponivel" : "offline"
+      // dataHoraLogout = "1899-12-30..." is Argus's sentinel for "not yet logged out"
+      const logoutStr = item.dataHoraLogout ?? ""
+      const isLoggedIn = !logoutStr || new Date(logoutStr).getFullYear() < 1900
+      // desempenhoresumido is a day-summary, not real-time — can't distinguish em_ligacao vs disponivel
+      const status: SDRStatus = isLoggedIn ? "disponivel" : "offline"
 
-    // qtdeAtendimentoTotal = calls Rafaella received from the dialer and handled (= atendidas)
-    const atendidas  = pickNum(item.qtdeAtendimentoTotal, item.qtdeAtendimentoAutomatico, item.qtdAtendidas, item.ligacoesAtendidas, item.totalAtendidas)
-    const realizadas = atendidas
-    const conversoes = pickNum(item.conversoes, item.qtdConversoes)
-    const tma        = pickNum(item.tempoMedioAtendimento, item.tma)
-    const tme        = pickNum(item.tempoMedioEspera, item.tme)
+      // qtdeAtendimentoTotal = calls received from the dialer and handled (= atendidas)
+      const atendidas  = pickNum(item.qtdeAtendimentoTotal, item.qtdeAtendimentoAutomatico, item.qtdAtendidas, item.ligacoesAtendidas, item.totalAtendidas)
+      const realizadas = atendidas
+      const conversoes = pickNum(item.conversoes, item.qtdConversoes)
+      const tma        = pickNum(item.tempoMedioAtendimento, item.tma)
+      const tme        = pickNum(item.tempoMedioEspera, item.tme)
 
-    return {
-      id: `${ramal}-${name}`,
-      name,
-      status,
-      extension: ramal,
-      meta_dia: 50,
-      ligacoes_realizadas: realizadas,
-      ligacoes_atendidas: atendidas,
-      conversoes,
-      tma_segundos: tma,
-      tme_segundos: tme,
-    } satisfies SDR
-  })
+      return {
+        id: `${ramal}-${name}`,
+        name,
+        status,
+        extension: ramal,
+        meta_dia: 50,
+        ligacoes_realizadas: realizadas,
+        ligacoes_atendidas: atendidas,
+        conversoes,
+        tma_segundos: tma,
+        tme_segundos: tme,
+      } satisfies SDR
+    })
 }
 
 // ─── ligacoesdetalhadas → LiveCall[] ────────────────────────────────────────
@@ -111,7 +111,7 @@ export function adaptLiveCalls(items: ArgusLigacaoItem[], allowlist: string[] = 
   // Dedup: keep only the most recent call per SDR name
   const latestBySdr = new Map<string, ArgusLigacaoItem>()
   for (const item of sdrCalls) {
-    const sdrName = ((item.usuarioOperador ?? item.nomeAgente ?? item.nome ?? item.agente ?? "")).trim()
+    const sdrName = (item.usuarioOperador ?? item.nomeAgente ?? item.nome ?? item.agente ?? "").trim()
     const existing = latestBySdr.get(sdrName)
     if (!existing) {
       latestBySdr.set(sdrName, item)
@@ -124,17 +124,14 @@ export function adaptLiveCalls(items: ArgusLigacaoItem[], allowlist: string[] = 
   const dedupedCalls = Array.from(latestBySdr.values())
 
   return dedupedCalls.map((item, idx) => {
-    // usuarioOperador is the confirmed field name for the agent
     const sdrName = pickStr(item.usuarioOperador, item.nomeAgente, item.nome, item.agente, "SDR")
     const phone   = maskPhone(pickStr(item.telefone, item.numero, item.numeroDiscado, ""))
     const durSec  = pickNum(item.tempoSegundos, item.duracao, item.tempoDuracao, item.tempoDecorrido)
-    // nomeCliente = lead name; lote = campaign batch
     const school  = pickStr(item.nomeCliente, item.escola, item.campanha, item.lote, item.fila, "—")
 
     const startedAt = pickStr(item.dataHoraLigacao, item.dataHora, item.horarioInicio, item.inicio)
       || new Date(Date.now() - durSec * 1000).toISOString()
 
-    // All calls in ligacoesdetalhadas are completed — mark as em_andamento for UI display
     return {
       id: `${item.idStatusLigacao ?? idx}-${sdrName}-${idx}`,
       sdr_id: String(item.idUsuario ?? idx),
@@ -181,14 +178,11 @@ export function adaptTabulacoes(items: ArgusTabulacaoItem[]): {
   total_conversoes: number
 } {
   let total_conversoes = 0
-  // Count by categoriaTabulacao for occurrences panel
   const categoriaCount = new Map<string, number>()
-  // Count by tabulado text for objections panel
   const tabuladoCount  = new Map<string, number>()
 
   for (const item of items) {
     const categoria = pickStr(item.categoriaTabulacao, "NÃO TABULADO")
-    // tabulado is the confirmed field name; fall back to legacy alternatives
     const tabulado  = pickStr(
       item.tabulado,
       (item as Record<string, unknown>).tabulacaoDesc as string | undefined,
@@ -196,7 +190,6 @@ export function adaptTabulacoes(items: ArgusTabulacaoItem[]): {
       item.descricao,
       "Sem tabulação"
     )
-    // Each record = 1 call (quantidade is null in this Argus config)
     const count = pickNum(item.quantidade, item.qtd, item.total) || 1
 
     categoriaCount.set(categoria, (categoriaCount.get(categoria) ?? 0) + count)
@@ -207,8 +200,6 @@ export function adaptTabulacoes(items: ArgusTabulacaoItem[]): {
     if (categoria === "SUCESSO") total_conversoes += count
   }
 
-  // Occurrences — all categories found in actual data; known ones use CATEGORIA_MAP labels/colors.
-  // Unknown categories (campaign-specific) fall through with raw key as label.
   const occTotal = Array.from(categoriaCount.values()).reduce((a, b) => a + b, 0) || 1
   let extraColorIdx = 0
   const occurrences: Occurrence[] = Array.from(categoriaCount.entries())
@@ -223,7 +214,6 @@ export function adaptTabulacoes(items: ArgusTabulacaoItem[]): {
       }
     })
 
-  // Objections — top 5 tabulado texts
   const objTotal = Array.from(tabuladoCount.values()).reduce((a, b) => a + b, 0) || 1
   const objections: Objection[] = Array.from(tabuladoCount.entries())
     .sort((a, b) => b[1] - a[1])
@@ -248,23 +238,20 @@ export function buildMetrics(
   /** Total calls answered (resultadoLigacao=ATENDIMENTO), from ligacoesdetalhadas filter */
   totalAtendidasOverride?: number
 ): DashboardMetrics {
-  const active = sdrs.filter((s) => s.status !== "offline")
-  const inCall = sdrs.filter((s) => s.status === "em_ligacao")
+  const active    = sdrs.filter((s) => s.status !== "offline")
+  const inCall    = sdrs.filter((s) => s.status === "em_ligacao")
   const available = sdrs.filter((s) => s.status === "disponivel")
-  const offline = sdrs.filter((s) => s.status === "offline")
+  const offline   = sdrs.filter((s) => s.status === "offline")
 
-  // Prefer totalAtendidasOverride (from ligacoesdetalhadas ATENDIMENTO filter) over SDR aggregate
   const totalAtendidas = totalAtendidasOverride ?? sdrs.reduce((s, r) => s + r.ligacoes_atendidas, 0)
   const totalLigacoes  = totalDiscadasOverride ?? totalAtendidas
 
   const tmaValues = active.filter((s) => s.tma_segundos > 0).map((s) => s.tma_segundos)
   const tma = tmaValues.length ? Math.round(tmaValues.reduce((a, b) => a + b, 0) / tmaValues.length) : 0
 
-  // TME from desempenhoresumido.tempoMedioEspera (stored in SDR.tme_segundos)
   const tmeValues = active.filter((s) => s.tme_segundos && s.tme_segundos > 0).map((s) => s.tme_segundos!)
   const tme = tmeValues.length ? Math.round(tmeValues.reduce((a, b) => a + b, 0) / tmeValues.length) : 0
 
-  // Taxa de contato = SDR atendimentos / total discadas (DISCADOR + SDR) from ligacoesdetalhadas
   const taxa_contato = totalDiscadasOverride && totalDiscadasOverride > 0
     ? (totalAtendidas / totalDiscadasOverride) * 100
     : 0
@@ -287,7 +274,6 @@ export function buildMetrics(
 // ─── extract array from any Argus response shape ────────────────────────────
 
 export function extractArray<T>(raw: Record<string, unknown>, keys: string[]): T[] {
-  // Some responses return the array directly at root
   if (Array.isArray(raw)) return raw as T[]
 
   for (const key of keys) {
@@ -295,7 +281,6 @@ export function extractArray<T>(raw: Record<string, unknown>, keys: string[]): T
     if (Array.isArray(val) && val.length > 0) return val as T[]
   }
 
-  // Last resort: find any array value in the response
   for (const val of Object.values(raw)) {
     if (Array.isArray(val)) return val as T[]
   }

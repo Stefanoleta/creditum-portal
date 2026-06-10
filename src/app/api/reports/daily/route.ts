@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { generateMockReports } from "@/lib/mock-reports"
 import type { OperatorRow, HourlyRow } from "@/lib/mock-reports"
-import { adaptSDRs, adaptTabulacoes, extractArray } from "@/lib/argus-adapter"
+import { adaptSDRs, adaptTabulacoes, extractArray, getVendasAllowlist } from "@/lib/argus-adapter"
 import type { ArgusDesempenhoItem, ArgusTabulacaoItem } from "@/types/argus"
 import { HR_BASE, DAILY_BASE } from "@/lib/mock-reports"
 
@@ -40,9 +40,10 @@ export async function GET() {
   }
 
   try {
-    const [rawDesempenho, rawTabulacoes] = await Promise.all([
+    const [rawDesempenho, rawTabulacoes, rawLigacoes] = await Promise.all([
       argusPost("report/desempenhoresumido", { ultimosMinutos: 480 }),
       argusPost("report/tabulacoesdetalhadas", { ultimosMinutos: 480, idCampanha: CAMPAIGN_ID }),
+      argusPost("report/ligacoesdetalhadas",   { ultimosMinutos: 480, idCampanha: CAMPAIGN_ID }),
     ])
 
     const desempenhoItems = extractArray<ArgusDesempenhoItem>(rawDesempenho, [
@@ -51,8 +52,21 @@ export async function GET() {
     const tabulacaoItems = extractArray<ArgusTabulacaoItem>(rawTabulacoes, [
       "itens", "data", "tabulacoes",
     ])
+    const ligacoesItems = extractArray<{ idGrupoUsuario?: number | string; usuarioOperador?: string }>(
+      rawLigacoes, ["ligacoesDetalhadas", "itens", "data", "ligacoes"]
+    )
 
-    const sdrs = adaptSDRs(desempenhoItems)
+    // Vendas SDR names from ligacoesdetalhadas (idGrupoUsuario=2 = Vendas-Creditum)
+    const vendasFromData = ligacoesItems
+      .filter((i) => Number(i.idGrupoUsuario) === 2)
+      .map((i) => (i.usuarioOperador ?? "").toUpperCase().trim())
+      .filter((n, idx, arr) => n && n !== "DISCADOR" && arr.indexOf(n) === idx)
+
+    const vendasList = vendasFromData.length > 0
+      ? vendasFromData
+      : getVendasAllowlist(process.env.ARGUS_SDR_ALLOWLIST)
+
+    const sdrs = adaptSDRs(desempenhoItems, vendasList)
     const { total_conversoes } = adaptTabulacoes(tabulacaoItems)
 
     const ligacoes    = sdrs.reduce((s, r) => s + r.ligacoes_realizadas, 0)

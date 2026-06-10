@@ -86,6 +86,10 @@ export interface ArgusLigacaoItem {
   horarioInicio?: string
   inicio?: string
 
+  // Group — confirmed from ligacoesdetalhadas (1=Cobrança, 2=Vendas-Creditum)
+  idGrupoUsuario?: number | string
+  grupoOrigem?: string
+
   escola?: string
   campanha?: string
   fila?: string

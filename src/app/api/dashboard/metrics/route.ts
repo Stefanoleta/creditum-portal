@@ -47,53 +47,31 @@ async function argusPost<T = Record<string, unknown>>(
   return json as T
 }
 
-// Try tabulacoesdetalhadas with idCampanha=1 fallback, then give up gracefully.
-async function fetchTabulacoes(): Promise<{
+// tabulacoesdetalhadas requires idCampanha — degrade gracefully if unavailable.
+async function fetchTabulacoes(campaignId: number): Promise<{
   objections: Objection[]
   occurrences: Occurrence[]
   total_conversoes: number
   tabulacoes_source: "argus" | "mock"
 }> {
-  const mock = generateMockDashboard()
-
-  // Attempt 1: standard payload
-  // Attempt 2: with idCampanha=CAMPAIGN_ID (some Argus configs require campaign scope)
-  // Attempt 3: broader window
-  const attempts = [
-    { ultimosMinutos: 480 },
-    { ultimosMinutos: 480, idCampanha: CAMPAIGN_ID },
-    { ultimosMinutos: 480, idCampanha: 1 },
-  ]
-
-  for (const body of attempts) {
-    try {
-      const raw = await argusPost("report/tabulacoesdetalhadas", body)
-      // Diagnostic log: show top-level keys and sample of first item
-      const keys = Object.keys(raw as object)
-      const anyArray = keys.find((k) => Array.isArray((raw as Record<string, unknown>)[k]))
-      const firstItem = anyArray ? ((raw as Record<string, unknown>)[anyArray] as unknown[])[0] : null
-      console.log("[tabulacoes] payload keys:", keys, "| array key:", anyArray ?? "none", "| first item:", JSON.stringify(firstItem ?? raw).slice(0, 300))
-
-      const items = extractArray<ArgusTabulacaoItem>(raw, [
-        "itens", "data", "tabulacoes", "resultados", "tabulacoesDetalhadas",
-      ])
-      if (items.length === 0) {
-        console.warn("[tabulacoes] attempt", JSON.stringify(body), "→ 0 items — tentando próximo")
-        continue
-      }
-      const result = adaptTabulacoes(items)
-      return { ...result, tabulacoes_source: "argus" }
-    } catch (err) {
-      console.warn("[tabulacoes] attempt", JSON.stringify(body), "→ erro:", err instanceof Error ? err.message : err)
+  try {
+    const raw = await argusPost("report/tabulacoesdetalhadas", {
+      ultimosMinutos: 480,
+      idCampanha: campaignId,
+    })
+    const items = extractArray<ArgusTabulacaoItem>(raw, [
+      "itens", "data", "tabulacoes", "resultados", "tabulacoesDetalhadas",
+    ])
+    return { ...adaptTabulacoes(items), tabulacoes_source: "argus" }
+  } catch {
+    console.warn("[dashboard/metrics] tabulacoesdetalhadas indisponível — usando mock")
+    const mock = generateMockDashboard()
+    return {
+      objections: mock.top_objections,
+      occurrences: mock.occurrences,
+      total_conversoes: mock.metrics.total_conversoes,
+      tabulacoes_source: "mock",
     }
-  }
-
-  console.warn("[dashboard/metrics] tabulacoesdetalhadas indisponível — usando mock para objeções/ocorrências")
-  return {
-    objections: mock.top_objections,
-    occurrences: mock.occurrences,
-    total_conversoes: mock.metrics.total_conversoes,
-    tabulacoes_source: "mock",
   }
 }
 
@@ -135,7 +113,6 @@ export async function GET() {
     // tabulacoesdetalhadas is optional — degrades gracefully to mock objections/occurrences.
     const [rawDesempenho, rawLigacoes] = await Promise.all([
       argusPost("report/desempenhoresumido", { ultimosMinutos: 480 }),
-      // 480 min window: needed for accurate taxa de contato (total dialed / attended)
       argusPost("report/ligacoesdetalhadas", { ultimosMinutos: 480, idCampanha: CAMPAIGN_ID }),
     ])
 
@@ -146,16 +123,16 @@ export async function GET() {
       "ligacoesDetalhadas", "itens", "data", "ligacoes", "chamadas",
     ])
 
-    // Total dialed = all records; attended = resultadoLigacao "ATENDIMENTO" (case-insensitive)
+    // Total dialed = all records; attended = resultadoLigacao "ATENDIMENTO"
     const totalDiscadas  = ligacoesItems.length
     const totalAtendidas = ligacoesItems.filter((i) => i.resultadoLigacao?.toUpperCase() === "ATENDIMENTO").length
 
-    // Try tabulações independently — won't throw even if both attempts fail
+    // Try tabulações independently — won't throw even if unavailable
     const { objections, occurrences, total_conversoes, tabulacoes_source } =
-      await fetchTabulacoes()
+      await fetchTabulacoes(CAMPAIGN_ID)
 
     const sdrs      = adaptSDRs(desempenhoItems, VENDAS_LIST)
-    const liveCalls = adaptLiveCalls(ligacoesItems, VENDAS_LIST)  // filtered to Vendas SDRs only
+    const liveCalls = adaptLiveCalls(ligacoesItems, VENDAS_LIST)
     const metrics   = buildMetrics(sdrs, liveCalls, total_conversoes, totalDiscadas, totalAtendidas)
 
     const hourlyChart = buildHourlyChart(

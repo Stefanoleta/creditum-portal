@@ -25,7 +25,7 @@ export async function GET() {
     checkSupabase(),
   ])
 
-  const openai    = openaiResult.status === "fulfilled"    ? openaiResult.value    : { status: "error" as const }
+  const openai    = openaiResult.status === "fulfilled"    ? openaiResult.value    : { status: "error" as const, balance: null }
   const anthropic = anthropicResult.status === "fulfilled" ? anthropicResult.value : { status: "error" as const }
   const argus     = argusResult.status === "fulfilled"     ? argusResult.value     : { status: "error" as const }
   const sbData    = supabaseResult.status === "fulfilled"  ? supabaseResult.value  : { pendingCount: 0, lastWebhook: null }
