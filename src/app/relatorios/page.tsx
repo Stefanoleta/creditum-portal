@@ -25,7 +25,7 @@ const HEALTH_MS  = 60 * 1000
 // ─── System Health types ──────────────────────────────────────────────────────
 
 interface HealthPayload {
-  openai:      { balance: null; status: "ok" | "low" | "critical" | "error" | "unconfigured" }
+  openai:      { balance: null; status: "ok" | "low" | "critical" | "error" | "unconfigured"; message?: string }
   argus:       { status: "ok" | "error" | "unconfigured"; latencyMs?: number }
   supabase:    { pendingCount: number; status: "ok" | "error" | "unconfigured"; configured?: boolean }
   lastWebhook: { receivedAt: string | null }
@@ -105,6 +105,11 @@ function SystemHealthPanel() {
           )}>
             OpenAI {openai.status === "ok" ? "Online" : openai.status === "unconfigured" ? "—" : "Erro"}
           </span>
+          {openai.status === "error" && openai.message && (
+            <span className="text-[10px] text-red-400" title={openai.message}>
+              · {openai.message.slice(0, 50)}{openai.message.length > 50 ? "…" : ""}
+            </span>
+          )}
         </div>
 
         <span className="text-gray-200 select-none">|</span>

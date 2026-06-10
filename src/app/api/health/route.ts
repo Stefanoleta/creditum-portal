@@ -10,7 +10,7 @@ export type OpenAIStatus  = "ok" | "low" | "critical" | "error" | "unconfigured"
 export type ServiceStatus = "ok" | "error" | "unconfigured"
 
 export interface HealthPayload {
-  openai:      { status: OpenAIStatus; balance: null }
+  openai:      { status: OpenAIStatus; balance: null; message?: string }
   anthropic:   { status: ServiceStatus }
   argus:       { status: ServiceStatus; latencyMs?: number }
   supabase:    { pendingCount: number; status: ServiceStatus; configured: boolean }
@@ -46,25 +46,49 @@ export async function GET() {
   })
 }
 
-async function checkOpenAI(): Promise<{ status: OpenAIStatus; balance: null }> {
+async function checkOpenAI(): Promise<{ status: OpenAIStatus; balance: null; message?: string }> {
   if (!OPENAI_KEY) return { status: "unconfigured", balance: null }
 
+  // Sanity-check the key format before making a network call
+  const trimmed = OPENAI_KEY.trim()
+  if (!trimmed.startsWith("sk-")) {
+    return { status: "error", balance: null, message: "Chave inválida (não começa com sk-)" }
+  }
+
   try {
-    // /v1/models works with any valid key and doesn't require billing permissions
     const res = await fetch("https://api.openai.com/v1/models", {
-      headers: { Authorization: `Bearer ${OPENAI_KEY}` },
+      headers: { Authorization: `Bearer ${trimmed}` },
       signal: AbortSignal.timeout(8000),
       cache: "no-store",
     })
-    if (!res.ok) {
-      const body = await res.text().catch(() => "")
-      console.warn(`[health/openai] /v1/models → HTTP ${res.status}: ${body.slice(0, 200)}`)
-      return { status: "error", balance: null }
-    }
-    return { status: "ok", balance: null }
+
+    if (res.ok) return { status: "ok", balance: null }
+
+    const body = await res.text().catch(() => "")
+    const message = openAIErrorMessage(res.status, body)
+    return { status: "error", balance: null, message }
   } catch (err) {
-    console.warn("[health/openai] fetch error:", err instanceof Error ? err.message : err)
-    return { status: "error", balance: null }
+    const msg = err instanceof Error ? err.message : String(err)
+    const message = msg.includes("timeout") || msg.includes("abort")
+      ? "Timeout (>8s)"
+      : `Erro de rede: ${msg.slice(0, 80)}`
+    return { status: "error", balance: null, message }
+  }
+}
+
+function openAIErrorMessage(status: number, body: string): string {
+  // Try to extract OpenAI's own error message from the JSON body
+  try {
+    const json = JSON.parse(body) as { error?: { message?: string; code?: string } }
+    const apiMsg = json?.error?.message
+    if (apiMsg) return apiMsg.slice(0, 120)
+  } catch { /* not JSON */ }
+
+  switch (status) {
+    case 401: return "Chave inválida ou expirada (HTTP 401)"
+    case 403: return "Chave revogada ou sem permissão (HTTP 403)"
+    case 429: return "Rate limit atingido / saldo esgotado (HTTP 429)"
+    default:  return `OpenAI indisponível (HTTP ${status})`
   }
 }
 
