@@ -15,7 +15,9 @@ export const openaiClient  = openaiKey    ? new OpenAI({ apiKey: openaiKey })   
 // ─── Download recording from Argus as base64 ────────────────────────────────
 // Confirmed: POST /cmd/downloadgravacao with {idLigacao, idCampanha} returns raw binary audio.
 
-export async function downloadAudioById(idLigacao: string | number): Promise<string> {
+export type AudioDownload = { base64: string; contentType: string }
+
+export async function downloadAudioById(idLigacao: string | number): Promise<AudioDownload> {
   if (!BASE_URL || !TOKEN) throw new Error("ARGUS não configurado")
 
   const controller = new AbortController()
@@ -43,22 +45,53 @@ export async function downloadAudioById(idLigacao: string | number): Promise<str
 
   const buffer = await res.arrayBuffer()
   if (buffer.byteLength === 0) throw new Error("Arquivo de áudio vazio")
-  return Buffer.from(buffer).toString("base64")
+  return { base64: Buffer.from(buffer).toString("base64"), contentType: ct }
 }
 
-// downloadAudio: accepts idLigacao (numeric string) or legacy arquivo name.
-// Since calls/list now uses idLigacao as the arquivo field, this delegates correctly.
-export async function downloadAudio(arquivo: string): Promise<string> {
-  // All recordings from calls/list now use idLigacao (pure numeric) as the arquivo field
+export async function downloadAudio(arquivo: string): Promise<AudioDownload> {
   return downloadAudioById(arquivo)
+}
+
+// Detect actual audio format from magic bytes, falling back to Content-Type header.
+// Sending the wrong MIME type to Whisper (e.g. "audio/mpeg" for a WAV file) causes
+// HTTP 400 "could not be decoded" — Argus dialers typically return WAV, not MP3.
+function detectAudioFormat(buffer: Buffer, contentTypeHint: string): { filename: string; mimeType: string } {
+  if (buffer.length >= 4) {
+    // WAV: RIFF....WAVE
+    if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46) {
+      return { filename: "gravacao.wav", mimeType: "audio/wav" }
+    }
+    // MP3: sync word 0xFF 0xEx or ID3 tag
+    if ((buffer[0] === 0xFF && (buffer[1] & 0xE0) === 0xE0) ||
+        (buffer[0] === 0x49 && buffer[1] === 0x44 && buffer[2] === 0x33)) {
+      return { filename: "gravacao.mp3", mimeType: "audio/mpeg" }
+    }
+    // OGG / Opus
+    if (buffer[0] === 0x4F && buffer[1] === 0x67 && buffer[2] === 0x67 && buffer[3] === 0x53) {
+      return { filename: "gravacao.ogg", mimeType: "audio/ogg" }
+    }
+    // FLAC
+    if (buffer[0] === 0x66 && buffer[1] === 0x4C && buffer[2] === 0x61 && buffer[3] === 0x43) {
+      return { filename: "gravacao.flac", mimeType: "audio/flac" }
+    }
+  }
+  // Fall back to Content-Type header from Argus
+  if (contentTypeHint.includes("mpeg") || contentTypeHint.includes("mp3")) {
+    return { filename: "gravacao.mp3", mimeType: "audio/mpeg" }
+  }
+  if (contentTypeHint.includes("ogg"))  return { filename: "gravacao.ogg",  mimeType: "audio/ogg"  }
+  if (contentTypeHint.includes("flac")) return { filename: "gravacao.flac", mimeType: "audio/flac" }
+  // Default: WAV — most common format for VoIP/PBX dialers (Argus)
+  return { filename: "gravacao.wav", mimeType: "audio/wav" }
 }
 
 // ─── Transcribe with OpenAI Whisper ─────────────────────────────────────────
 
-export async function transcribeAudio(base64Audio: string): Promise<string> {
+export async function transcribeAudio(base64Audio: string, contentTypeHint = ""): Promise<string> {
   if (!openaiClient) throw new Error("OPENAI_API_KEY não configurado")
   const buffer = Buffer.from(base64Audio, "base64")
-  const file = new File([buffer], "gravacao.mp3", { type: "audio/mpeg" })
+  const { filename, mimeType } = detectAudioFormat(buffer, contentTypeHint)
+  const file = new File([buffer], filename, { type: mimeType })
   const result = await openaiClient.audio.transcriptions.create({
     file,
     model: "whisper-1",

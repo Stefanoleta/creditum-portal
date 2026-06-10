@@ -51,12 +51,12 @@ export async function POST(req: NextRequest) {
 
     try {
       // Try to download audio now that (hopefully) Argus is available
-      const base64Audio = await downloadAudioById(argusId)
+      const { base64, contentType } = await downloadAudioById(argusId)
 
       // Transcribe
       let transcript: string
       if (openaiClient) {
-        transcript = await transcribeAudio(base64Audio)
+        transcript = await transcribeAudio(base64, contentType)
       } else {
         transcript = `[OPENAI_API_KEY não configurado. SDR: ${p.sdr_name}, ${Math.round(p.duration_seconds / 60)}min]`
       }

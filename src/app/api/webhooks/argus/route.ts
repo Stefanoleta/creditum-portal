@@ -50,8 +50,11 @@ async function processWebhook(payload: ArgusWebhook): Promise<void> {
   // If audio is unavailable, save as "pendente" and abort. No Claude analysis
   // on metadata alone — that produces unreliable data that can be mistaken for real.
   let base64Audio: string
+  let audioContentType = ""
   try {
-    base64Audio = await downloadAudioById(idLigacao)
+    const dl = await downloadAudioById(idLigacao)
+    base64Audio = dl.base64
+    audioContentType = dl.contentType
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.warn(`[webhook/argus] áudio indisponível para ${call_id} (${msg}) — salvando como pendente`)
@@ -90,7 +93,7 @@ async function processWebhook(payload: ArgusWebhook): Promise<void> {
   let transcript: string
   if (openaiClient) {
     try {
-      transcript = await transcribeAudio(base64Audio)
+      transcript = await transcribeAudio(base64Audio, audioContentType)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       console.warn(`[webhook/argus] Whisper falhou (${msg}) — placeholder de transcrição`)

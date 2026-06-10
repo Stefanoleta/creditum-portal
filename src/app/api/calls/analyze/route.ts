@@ -4,6 +4,7 @@ import {
   transcribeAudio,
   analyzeWithClaude,
   openaiClient,
+  type AudioDownload,
 } from "@/lib/call-analyzer"
 import { saveAnalysis } from "@/lib/supabase-server"
 import { generateMockAnalyses } from "@/lib/mock-calls"
@@ -50,9 +51,9 @@ export async function POST(req: NextRequest) {
   }
 
   // Step 1 — Download audio from Argus (REQUIRED — no fallback to metadata analysis)
-  let base64Audio: string
+  let audioDownload: AudioDownload
   try {
-    base64Audio = await downloadAudio(arquivo)
+    audioDownload = await downloadAudio(arquivo)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.warn(`[calls/analyze] download falhou para ${call_id}: ${message}`)
@@ -73,7 +74,7 @@ export async function POST(req: NextRequest) {
     // Step 2 — Transcribe with Whisper (if OpenAI key set)
     let transcript: string
     if (openaiClient) {
-      transcript = await transcribeAudio(base64Audio)
+      transcript = await transcribeAudio(audioDownload.base64, audioDownload.contentType)
     } else {
       transcript = `[OPENAI_API_KEY não configurado. SDR: ${sdr_name}, ${Math.round(duration_seconds / 60)}min]`
     }
