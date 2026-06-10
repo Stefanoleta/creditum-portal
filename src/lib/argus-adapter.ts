@@ -41,10 +41,17 @@ export function adaptSDRs(items: ArgusDesempenhoItem[]): SDR[] {
   return items.map((item, idx) => {
     const name = pickStr(item.nomeUsuario, item.nomeAgente, item.nome, `SDR ${idx + 1}`)
     const ramal = pickStr(item.ramal, item.ramalAgente, `300${idx + 1}`)
-    const status = parseStatus(pick(item.statusAgente, item.status))
 
-    const realizadas = pickNum(item.qtdeAtendimentoTotal, item.qtdDiscadas, item.ligacoesRealizadas, item.totalLigacoes)
-    const atendidas  = pickNum(item.qtdeAtendimentoAutomatico, item.qtdAtendidas, item.ligacoesAtendidas, item.totalAtendidas)
+    // dataHoraLogout = "1899-12-30..." is Argus's sentinel for "not yet logged out"
+    const logoutStr = item.dataHoraLogout ?? ""
+    const isLoggedIn = !logoutStr || new Date(logoutStr).getFullYear() < 1900
+    // desempenhoresumido is a day-summary, not real-time — can't distinguish em_ligacao vs disponivel
+    const status: SDRStatus = isLoggedIn ? "disponivel" : "offline"
+
+    // qtdeAtendimentoTotal = calls answered by this SDR (i.e., atendidas, not total dialed)
+    // true realizadas (total dialed) comes from ligacoesdetalhadas; use atendimentos here for SDR-level stats
+    const atendidas  = pickNum(item.qtdeAtendimentoTotal, item.qtdeAtendimentoAutomatico, item.qtdAtendidas, item.ligacoesAtendidas, item.totalAtendidas)
+    const realizadas = atendidas  // overridden at route level with real discadas count
     const conversoes = pickNum(item.conversoes, item.qtdConversoes)
     const tma        = pickNum(item.tempoMedioAtendimento, item.tma)
 
@@ -63,38 +70,37 @@ export function adaptSDRs(items: ArgusDesempenhoItem[]): SDR[] {
 }
 
 // ─── ligacoesdetalhadas → LiveCall[] ────────────────────────────────────────
+// ligacoesdetalhadas returns historical completed calls, not truly active ones.
+// Filter to human SDR calls only (exclude DISCADOR = auto-dialer) and show as
+// "recent calls" — the closest proxy for live activity the Argus API provides.
 
 export function adaptLiveCalls(items: ArgusLigacaoItem[]): LiveCall[] {
-  return items.map((item, idx) => {
-    const sdrName   = pickStr(item.nomeAgente, item.nome, item.agente, "SDR")
-    const phone     = maskPhone(pickStr(item.numero, item.telefone, item.numeroDiscado, ""))
-    const durSec    = pickNum(item.duracao, item.tempoDuracao, item.tempoDecorrido)
-    const statusRaw = pickStr(item.status, item.statusLigacao, "em_andamento")
-    const school    = pickStr(item.escola, item.campanha, item.fila, "—")
+  const sdrCalls = items.filter((item) => {
+    const op = (item.usuarioOperador ?? "").toUpperCase().trim()
+    return op && op !== "DISCADOR"
+  })
 
-    const startedAt = pick(item.dataHora, item.horarioInicio, item.inicio)
-      ?? new Date(Date.now() - durSec * 1000).toISOString()
+  return sdrCalls.map((item, idx) => {
+    // usuarioOperador is the confirmed field name for the agent
+    const sdrName = pickStr(item.usuarioOperador, item.nomeAgente, item.nome, item.agente, "SDR")
+    const phone   = maskPhone(pickStr(item.telefone, item.numero, item.numeroDiscado, ""))
+    const durSec  = pickNum(item.tempoSegundos, item.duracao, item.tempoDuracao, item.tempoDecorrido)
+    // nomeCliente = lead name; lote = campaign batch
+    const school  = pickStr(item.nomeCliente, item.escola, item.campanha, item.lote, item.fila, "—")
 
-    const statusMap: Record<string, LiveCall["status"]> = {
-      "em andamento": "em_andamento",
-      "em_andamento": "em_andamento",
-      "atendida":     "em_andamento",
-      "tocando":      "tocando",
-      "chamando":     "tocando",
-      "em espera":    "em_espera",
-      "em_espera":    "em_espera",
-    }
-    const status = statusMap[statusRaw.toLowerCase()] ?? "em_andamento"
+    const startedAt = pickStr(item.dataHoraLigacao, item.dataHora, item.horarioInicio, item.inicio)
+      || new Date(Date.now() - durSec * 1000).toISOString()
 
+    // All calls in ligacoesdetalhadas are completed — mark as em_andamento for UI display
     return {
-      id: `${idx}-${sdrName}`,
-      sdr_id: `${idx}`,
+      id: `${item.idStatusLigacao ?? idx}-${sdrName}-${idx}`,
+      sdr_id: String(item.idUsuario ?? idx),
       sdr_name: sdrName,
       school_name: school,
       phone,
       started_at: startedAt,
       duration_seconds: durSec,
-      status,
+      status: "em_andamento" as LiveCall["status"],
     } satisfies LiveCall
   })
 }
@@ -193,24 +199,24 @@ export function adaptTabulacoes(items: ArgusTabulacaoItem[]): {
 export function buildMetrics(
   sdrs: SDR[],
   liveCalls: LiveCall[],
-  total_conversoes: number
+  total_conversoes: number,
+  /** Total calls dialed by the system (all agents + auto-dialer), from ligacoesdetalhadas */
+  totalDiscadasOverride?: number
 ): DashboardMetrics {
   const active = sdrs.filter((s) => s.status !== "offline")
   const inCall = sdrs.filter((s) => s.status === "em_ligacao")
   const available = sdrs.filter((s) => s.status === "disponivel")
   const offline = sdrs.filter((s) => s.status === "offline")
 
-  const totalLigacoes = sdrs.reduce((s, r) => s + r.ligacoes_realizadas, 0)
+  // totalDiscadasOverride = all calls dialed (DISCADOR + SDR) from ligacoesdetalhadas
+  // Falls back to summing SDR-level realizadas if not provided (less accurate)
+  const totalLigacoes = totalDiscadasOverride ?? sdrs.reduce((s, r) => s + r.ligacoes_realizadas, 0)
   const totalAtendidas = sdrs.reduce((s, r) => s + r.ligacoes_atendidas, 0)
 
   const tmaValues = active.filter((s) => s.tma_segundos > 0).map((s) => s.tma_segundos)
   const tma = tmaValues.length ? Math.round(tmaValues.reduce((a, b) => a + b, 0) / tmaValues.length) : 0
 
-  // TME: average duration of currently ringing calls as proxy
-  const ringing = liveCalls.filter((c) => c.status === "tocando")
-  const tme = ringing.length
-    ? Math.round(ringing.reduce((s, c) => s + c.duration_seconds, 0) / ringing.length)
-    : 0
+  const tme = 0  // ligacoesdetalhadas has no live ringing calls; TME not available from this API
 
   const taxa_contato = totalLigacoes > 0 ? (totalAtendidas / totalLigacoes) * 100 : 0
   const taxa_conversao = totalAtendidas > 0 ? (total_conversoes / totalAtendidas) * 100 : 0

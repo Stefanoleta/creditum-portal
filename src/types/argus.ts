@@ -11,13 +11,17 @@ export interface ArgusDesempenhoItem {
   ramal?: string
   ramalAgente?: string
 
+  // Login/logout — "1899-12-30..." means still online (Argus null sentinel)
+  dataHoraLogin?: string
+  dataHoraLogout?: string       // confirmed: year 1899 = not yet logged out
+
   // Status string: "Em Ligação", "Disponível", "Pausa", "Offline", etc.
   statusAgente?: string
   status?: string
 
   // Call counts — actual Argus fields
-  qtdeAtendimentoTotal?: number      // confirmed: total calls handled
-  qtdeAtendimentoAutomatico?: number // confirmed: auto-dialer calls
+  qtdeAtendimentoTotal?: number      // confirmed: calls Rafaella received from dialer
+  qtdeAtendimentoAutomatico?: number // confirmed: auto-dialer connected calls
   qtdeAtendimentoManual?: number     // confirmed: manual calls
   // legacy / alternative shapes
   qtdDiscadas?: number
@@ -27,9 +31,11 @@ export interface ArgusDesempenhoItem {
   ligacoesAtendidas?: number
   totalAtendidas?: number
 
-  // Timing in seconds — actual Argus fields
+  // Time in seconds
   tempoMedioAtendimento?: number     // confirmed: TMA
   tempoMedioEspera?: number          // confirmed: TME
+  tempoLivreSegundos?: number        // confirmed: seconds currently free
+  tempoAtendimentoSegundos?: number  // confirmed: total seconds in calls today
   tma?: number
   tme?: number
 
@@ -49,23 +55,33 @@ export interface ArgusDesempenhoResponse {
 }
 
 export interface ArgusLigacaoItem {
-  nomeAgente?: string
+  // Agent — confirmed Argus field names
+  usuarioOperador?: string      // confirmed: agent name or "DISCADOR" for auto-dialer
+  idUsuario?: number
+  nomeAgente?: string           // legacy
   nome?: string
   agente?: string
 
+  // Lead / contact
+  nomeCliente?: string          // confirmed: lead name
+  telefone?: string             // confirmed
   numero?: string
-  telefone?: string
   numeroDiscado?: string
 
-  // Duration in seconds
+  // Call result — confirmed Argus field names
+  resultadoLigacao?: string     // confirmed: "ATENDIMENTO", "NÃO ATENDE", "CAIXA POSTAL / MSG", etc.
+  idStatusLigacao?: number      // confirmed: 1=atendimento, 2=?, 3=número inexistente, etc.
+  tabulacao?: string            // confirmed: agent tabulation after call
+  categoriaTabulacao?: string
+
+  // Timing
+  tempoSegundos?: number        // confirmed: call duration in seconds
   duracao?: number
   tempoDuracao?: number
   tempoDecorrido?: number
 
-  // Status: "Em Andamento", "Tocando", "Em Espera"
-  status?: string
-  statusLigacao?: string
-
+  // Timestamps
+  dataHoraLigacao?: string      // confirmed: call datetime
   dataHora?: string
   horarioInicio?: string
   inicio?: string
@@ -73,6 +89,7 @@ export interface ArgusLigacaoItem {
   escola?: string
   campanha?: string
   fila?: string
+  lote?: string                 // confirmed: campaign batch name
 }
 
 export interface ArgusLigacoesResponse {

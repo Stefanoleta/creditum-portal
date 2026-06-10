@@ -121,7 +121,8 @@ export async function GET() {
     // tabulacoesdetalhadas is optional — degrades gracefully to mock objections/occurrences.
     const [rawDesempenho, rawLigacoes] = await Promise.all([
       argusPost("report/desempenhoresumido", { ultimosMinutos: 480 }),
-      argusPost("report/ligacoesdetalhadas", { ultimosMinutos: 5, idCampanha: CAMPAIGN_ID }),
+      // 480 min window: needed for accurate taxa de contato (total dialed / attended)
+      argusPost("report/ligacoesdetalhadas", { ultimosMinutos: 480, idCampanha: CAMPAIGN_ID }),
     ])
 
     const desempenhoItems = extractArray<ArgusDesempenhoItem>(rawDesempenho, [
@@ -131,13 +132,17 @@ export async function GET() {
       "ligacoesDetalhadas", "itens", "data", "ligacoes", "chamadas",
     ])
 
+    // Total dialed = all records; attended = resultadoLigacao "ATENDIMENTO"
+    const totalDiscadas  = ligacoesItems.length
+    const totalAtendidas = ligacoesItems.filter((i) => i.resultadoLigacao === "ATENDIMENTO").length
+
     // Try tabulações independently — won't throw even if both attempts fail
     const { objections, occurrences, total_conversoes, tabulacoes_source } =
       await fetchTabulacoes()
 
     const sdrs      = adaptSDRs(desempenhoItems)
-    const liveCalls = adaptLiveCalls(ligacoesItems)
-    const metrics   = buildMetrics(sdrs, liveCalls, total_conversoes)
+    const liveCalls = adaptLiveCalls(ligacoesItems)  // filtered to SDR-only, excludes DISCADOR
+    const metrics   = buildMetrics(sdrs, liveCalls, total_conversoes, totalDiscadas)
 
     const hourlyChart = buildHourlyChart(
       metrics.total_ligacoes,
