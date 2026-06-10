@@ -13,7 +13,7 @@ export interface HealthPayload {
   openai:      { status: OpenAIStatus; balance: null; message?: string }
   anthropic:   { status: ServiceStatus }
   argus:       { status: ServiceStatus; latencyMs?: number }
-  supabase:    { pendingCount: number; status: ServiceStatus; configured: boolean }
+  supabase:    { pendingCount: number; status: ServiceStatus; configured: boolean; error?: string; columns?: string[] }
   lastWebhook: { receivedAt: string | null }
 }
 
@@ -41,6 +41,8 @@ export async function GET() {
         ? (supabaseResult.status === "fulfilled" ? "ok" : "error")
         : "unconfigured",
       configured: supabaseConfigured,
+      error:   sbData.error,
+      columns: sbData.columns,
     },
     lastWebhook: { receivedAt: sbData.lastWebhook },
   })
@@ -132,23 +134,71 @@ async function checkArgus(): Promise<{ status: ServiceStatus; latencyMs?: number
   }
 }
 
-async function checkSupabase(): Promise<{ pendingCount: number; lastWebhook: string | null }> {
+async function checkSupabase(): Promise<{
+  pendingCount: number
+  lastWebhook: string | null
+  error?: string
+  columns?: string[]
+}> {
   if (!supabase) return { pendingCount: 0, lastWebhook: null }
 
-  const [pendingRes, lastRes] = await Promise.all([
-    supabase
+  // Step 1: fetch one row with all columns — safe, no filtering by column name
+  const schemaRes = await supabase
+    .from("call_analyses")
+    .select("*")
+    .limit(1)
+
+  const columns = schemaRes.data && schemaRes.data.length > 0
+    ? Object.keys(schemaRes.data[0] as Record<string, unknown>).sort()
+    : undefined
+
+  if (schemaRes.error) {
+    return {
+      pendingCount: 0,
+      lastWebhook: null,
+      error: schemaRes.error.message,
+      columns,
+    }
+  }
+
+  // Step 2: count pending — uses .eq() which doesn't care about timestamp column
+  const pendingRes = await supabase
+    .from("call_analyses")
+    .select("*", { count: "exact", head: true })
+    .eq("status", "pendente")
+
+  // Step 3: get last row — try analisado_em first, fall back to created_at
+  const lastByAnalisado = await supabase
+    .from("call_analyses")
+    .select("analisado_em")
+    .order("analisado_em", { ascending: false })
+    .limit(1)
+
+  let lastWebhook: string | null = null
+  let lastError: string | undefined
+
+  if (!lastByAnalisado.error) {
+    lastWebhook = (lastByAnalisado.data?.[0]?.analisado_em as string | undefined) ?? null
+  } else {
+    lastError = `order/analisado_em: ${lastByAnalisado.error.message}`
+    // Try fallback column
+    const lastByCreated = await supabase
       .from("call_analyses")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "pendente"),
-    supabase
-      .from("call_analyses")
-      .select("analisado_em")
-      .order("analisado_em", { ascending: false })
-      .limit(1),
-  ])
+      .select("created_at")
+      .order("created_at", { ascending: false })
+      .limit(1)
+    if (!lastByCreated.error) {
+      lastWebhook = (lastByCreated.data?.[0]?.created_at as string | undefined) ?? null
+      lastError += " | fallback created_at: ok"
+    } else {
+      lastError += ` | fallback created_at: ${lastByCreated.error.message}`
+    }
+  }
 
   return {
     pendingCount: pendingRes.count ?? 0,
-    lastWebhook:  (lastRes.data?.[0]?.analisado_em as string | undefined) ?? null,
+    lastWebhook,
+    error:   lastError ?? (pendingRes.error?.message),
+    columns,
   }
 }
