@@ -142,13 +142,13 @@ async function checkSupabase(): Promise<{ pendingCount: number; lastWebhook: str
       .eq("status", "pendente"),
     supabase
       .from("call_analyses")
-      .select("created_at")
-      .order("created_at", { ascending: false })
+      .select("analisado_em")
+      .order("analisado_em", { ascending: false })
       .limit(1),
   ])
 
   return {
     pendingCount: pendingRes.count ?? 0,
-    lastWebhook:  (lastRes.data?.[0]?.created_at as string | undefined) ?? null,
+    lastWebhook:  (lastRes.data?.[0]?.analisado_em as string | undefined) ?? null,
   }
 }

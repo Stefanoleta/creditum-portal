@@ -10,7 +10,7 @@ export const supabase =
     ? createClient(url, key)
     : null
 
-export type DbAnalysis = CallAnalysis & { created_at?: string }
+export type DbAnalysis = CallAnalysis
 
 // ─── Save or overwrite an analysis ───────────────────────────────────────────
 
@@ -18,10 +18,7 @@ export async function saveAnalysis(analysis: CallAnalysis): Promise<void> {
   if (!supabase) return
   const { error } = await supabase
     .from("call_analyses")
-    .upsert(
-      { ...analysis, created_at: new Date().toISOString() },
-      { onConflict: "call_id" }
-    )
+    .upsert(analysis, { onConflict: "call_id" })
   if (error) console.error("[supabase] saveAnalysis error:", error.message)
 }
 
@@ -47,10 +44,10 @@ export async function fetchRecentAnalyses(date?: string): Promise<DbAnalysis[]> 
   const { data, error } = await supabase
     .from("call_analyses")
     .select("*")
-    .gte("created_at", `${targetDate}T00:00:00`)
-    .lte("created_at", `${targetDate}T23:59:59`)
+    .gte("analisado_em", `${targetDate}T00:00:00`)
+    .lte("analisado_em", `${targetDate}T23:59:59`)
     .neq("status", "pendente")          // exclude pending from main list
-    .order("created_at", { ascending: false })
+    .order("analisado_em", { ascending: false })
     .limit(50)
   if (error) {
     console.error("[supabase] fetchRecentAnalyses error:", error.message)
@@ -67,7 +64,7 @@ export async function fetchPendingAnalyses(): Promise<DbAnalysis[]> {
     .from("call_analyses")
     .select("*")
     .eq("status", "pendente")
-    .order("created_at", { ascending: false })
+    .order("analisado_em", { ascending: false })
     .limit(20)
   if (error) {
     console.error("[supabase] fetchPendingAnalyses error:", error.message)
