@@ -39,14 +39,14 @@ function maskPhone(phone: string): string {
 
 export function adaptSDRs(items: ArgusDesempenhoItem[]): SDR[] {
   return items.map((item, idx) => {
-    const name = pickStr(item.nomeAgente, item.nome, `SDR ${idx + 1}`)
+    const name = pickStr(item.nomeUsuario, item.nomeAgente, item.nome, `SDR ${idx + 1}`)
     const ramal = pickStr(item.ramal, item.ramalAgente, `300${idx + 1}`)
     const status = parseStatus(pick(item.statusAgente, item.status))
 
-    const realizadas = pickNum(item.qtdDiscadas, item.ligacoesRealizadas, item.totalLigacoes)
-    const atendidas  = pickNum(item.qtdAtendidas, item.ligacoesAtendidas, item.totalAtendidas)
+    const realizadas = pickNum(item.qtdeAtendimentoTotal, item.qtdDiscadas, item.ligacoesRealizadas, item.totalLigacoes)
+    const atendidas  = pickNum(item.qtdeAtendimentoAutomatico, item.qtdAtendidas, item.ligacoesAtendidas, item.totalAtendidas)
     const conversoes = pickNum(item.conversoes, item.qtdConversoes)
-    const tma        = pickNum(item.tma, item.tempoMedioAtendimento)
+    const tma        = pickNum(item.tempoMedioAtendimento, item.tma)
 
     return {
       id: `${ramal}-${name}`,

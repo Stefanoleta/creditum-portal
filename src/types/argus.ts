@@ -3,8 +3,10 @@
 // If a field comes back undefined, check the raw response logged by the API route.
 
 export interface ArgusDesempenhoItem {
-  // Agent identity
-  nomeAgente?: string
+  // Agent identity — actual Argus fields
+  nomeUsuario?: string          // confirmed: desempenhoresumido response
+  idUsuario?: number
+  nomeAgente?: string           // legacy / alternative shape
   nome?: string
   ramal?: string
   ramalAgente?: string
@@ -13,22 +15,25 @@ export interface ArgusDesempenhoItem {
   statusAgente?: string
   status?: string
 
-  // Call counts
+  // Call counts — actual Argus fields
+  qtdeAtendimentoTotal?: number      // confirmed: total calls handled
+  qtdeAtendimentoAutomatico?: number // confirmed: auto-dialer calls
+  qtdeAtendimentoManual?: number     // confirmed: manual calls
+  // legacy / alternative shapes
   qtdDiscadas?: number
   totalLigacoes?: number
   ligacoesRealizadas?: number
-
   qtdAtendidas?: number
   ligacoesAtendidas?: number
   totalAtendidas?: number
 
-  // Timing in seconds
-  tma?: number                  // Tempo Médio de Atendimento
-  tempoMedioAtendimento?: number
-  tme?: number                  // Tempo Médio de Espera
-  tempoMedioEspera?: number
+  // Timing in seconds — actual Argus fields
+  tempoMedioAtendimento?: number     // confirmed: TMA
+  tempoMedioEspera?: number          // confirmed: TME
+  tma?: number
+  tme?: number
 
-  // Conversions (may come as count or separate tabulation)
+  // Conversions (come from tabulacoesdetalhadas, not desempenhoresumido)
   conversoes?: number
   qtdConversoes?: number
 }
@@ -36,10 +41,10 @@ export interface ArgusDesempenhoItem {
 export interface ArgusDesempenhoResponse {
   codStatus?: number
   descStatus?: string
+  desempenhosResumidos?: ArgusDesempenhoItem[]  // confirmed array key
   itens?: ArgusDesempenhoItem[]
   data?: ArgusDesempenhoItem[]
   relatorio?: ArgusDesempenhoItem[]
-  // Some versions return the array directly
   [key: string]: unknown
 }
 
@@ -73,6 +78,7 @@ export interface ArgusLigacaoItem {
 export interface ArgusLigacoesResponse {
   codStatus?: number
   descStatus?: string
+  ligacoesDetalhadas?: ArgusLigacaoItem[]  // confirmed array key
   itens?: ArgusLigacaoItem[]
   data?: ArgusLigacaoItem[]
   ligacoes?: ArgusLigacaoItem[]

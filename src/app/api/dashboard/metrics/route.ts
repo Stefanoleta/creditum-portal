@@ -14,8 +14,9 @@ import type {
 } from "@/types/argus"
 import type { HourlyMetric, Objection, Occurrence } from "@/types/dashboard"
 
-const BASE_URL = process.env.ARGUS_BASE_URL!
-const TOKEN    = process.env.ARGUS_TOKEN!
+const BASE_URL    = process.env.ARGUS_BASE_URL!
+const TOKEN       = process.env.ARGUS_TOKEN!
+const CAMPAIGN_ID = Number(process.env.ARGUS_CAMPAIGN_ID ?? "1")
 
 async function argusPost<T = Record<string, unknown>>(
   endpoint: string,
@@ -120,14 +121,14 @@ export async function GET() {
     // tabulacoesdetalhadas is optional — degrades gracefully to mock objections/occurrences.
     const [rawDesempenho, rawLigacoes] = await Promise.all([
       argusPost("report/desempenhoresumido", { ultimosMinutos: 480 }),
-      argusPost("report/ligacoesdetalhadas", { ultimosMinutos: 5   }),
+      argusPost("report/ligacoesdetalhadas", { ultimosMinutos: 5, idCampanha: CAMPAIGN_ID }),
     ])
 
     const desempenhoItems = extractArray<ArgusDesempenhoItem>(rawDesempenho, [
-      "itens", "data", "relatorio", "agentes", "operadores",
+      "desempenhosResumidos", "itens", "data", "relatorio", "agentes", "operadores",
     ])
     const ligacoesItems = extractArray<ArgusLigacaoItem>(rawLigacoes, [
-      "itens", "data", "ligacoes", "chamadas",
+      "ligacoesDetalhadas", "itens", "data", "ligacoes", "chamadas",
     ])
 
     // Try tabulações independently — won't throw even if both attempts fail

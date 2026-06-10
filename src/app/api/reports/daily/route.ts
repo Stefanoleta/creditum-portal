@@ -46,7 +46,7 @@ export async function GET() {
     ])
 
     const desempenhoItems = extractArray<ArgusDesempenhoItem>(rawDesempenho, [
-      "itens", "data", "relatorio", "agentes", "operadores",
+      "desempenhosResumidos", "itens", "data", "relatorio", "agentes", "operadores",
     ])
     const tabulacaoItems = extractArray<ArgusTabulacaoItem>(rawTabulacoes, [
       "itens", "data", "tabulacoes",
