@@ -81,7 +81,8 @@ export function adaptSDRs(items: ArgusDesempenhoItem[], allowlist: string[] = DE
 
       // qtdeAtendimentoTotal = calls received from the dialer and handled (= atendidas)
       const atendidas  = pickNum(item.qtdeAtendimentoTotal, item.qtdeAtendimentoAutomatico, item.qtdAtendidas, item.ligacoesAtendidas, item.totalAtendidas)
-      const realizadas = atendidas
+      // qtdDiscadas = total calls placed (including unanswered) — may or may not exist per Argus version
+      const realizadas = pickNum(item.qtdDiscadas, item.totalLigacoes, item.ligacoesRealizadas) || atendidas
       const conversoes = pickNum(item.conversoes, item.qtdConversoes)
       const tma        = pickNum(item.tempoMedioAtendimento, item.tma)
       const tme        = pickNum(item.tempoMedioEspera, item.tme)

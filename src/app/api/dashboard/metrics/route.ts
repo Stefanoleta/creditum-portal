@@ -124,8 +124,7 @@ export async function GET() {
       "ligacoesDetalhadas", "itens", "data", "ligacoes", "chamadas",
     ])
 
-    // Total dialed = all records; attended = resultadoLigacao "ATENDIMENTO"
-    const totalDiscadas  = ligacoesItems.length
+    // attended = calls where the lead picked up (resultadoLigacao "ATENDIMENTO")
     const totalAtendidas = ligacoesItems.filter((i) => i.resultadoLigacao?.toUpperCase() === "ATENDIMENTO").length
 
     // Try tabulações independently — won't throw even if unavailable
@@ -134,6 +133,15 @@ export async function GET() {
 
     const sdrs      = adaptSDRs(desempenhoItems, VENDAS_LIST)
     const liveCalls = adaptLiveCalls(ligacoesItems, VENDAS_LIST)
+
+    // totalDiscadas: prefer SDR realizadas sum (desempenhoresumido includes unanswered calls).
+    // ligacoesdetalhadas may only return attended calls in this Argus config,
+    // which makes length === totalAtendidas and produces taxa_contato=100%.
+    const totalDiscadasFromSDR = sdrs.reduce((s, r) => s + r.ligacoes_realizadas, 0)
+    const totalDiscadas = totalDiscadasFromSDR > totalAtendidas
+      ? totalDiscadasFromSDR   // desempenho returned real discadas count
+      : ligacoesItems.length   // fallback: count all ligacoes records
+
     const metrics   = buildMetrics(sdrs, liveCalls, total_conversoes, totalDiscadas, totalAtendidas)
 
     const hourlyChart = buildHourlyChart(
