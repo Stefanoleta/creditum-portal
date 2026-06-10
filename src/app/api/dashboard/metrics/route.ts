@@ -35,7 +35,8 @@ async function argusPost<T = Record<string, unknown>>(
   })
 
   if (!res.ok) {
-    throw new Error(`Argus ${endpoint} → HTTP ${res.status}`)
+    const body = await res.text().catch(() => "")
+    throw new Error(`Argus ${endpoint} → HTTP ${res.status}: ${body.slice(0, 400)}`)
   }
 
   const json = await res.json()

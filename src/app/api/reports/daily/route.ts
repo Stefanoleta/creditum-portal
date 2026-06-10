@@ -24,7 +24,10 @@ async function argusPost<T = Record<string, unknown>>(
     signal: AbortSignal.timeout(8000),
   })
 
-  if (!res.ok) throw new Error(`Argus ${endpoint} → HTTP ${res.status}`)
+  if (!res.ok) {
+    const body = await res.text().catch(() => "")
+    throw new Error(`Argus ${endpoint} → HTTP ${res.status}: ${body.slice(0, 400)}`)
+  }
 
   const json = await res.json() as Record<string, unknown>
   if (typeof json?.codStatus === "number" && json.codStatus < 0) {
