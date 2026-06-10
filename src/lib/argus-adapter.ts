@@ -164,6 +164,8 @@ export function adaptLiveCalls(items: ArgusLigacaoItem[], allowlist: string[] = 
 // Includes both accented and unaccented variants for Argus installations that strip diacritics.
 const CATEGORIA_MAP: { key: string; label: string; color: string }[] = [
   { key: "SUCESSO",                  label: "Contrato Fechado",        color: "bg-emerald-500" },
+  { key: "PROPOSTA ENVIADA",         label: "Proposta Enviada",        color: "bg-emerald-400" },
+  { key: "PROPOSTA",                 label: "Proposta Enviada",        color: "bg-emerald-400" },
   { key: "AGENDAMENTO GRUPO",        label: "Agendamento Grupo",        color: "bg-blue-500"    },
   { key: "AGENDAMENTO INDIVIDUAL",   label: "Agendamento Individual",   color: "bg-sky-400"     },
   { key: "AGENDAMENTO",              label: "Agendamento",              color: "bg-blue-400"    },
@@ -208,7 +210,14 @@ export function adaptTabulacoes(items: ArgusTabulacaoItem[]): {
       tabuladoCount.set(tabulado, (tabuladoCount.get(tabulado) ?? 0) + count)
     }
 
-    if (categoria === "SUCESSO") total_conversoes += count
+    // Count as conversion: "PROPOSTA ENVIADA" tabulado (confirmed for this Argus setup)
+    // or categoriaTabulacao "SUCESSO" as fallback for other Argus configurations.
+    const tabuladoUpper = tabulado.toUpperCase()
+    const isConversao =
+      tabuladoUpper === "PROPOSTA ENVIADA" ||
+      tabuladoUpper.startsWith("PROPOSTA ENVIADA") ||
+      categoria.toUpperCase() === "SUCESSO"
+    if (isConversao) total_conversoes += count
   }
 
   const occTotal = Array.from(categoriaCount.values()).reduce((a, b) => a + b, 0) || 1

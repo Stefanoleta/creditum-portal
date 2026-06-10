@@ -37,6 +37,7 @@ export default function AnalisePage() {
   const [newWebhookCount, setNewWebhookCount]     = useState(0)
   const [lastFetch, setLastFetch]                 = useState<Date | null>(null)
   const [retrying, setRetrying]                   = useState<Set<string>>(new Set())
+  const [analyzeErrors, setAnalyzeErrors]         = useState<Map<string, string>>(new Map())
   const prevWebhookIds = useRef<Set<string>>(new Set())
 
   // ─── Fetch recordings on mount ───────────────────────────────────────────────
@@ -89,6 +90,7 @@ export default function AnalisePage() {
     async (rec: CallRecording) => {
       if (analyzing.has(rec.id)) return
       setAnalyzing((prev) => new Set(prev).add(rec.id))
+      setAnalyzeErrors((prev) => { const next = new Map(prev); next.delete(rec.id); return next })
       try {
         const res = await fetch("/api/calls/analyze", {
           method: "POST",
@@ -96,12 +98,18 @@ export default function AnalisePage() {
           body: JSON.stringify(rec),
         })
         const data = await res.json()
+        if (!res.ok || data.error) {
+          const msg: string = data.message ?? data.detail ?? data.error ?? `Erro ${res.status}`
+          setAnalyzeErrors((prev) => new Map(prev).set(rec.id, msg))
+          return
+        }
         if (data.analysis) {
           setAnalyses((prev) => new Map(prev).set(rec.id, data.analysis as CallAnalysis))
           setSelectedId(rec.id)
         }
       } catch (err) {
-        console.error("analyze error:", err)
+        const msg = err instanceof Error ? err.message : "Erro de rede"
+        setAnalyzeErrors((prev) => new Map(prev).set(rec.id, msg))
       } finally {
         setAnalyzing((prev) => {
           const next = new Set(prev)
@@ -366,6 +374,14 @@ export default function AnalisePage() {
                 <p className="text-sm font-medium text-gray-500">
                   Pronto para analisar — {selectedRecording.sdr_name} / {selectedRecording.school_name}
                 </p>
+                {analyzeErrors.get(selectedRecording.id) && (
+                  <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 max-w-md">
+                    <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                    <p className="text-xs text-red-600 leading-relaxed">
+                      {analyzeErrors.get(selectedRecording.id)}
+                    </p>
+                  </div>
+                )}
                 <button
                   onClick={() => analyzeCall(selectedRecording)}
                   disabled={analyzing.has(selectedRecording.id)}
