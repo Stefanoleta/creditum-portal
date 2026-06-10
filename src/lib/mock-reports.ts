@@ -1,0 +1,166 @@
+// Mock data for Módulo 3 — Relatórios
+// 15 working days: May 19–23, May 26–30, Jun 2–6, 2025
+// RAF = Rafael Costa (high performer), MARC = Marcos Pinto (low performer)
+
+export interface DailyRow {
+  date: string
+  dia: string
+  ligacoes: number
+  atendidas: number
+  conversoes: number
+  tma_segundos: number
+  taxa_contato: number
+  taxa_conversao: number
+  receita: number
+}
+
+export interface HourlyRow {
+  hora: string
+  ligacoes: number
+  atendidas: number
+  conversoes: number
+  taxa_contato: number
+  taxa_conversao: number
+}
+
+export interface OperatorRow {
+  id: string
+  name: string
+  meta_dia: number
+  ligacoes_realizadas: number
+  ligacoes_atendidas: number
+  conversoes: number
+  tma_segundos: number
+  score_ia: number
+  taxa_contato: number
+  taxa_conversao: number
+}
+
+export interface ReportsPayload {
+  hoje: DailyRow
+  intraday: HourlyRow[]
+  por_hora: HourlyRow[]
+  operadores: OperatorRow[]
+  historico: DailyRow[]
+  source: "argus" | "mock"
+  updated_at: string
+}
+
+// ─── base datasets ────────────────────────────────────────────────────────────
+
+const RAW_DAILY = [
+  { date: "2025-05-19", wd: "Seg", dd: "19/05", l: 348, a: 224, c: 31, tma: 231 },
+  { date: "2025-05-20", wd: "Ter", dd: "20/05", l: 337, a: 217, c: 28, tma: 244 },
+  { date: "2025-05-21", wd: "Qua", dd: "21/05", l: 361, a: 235, c: 35, tma: 226 },
+  { date: "2025-05-22", wd: "Qui", dd: "22/05", l: 329, a: 209, c: 27, tma: 238 },
+  { date: "2025-05-23", wd: "Sex", dd: "23/05", l: 294, a: 183, c: 21, tma: 252 },
+  { date: "2025-05-26", wd: "Seg", dd: "26/05", l: 356, a: 228, c: 33, tma: 229 },
+  { date: "2025-05-27", wd: "Ter", dd: "27/05", l: 343, a: 221, c: 30, tma: 241 },
+  { date: "2025-05-28", wd: "Qua", dd: "28/05", l: 371, a: 242, c: 38, tma: 219 },
+  { date: "2025-05-29", wd: "Qui", dd: "29/05", l: 338, a: 213, c: 29, tma: 237 },
+  { date: "2025-05-30", wd: "Sex", dd: "30/05", l: 301, a: 188, c: 23, tma: 248 },
+  { date: "2025-06-02", wd: "Seg", dd: "02/06", l: 362, a: 233, c: 34, tma: 223 },
+  { date: "2025-06-03", wd: "Ter", dd: "03/06", l: 349, a: 226, c: 32, tma: 235 },
+  { date: "2025-06-04", wd: "Qua", dd: "04/06", l: 375, a: 248, c: 41, tma: 217 },
+  { date: "2025-06-05", wd: "Qui", dd: "05/06", l: 321, a: 204, c: 26, tma: 243 },
+  { date: "2025-06-06", wd: "Sex", dd: "06/06", l: 308, a: 191, c: 22, tma: 251 },
+]
+
+const RAW_HOURLY = [
+  { h: "09h", l: 28, a: 18, c: 2 },
+  { h: "10h", l: 45, a: 30, c: 5 },
+  { h: "11h", l: 52, a: 35, c: 6 },
+  { h: "12h", l: 22, a: 14, c: 2 },
+  { h: "13h", l: 38, a: 25, c: 4 },
+  { h: "14h", l: 58, a: 39, c: 7 },
+  { h: "15h", l: 55, a: 37, c: 6 },
+  { h: "16h", l: 48, a: 31, c: 5 },
+  { h: "17h", l: 35, a: 22, c: 3 },
+  { h: "18h", l: 19, a: 11, c: 1 },
+]
+
+// ─── exported bases ───────────────────────────────────────────────────────────
+
+function makeDailyRow(r: typeof RAW_DAILY[0]): DailyRow {
+  const taxa_contato = Math.round((r.a / r.l) * 1000) / 10
+  const taxa_conversao = Math.round((r.c / r.a) * 1000) / 10
+  return {
+    date: r.date,
+    dia: `${r.wd} ${r.dd}`,
+    ligacoes: r.l,
+    atendidas: r.a,
+    conversoes: r.c,
+    tma_segundos: r.tma,
+    taxa_contato,
+    taxa_conversao,
+    receita: r.c * 1600,
+  }
+}
+
+function makeHourlyRow(r: typeof RAW_HOURLY[0]): HourlyRow {
+  return {
+    hora: r.h,
+    ligacoes: r.l,
+    atendidas: r.a,
+    conversoes: r.c,
+    taxa_contato: Math.round((r.a / r.l) * 1000) / 10,
+    taxa_conversao: r.a > 0 ? Math.round((r.c / r.a) * 1000) / 10 : 0,
+  }
+}
+
+export const DAILY_BASE: DailyRow[] = RAW_DAILY.map(makeDailyRow)
+
+export const HR_BASE: HourlyRow[] = RAW_HOURLY.map(makeHourlyRow)
+
+export const RAF_BASE: OperatorRow = {
+  id: "raf-001",
+  name: "Rafael Costa",
+  meta_dia: 50,
+  ligacoes_realizadas: 58,
+  ligacoes_atendidas: 41,
+  conversoes: 9,
+  tma_segundos: 198,
+  score_ia: 91,
+  taxa_contato: 70.7,
+  taxa_conversao: 22.0,
+}
+
+export const MARC_BASE: OperatorRow = {
+  id: "marc-001",
+  name: "Marcos Pinto",
+  meta_dia: 50,
+  ligacoes_realizadas: 42,
+  ligacoes_atendidas: 27,
+  conversoes: 4,
+  tma_segundos: 284,
+  score_ia: 71,
+  taxa_contato: 64.3,
+  taxa_conversao: 14.8,
+}
+
+// ─── full mock payload ────────────────────────────────────────────────────────
+
+export function generateMockReports(): ReportsPayload {
+  const hoje = makeDailyRow({ date: "2025-06-09", wd: "Seg", dd: "09/06", l: 347, a: 221, c: 41, tma: 228 })
+
+  const allOperators: OperatorRow[] = [
+    { id: "ana-001",   name: "Ana Beatriz",   meta_dia: 50, ligacoes_realizadas: 52, ligacoes_atendidas: 36, conversoes: 8, tma_segundos: 210, score_ia: 91, taxa_contato: 69.2, taxa_conversao: 22.2 },
+    RAF_BASE,
+    { id: "jul-001",   name: "Julia Souza",   meta_dia: 50, ligacoes_realizadas: 44, ligacoes_atendidas: 30, conversoes: 6, tma_segundos: 230, score_ia: 82, taxa_contato: 68.2, taxa_conversao: 20.0 },
+    { id: "lar-001",   name: "Larissa Neves", meta_dia: 50, ligacoes_realizadas: 50, ligacoes_atendidas: 34, conversoes: 5, tma_segundos: 220, score_ia: 86, taxa_contato: 68.0, taxa_conversao: 14.7 },
+    { id: "car-001",   name: "Carlos Mendes", meta_dia: 50, ligacoes_realizadas: 48, ligacoes_atendidas: 31, conversoes: 6, tma_segundos: 255, score_ia: 84, taxa_contato: 64.6, taxa_conversao: 19.4 },
+    { id: "fer-001",   name: "Fernanda Lima", meta_dia: 50, ligacoes_realizadas: 41, ligacoes_atendidas: 28, conversoes: 5, tma_segundos: 198, score_ia: 78, taxa_contato: 68.3, taxa_conversao: 17.9 },
+    MARC_BASE,
+    { id: "die-001",   name: "Diego Rocha",   meta_dia: 50, ligacoes_realizadas: 38, ligacoes_atendidas: 24, conversoes: 2, tma_segundos: 312, score_ia: 75, taxa_contato: 63.2, taxa_conversao:  8.3 },
+  ].sort((a, b) => b.conversoes - a.conversoes)
+
+  return {
+    hoje,
+    intraday: HR_BASE,
+    por_hora: HR_BASE,
+    operadores: allOperators,
+    historico: DAILY_BASE,
+    source: "mock",
+    updated_at: new Date().toISOString(),
+  }
+}
