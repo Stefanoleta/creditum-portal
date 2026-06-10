@@ -124,6 +124,19 @@ export async function GET() {
       "ligacoesDetalhadas", "itens", "data", "ligacoes", "chamadas",
     ])
 
+    // DEBUG — log all agent objects before any filter (nomeUsuario + all name-like fields)
+    console.log("[DEBUG metrics] chaves do rawDesempenho:", Object.keys(rawDesempenho))
+    console.log("[DEBUG metrics] total itens desempenho:", desempenhoItems.length)
+    console.log("[DEBUG metrics] agentes brutos:", JSON.stringify(
+      desempenhoItems.map((i) => ({
+        nomeUsuario: i.nomeUsuario,
+        nomeAgente: i.nomeAgente,
+        nome: i.nome,
+        idUsuario: i.idUsuario,
+      }))
+    ))
+    console.log("[DEBUG metrics] allowlist:", VENDAS_LIST)
+
     // Total dialed = all records; attended = resultadoLigacao "ATENDIMENTO"
     const totalDiscadas  = ligacoesItems.length
     const totalAtendidas = ligacoesItems.filter((i) => i.resultadoLigacao?.toUpperCase() === "ATENDIMENTO").length
@@ -131,14 +144,6 @@ export async function GET() {
     // Try tabulações independently — won't throw even if unavailable
     const { objections, occurrences, total_conversoes, tabulacoes_source } =
       await fetchTabulacoes(CAMPAIGN_ID)
-
-    // Log raw agent names once per request to confirm exact format from Argus.
-    const rawAgentNames = desempenhoItems.map((i) =>
-      (i as { nomeUsuario?: string; nome?: string }).nomeUsuario ??
-      (i as { nomeUsuario?: string; nome?: string }).nome ?? "?"
-    )
-    console.log("[dashboard/metrics] agentes brutos do Argus:", rawAgentNames)
-    console.log("[dashboard/metrics] allowlist Vendas:", VENDAS_LIST)
 
     const sdrs      = adaptSDRs(desempenhoItems, VENDAS_LIST)
     const liveCalls = adaptLiveCalls(ligacoesItems, VENDAS_LIST)
