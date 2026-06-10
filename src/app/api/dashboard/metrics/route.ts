@@ -131,6 +131,14 @@ export async function GET() {
     const { objections, occurrences, total_conversoes, tabulacoes_source } =
       await fetchTabulacoes(CAMPAIGN_ID)
 
+    // Log raw agent names once per request to confirm exact format from Argus.
+    const rawAgentNames = desempenhoItems.map((i) =>
+      (i as { nomeUsuario?: string; nome?: string }).nomeUsuario ??
+      (i as { nomeUsuario?: string; nome?: string }).nome ?? "?"
+    )
+    console.log("[dashboard/metrics] agentes brutos do Argus:", rawAgentNames)
+    console.log("[dashboard/metrics] allowlist Vendas:", VENDAS_LIST)
+
     const sdrs      = adaptSDRs(desempenhoItems, VENDAS_LIST)
     const liveCalls = adaptLiveCalls(ligacoesItems, VENDAS_LIST)
     const metrics   = buildMetrics(sdrs, liveCalls, total_conversoes, totalDiscadas, totalAtendidas)

@@ -37,18 +37,35 @@ function maskPhone(phone: string): string {
 
 // ─── Vendas group allowlist ──────────────────────────────────────────────────
 // Only agents in this list are shown in rankings and live calls.
-// Override via ARGUS_SDR_ALLOWLIST="Rafaella Gomes,Marcela Sampaio" (case-insensitive).
+// Hardcoded default — does NOT depend on ARGUS_SDR_ALLOWLIST env var.
+// Add names in UPPERCASE exactly as Argus returns them.
 const DEFAULT_VENDAS = ["RAFAELLA GOMES", "MARCELA SAMPAIO"]
 
 export function getVendasAllowlist(envOverride?: string): string[] {
-  if (envOverride) return envOverride.split(",").map((n) => n.trim().toUpperCase())
+  if (envOverride) {
+    const parsed = envOverride.split(",").map((n) => n.trim().toUpperCase()).filter(Boolean)
+    if (parsed.length > 0) return parsed
+  }
   return DEFAULT_VENDAS
 }
 
 function matchesAllowlist(name: string, allowlist: string[]): boolean {
   if (allowlist.length === 0) return true
   const upper = name.toUpperCase().trim()
-  return allowlist.some((a) => upper.includes(a) || a.includes(upper))
+  if (!upper) return false
+  return allowlist.some((entry) => {
+    if (!entry) return false
+    // Exact match (most common: Argus returns full name)
+    if (upper === entry) return true
+    // Argus returned shorter name (first name only, or truncated)
+    if (entry.startsWith(upper + " ") || entry === upper) return true
+    // Argus returned longer name (extra suffix/title) — entry is prefix of returned name
+    if (upper.startsWith(entry + " ") || upper.startsWith(entry)) return true
+    // First-name match — guards against partial last-name collisions
+    const firstName = upper.split(" ")[0]
+    const entryFirstName = entry.split(" ")[0]
+    return firstName.length > 3 && firstName === entryFirstName
+  })
 }
 
 // ─── desempenhoresumido → SDR[] ─────────────────────────────────────────────

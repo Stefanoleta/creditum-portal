@@ -52,19 +52,17 @@ export async function GET() {
     const tabulacaoItems = extractArray<ArgusTabulacaoItem>(rawTabulacoes, [
       "itens", "data", "tabulacoes",
     ])
-    const ligacoesItems = extractArray<{ idGrupoUsuario?: number | string; usuarioOperador?: string }>(
-      rawLigacoes, ["ligacoesDetalhadas", "itens", "data", "ligacoes"]
-    )
 
-    // Vendas SDR names from ligacoesdetalhadas (idGrupoUsuario=2 = Vendas-Creditum)
-    const vendasFromData = ligacoesItems
-      .filter((i) => Number(i.idGrupoUsuario) === 2)
-      .map((i) => (i.usuarioOperador ?? "").toUpperCase().trim())
-      .filter((n, idx, arr) => n && n !== "DISCADOR" && arr.indexOf(n) === idx)
+    // Vendas allowlist: hardcoded default, optional env-var override.
+    // Do NOT detect group IDs dynamically — group numbering varies by Argus installation.
+    const vendasList = getVendasAllowlist(process.env.ARGUS_SDR_ALLOWLIST)
 
-    const vendasList = vendasFromData.length > 0
-      ? vendasFromData
-      : getVendasAllowlist(process.env.ARGUS_SDR_ALLOWLIST)
+    // Log raw agent names once per request so Vercel logs can confirm exact format.
+    const rawNames = extractArray<{ nomeUsuario?: string; nome?: string }>(rawDesempenho, [
+      "desempenhosResumidos", "itens", "data", "relatorio", "agentes", "operadores",
+    ]).map((i) => i.nomeUsuario ?? i.nome ?? "?")
+    console.log("[reports/daily] agentes brutos do Argus:", rawNames)
+    console.log("[reports/daily] allowlist Vendas:", vendasList)
 
     const sdrs = adaptSDRs(desempenhoItems, vendasList)
     const { total_conversoes } = adaptTabulacoes(tabulacaoItems)
