@@ -42,24 +42,17 @@ export async function GET() {
 
     const items = (json.ligacoesDetalhadas ?? []) as Record<string, unknown>[]
 
-    // DEBUG — log unique operators before filter to verify names from Argus
-    const uniqueOps = [...new Set(items.map((i) => String(i.usuarioOperador ?? "__null__")))]
-    console.log("[DEBUG calls/list] operadores únicos:", JSON.stringify(uniqueOps))
-    console.log("[DEBUG calls/list] allowlist:", VENDAS_LIST)
-
-    // Keep only answered calls from Vendas SDRs (allowlist by name, same as cockpit)
+    // Keep only answered calls from Vendas SDRs — partial first-name match, same as cockpit
     const recordings: CallRecording[] = items
       .filter((item) => {
         const operador  = String(item.usuarioOperador ?? "").toUpperCase().trim()
         const resultado = String(item.resultadoLigacao ?? "")
         if (resultado !== "ATENDIMENTO") return false
         if (!operador || operador === "DISCADOR") return false
-        return VENDAS_LIST.some((allowed) =>
-          operador === allowed ||
-          operador.startsWith(allowed) ||
-          allowed.startsWith(operador) ||
-          operador.split(" ")[0] === allowed.split(" ")[0]
-        )
+        return VENDAS_LIST.some((allowed) => {
+          const firstName = allowed.split(" ")[0]
+          return firstName.length > 2 && operador.includes(firstName)
+        })
       })
       .sort((a, b) =>
         String(b.dataHoraLigacao ?? "").localeCompare(String(a.dataHoraLigacao ?? ""))

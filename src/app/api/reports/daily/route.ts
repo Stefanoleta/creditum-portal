@@ -60,19 +60,6 @@ export async function GET() {
     // Do NOT detect group IDs dynamically — group numbering varies by Argus installation.
     const vendasList = getVendasAllowlist(process.env.ARGUS_SDR_ALLOWLIST)
 
-    // DEBUG — log all agent objects before any filter
-    console.log("[DEBUG daily] chaves do rawDesempenho:", Object.keys(rawDesempenho))
-    console.log("[DEBUG daily] total itens desempenho:", desempenhoItems.length)
-    console.log("[DEBUG daily] agentes brutos:", JSON.stringify(
-      desempenhoItems.map((i) => ({
-        nomeUsuario: i.nomeUsuario,
-        nomeAgente: i.nomeAgente,
-        nome: i.nome,
-        idUsuario: i.idUsuario,
-      }))
-    ))
-    console.log("[DEBUG daily] allowlist:", vendasList)
-
     const sdrs = adaptSDRs(desempenhoItems, vendasList)
     const { total_conversoes } = adaptTabulacoes(tabulacaoItems)
 

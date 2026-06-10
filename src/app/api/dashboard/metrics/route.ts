@@ -124,23 +124,6 @@ export async function GET() {
       "ligacoesDetalhadas", "itens", "data", "ligacoes", "chamadas",
     ])
 
-    // DEBUG — log all agent objects before any filter (nomeUsuario + all name-like fields)
-    console.log("[DEBUG metrics] chaves do rawDesempenho:", Object.keys(rawDesempenho))
-    console.log("[DEBUG metrics] total itens desempenho:", desempenhoItems.length)
-    console.log("[DEBUG metrics] agentes brutos:", JSON.stringify(
-      desempenhoItems.map((i) => ({
-        nomeUsuario: i.nomeUsuario,
-        nomeAgente: i.nomeAgente,
-        nome: i.nome,
-        idUsuario: i.idUsuario,
-      }))
-    ))
-    console.log("[DEBUG metrics] allowlist:", VENDAS_LIST)
-
-    // DEBUG — log all unique usuarioOperador from ligacoesdetalhadas before any filter
-    const uniqueOps = [...new Set(ligacoesItems.map((i) => i.usuarioOperador ?? "__null__"))]
-    console.log("[DEBUG metrics] operadores únicos ligacoesdetalhadas:", JSON.stringify(uniqueOps))
-
     // Total dialed = all records; attended = resultadoLigacao "ATENDIMENTO"
     const totalDiscadas  = ligacoesItems.length
     const totalAtendidas = ligacoesItems.filter((i) => i.resultadoLigacao?.toUpperCase() === "ATENDIMENTO").length
@@ -151,8 +134,6 @@ export async function GET() {
 
     const sdrs      = adaptSDRs(desempenhoItems, VENDAS_LIST)
     const liveCalls = adaptLiveCalls(ligacoesItems, VENDAS_LIST)
-    console.log("[DEBUG metrics] live_calls após filtro:", liveCalls.map((c) => c.sdr_name))
-    console.log("[DEBUG metrics] sdrs após filtro:", sdrs.map((s) => s.name))
     const metrics   = buildMetrics(sdrs, liveCalls, total_conversoes, totalDiscadas, totalAtendidas)
 
     const hourlyChart = buildHourlyChart(

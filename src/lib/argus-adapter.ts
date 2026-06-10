@@ -49,30 +49,21 @@ export function getVendasAllowlist(envOverride?: string): string[] {
   return DEFAULT_VENDAS
 }
 
+// Partial first-name match: "RAFAELLA GOMES" → looks for "RAFAELLA" anywhere in name.
+// Robust against Argus returning truncated, suffixed, or differently-cased names.
 function matchesAllowlist(name: string, allowlist: string[]): boolean {
   if (allowlist.length === 0) return true
   const upper = name.toUpperCase().trim()
   if (!upper) return false
   return allowlist.some((entry) => {
-    if (!entry) return false
-    // Exact match (most common: Argus returns full name)
-    if (upper === entry) return true
-    // Argus returned shorter name (first name only, or truncated)
-    if (entry.startsWith(upper + " ") || entry === upper) return true
-    // Argus returned longer name (extra suffix/title) — entry is prefix of returned name
-    if (upper.startsWith(entry + " ") || upper.startsWith(entry)) return true
-    // First-name match — guards against partial last-name collisions
-    const firstName = upper.split(" ")[0]
-    const entryFirstName = entry.split(" ")[0]
-    return firstName.length > 3 && firstName === entryFirstName
+    const firstName = entry.split(" ")[0]
+    return firstName.length > 2 && upper.includes(firstName)
   })
 }
 
 // ─── desempenhoresumido → SDR[] ─────────────────────────────────────────────
 
 export function adaptSDRs(items: ArgusDesempenhoItem[], allowlist: string[] = DEFAULT_VENDAS): SDR[] {
-  // DEBUG TEMPORÁRIO — remover após confirmar nomes exatos do Argus
-  console.log("AGENTES ARGUS:", items.map(i => JSON.stringify(i.nomeUsuario)))
   return items
     .filter((item) => {
       const name = pickStr(item.nomeUsuario, item.nomeAgente, item.nome, "")
