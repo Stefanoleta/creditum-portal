@@ -1,7 +1,8 @@
 "use client"
 
+import { cn } from "@/lib/utils"
 import type { DashboardMetrics } from "@/types/dashboard"
-import { Phone, UserCheck, UserX, Wifi, FlaskConical } from "lucide-react"
+import { FlaskConical } from "lucide-react"
 
 interface StatusBarProps {
   metrics: DashboardMetrics
@@ -17,43 +18,44 @@ export function StatusBar({ metrics, lastUpdated, source }: StatusBarProps) {
   })
 
   return (
-    <div className="flex items-center justify-between px-4 py-1.5 bg-white border-b border-gray-200 text-xs text-gray-500 shadow-sm">
-      <div className="flex items-center gap-5">
+    <div className="flex items-center justify-between px-5 py-1 bg-[#0D5C3A] text-xs text-emerald-100">
+      <div className="flex items-center gap-4">
         {source === "mock" ? (
-          <span className="flex items-center gap-1.5 text-amber-600 font-medium">
+          <span className="flex items-center gap-1 text-amber-300 font-medium">
             <FlaskConical className="w-3 h-3" />
             Dados simulados
           </span>
         ) : (
-          <span className="flex items-center gap-1.5">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+          <span className="flex items-center gap-1.5 font-medium text-emerald-200">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75" />
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-300" />
             </span>
-            <span className="font-medium text-emerald-600">Argus ao vivo</span>
+            Argus ao vivo
           </span>
         )}
-        <span className="flex items-center gap-1">
-          <Phone className="w-3 h-3" />
-          {metrics.ligacoes_ativas} ligações ativas
-        </span>
-        <span className="flex items-center gap-1 text-emerald-600 font-medium">
-          <UserCheck className="w-3 h-3" />
-          {metrics.sdrs_disponiveis} SDRs disponíveis
-        </span>
-        <span className="flex items-center gap-1 text-blue-600 font-medium">
-          <Wifi className="w-3 h-3" />
+
+        <span className="text-emerald-300 select-none">·</span>
+
+        <span className={cn(
+          "font-medium",
+          metrics.sdrs_em_ligacao > 0 ? "text-emerald-200" : "text-emerald-400"
+        )}>
           {metrics.sdrs_em_ligacao} em ligação
         </span>
-        <span className="flex items-center gap-1 text-gray-400">
-          <UserX className="w-3 h-3" />
+
+        <span className="text-emerald-400">
+          {metrics.sdrs_disponiveis} disponíveis
+        </span>
+
+        <span className="text-emerald-500">
           {metrics.sdrs_offline} offline
         </span>
       </div>
-      <div className="flex items-center gap-4 text-gray-400">
-        <span>Creditum Portal — SDR Cockpit</span>
-        <span className="tabular-nums font-mono font-medium text-gray-600">{time}</span>
-      </div>
+
+      <span className="tabular-nums font-mono text-emerald-300 text-[11px]">
+        {time}
+      </span>
     </div>
   )
 }

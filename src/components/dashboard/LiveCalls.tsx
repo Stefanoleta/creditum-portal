@@ -2,18 +2,21 @@
 
 import { cn, formatSeconds } from "@/lib/utils"
 import type { LiveCall } from "@/types/dashboard"
-import { PhoneCall, PhoneIncoming, Clock } from "lucide-react"
+import { PhoneCall, PhoneIncoming } from "lucide-react"
 
 interface LiveCallsProps {
   calls: LiveCall[]
 }
 
-// ligacoesdetalhadas returns completed calls — show duration_seconds statically.
-// A live counting timer would inflate to hours because started_at is in the past.
+// Shows duration_seconds statically — ligacoesdetalhadas returns completed calls,
+// so a live counting timer would inflate to hours from the historical started_at.
 function CallDuration({ durationSeconds }: { durationSeconds: number }) {
-  const isLong = durationSeconds > 300
+  const isLong = durationSeconds > 600
   return (
-    <span className={cn("tabular-nums font-mono text-sm font-bold", isLong ? "text-red-600" : "text-emerald-600")}>
+    <span className={cn(
+      "tabular-nums font-mono text-sm font-bold",
+      isLong ? "text-[#D97706]" : "text-[#0D5C3A]"
+    )}>
       {formatSeconds(durationSeconds)}
     </span>
   )
@@ -22,49 +25,61 @@ function CallDuration({ durationSeconds }: { durationSeconds: number }) {
 export function LiveCalls({ calls }: LiveCallsProps) {
   if (calls.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-400 text-sm">
-        Nenhuma ligação ativa no momento
+      <div className="flex flex-col items-center justify-center h-full gap-2 py-6 text-gray-300">
+        <PhoneCall className="w-8 h-8" />
+        <span className="text-xs text-gray-400">Nenhuma ligação ativa no momento</span>
       </div>
     )
   }
 
+  // Max 2 cards — one per active SDR (already deduped upstream)
+  const visible = calls.slice(0, 2)
+
   return (
     <div className="flex flex-col gap-2">
-      {calls.map((call) => {
+      {visible.map((call) => {
         const isRinging = call.status === "tocando"
         return (
           <div
             key={call.id}
             className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-3 border",
+              "flex items-center gap-3 rounded-lg px-3 py-3 border transition-colors",
               isRinging
-                ? "border-yellow-200 bg-yellow-50 animate-pulse"
+                ? "border-amber-200 bg-amber-50"
                 : "border-gray-100 bg-white"
             )}
           >
-            <div className={cn("shrink-0", isRinging ? "text-yellow-600" : "text-emerald-600")}>
-              {isRinging ? (
-                <PhoneIncoming className="w-4 h-4" />
-              ) : (
-                <PhoneCall className="w-4 h-4" />
-              )}
+            <div className={cn(
+              "shrink-0 w-7 h-7 rounded-full flex items-center justify-center",
+              isRinging ? "bg-amber-100 text-[#D97706]" : "bg-emerald-50 text-[#0D5C3A]"
+            )}>
+              {isRinging
+                ? <PhoneIncoming className="w-3.5 h-3.5" />
+                : <PhoneCall className="w-3.5 h-3.5" />}
             </div>
 
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold text-gray-800 truncate">{call.sdr_name}</div>
-              <div className="text-xs text-gray-500 truncate">{call.school_name}</div>
+              <div className="text-sm font-semibold text-gray-800 truncate leading-tight">
+                {call.sdr_name}
+              </div>
+              <div className="text-xs text-gray-400 truncate mt-0.5">{call.school_name}</div>
             </div>
 
             <div className="flex flex-col items-end gap-0.5 shrink-0">
               <CallDuration durationSeconds={call.duration_seconds} />
-              <div className="flex items-center gap-1 text-xs text-gray-400">
-                <Clock className="w-2.5 h-2.5" />
+              <div className="text-[10px] text-gray-400">
                 {isRinging ? "Chamando..." : "Em andamento"}
               </div>
             </div>
           </div>
         )
       })}
+
+      {calls.length > 2 && (
+        <p className="text-[10px] text-gray-400 text-center pt-1">
+          +{calls.length - 2} outras ligações
+        </p>
+      )}
     </div>
   )
 }

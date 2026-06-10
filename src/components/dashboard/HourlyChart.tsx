@@ -34,18 +34,19 @@ export function HourlyChart({ data }: HourlyChartProps) {
           contentStyle={{
             background: "#ffffff",
             border: "1px solid #e5e7eb",
-            borderRadius: "8px",
+            borderRadius: "6px",
             fontSize: 12,
-            boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+            boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
           }}
           labelStyle={{ color: "#374151", fontWeight: 600 }}
+          cursor={{ fill: "rgba(0,0,0,0.03)" }}
         />
         <Legend
-          wrapperStyle={{ fontSize: 11, color: "#6b7280", paddingTop: 4 }}
+          wrapperStyle={{ fontSize: 11, color: "#9ca3af", paddingTop: 6 }}
         />
-        <Bar dataKey="ligacoes"  name="Ligações"   fill="#3b82f6" radius={[3, 3, 0, 0]} maxBarSize={24} />
-        <Bar dataKey="contatos"  name="Contatos"   fill="#8b5cf6" radius={[3, 3, 0, 0]} maxBarSize={24} />
-        <Bar dataKey="conversoes" name="Conversões" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={24} />
+        <Bar dataKey="ligacoes"   name="Ligações"   fill="#6B7280" radius={[3, 3, 0, 0]} maxBarSize={20} />
+        <Bar dataKey="contatos"   name="Contatos"   fill="#D97706" radius={[3, 3, 0, 0]} maxBarSize={20} />
+        <Bar dataKey="conversoes" name="Conversões" fill="#0D5C3A" radius={[3, 3, 0, 0]} maxBarSize={20} />
       </BarChart>
     </ResponsiveContainer>
   )

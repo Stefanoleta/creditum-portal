@@ -7,50 +7,66 @@ interface MetricCardProps {
   label: string
   value: string
   sublabel?: string
-  icon: LucideIcon
+  icon?: LucideIcon
   variant?: "default" | "success" | "warning" | "danger" | "info"
   pulse?: boolean
 }
 
-const variantStyles = {
-  default:  { card: "border-gray-200",   iconBg: "bg-gray-100",    icon: "text-gray-500",   value: "text-gray-900" },
-  success:  { card: "border-emerald-200", iconBg: "bg-emerald-50",  icon: "text-emerald-600", value: "text-emerald-700" },
-  warning:  { card: "border-yellow-200",  iconBg: "bg-yellow-50",   icon: "text-yellow-600",  value: "text-yellow-700" },
-  danger:   { card: "border-red-200",     iconBg: "bg-red-50",      icon: "text-red-600",     value: "text-red-700" },
-  info:     { card: "border-blue-200",    iconBg: "bg-blue-50",     icon: "text-blue-600",    value: "text-blue-700" },
+const topBar: Record<NonNullable<MetricCardProps["variant"]>, string> = {
+  default: "bg-gray-300",
+  success: "bg-[#0D5C3A]",
+  warning: "bg-[#D97706]",
+  danger:  "bg-[#DC2626]",
+  info:    "bg-gray-400",
+}
+
+const valueColor: Record<NonNullable<MetricCardProps["variant"]>, string> = {
+  default: "text-gray-900",
+  success: "text-[#0D5C3A]",
+  warning: "text-[#D97706]",
+  danger:  "text-[#DC2626]",
+  info:    "text-gray-800",
 }
 
 export function MetricCard({
   label,
   value,
   sublabel,
-  icon: Icon,
   variant = "default",
   pulse = false,
 }: MetricCardProps) {
-  const s = variantStyles[variant]
   return (
-    <div className={cn("relative bg-white rounded-xl border shadow-sm p-5 flex flex-col gap-2", s.card)}>
-      {pulse && (
-        <span className="absolute top-3 right-3 flex h-2.5 w-2.5">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
-        </span>
-      )}
-      <div className="flex items-center gap-2">
-        <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center", s.iconBg)}>
-          <Icon className={cn("w-3.5 h-3.5", s.icon)} />
-        </div>
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider leading-tight">
+    <div className="relative bg-white rounded-lg border border-gray-200 shadow-[0_1px_2px_rgba(0,0,0,0.05)] overflow-hidden flex flex-col">
+      {/* 4px status bar */}
+      <div className={cn("h-1 w-full shrink-0", topBar[variant])} />
+
+      <div className="px-4 pt-3 pb-4 flex flex-col gap-1.5 flex-1">
+        {pulse && (
+          <span className="absolute top-[18px] right-3 flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+          </span>
+        )}
+
+        <span className="text-[10px] font-medium text-gray-400 uppercase tracking-widest leading-none pr-4">
           {label}
         </span>
+
+        <div
+          className={cn(
+            "font-bold tabular-nums leading-none",
+            "text-[2.5rem]",
+            "tracking-[-0.02em]",
+            valueColor[variant]
+          )}
+        >
+          {value}
+        </div>
+
+        {sublabel && (
+          <div className="text-[11px] text-gray-400">{sublabel}</div>
+        )}
       </div>
-      <div className={cn("text-4xl font-bold tabular-nums leading-none", s.value)}>
-        {value}
-      </div>
-      {sublabel && (
-        <div className="text-xs text-gray-400">{sublabel}</div>
-      )}
     </div>
   )
 }
