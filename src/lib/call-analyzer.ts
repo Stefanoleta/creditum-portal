@@ -17,35 +17,67 @@ export const openaiClient  = openaiKey    ? new OpenAI({ apiKey: openaiKey })   
 
 export type AudioDownload = { base64: string; contentType: string }
 
+function hasKnownHeader(buf: Buffer): boolean {
+  if (buf.length < 4) return false
+  const isRiff = buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46
+  const isMp3Sync = buf[0] === 0xFF && (buf[1] & 0xE0) === 0xE0
+  const isId3 = buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33
+  const isOgg = buf[0] === 0x4F && buf[1] === 0x67 && buf[2] === 0x67 && buf[3] === 0x53
+  const isFlac = buf[0] === 0x66 && buf[1] === 0x4C && buf[2] === 0x61 && buf[3] === 0x43
+  return isRiff || isMp3Sync || isId3 || isOgg || isFlac
+}
+
+async function fetchArgusAudio(
+  idLigacao: string,
+  extraBody: Record<string, unknown> = {},
+): Promise<{ buffer: Buffer; contentType: string } | null> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 30_000)
+  try {
+    const res = await fetch(`${BASE_URL}/cmd/downloadgravacao`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Token-Signature": TOKEN },
+      body: JSON.stringify({ idLigacao, idCampanha: CAMPAIGN_ID, ...extraBody }),
+      cache: "no-store",
+      signal: controller.signal,
+    })
+    if (!res.ok) return null
+    const ct = res.headers.get("content-type") ?? ""
+    if (ct.includes("application/json") || ct.includes("text/")) {
+      const json = await res.json() as Record<string, unknown>
+      if (typeof json?.codStatus === "number" && json.codStatus < 0) {
+        throw new Error(String(json.descStatus ?? "download falhou"))
+      }
+      return null
+    }
+    const ab = await res.arrayBuffer()
+    if (ab.byteLength === 0) return null
+    return { buffer: Buffer.from(ab), contentType: ct }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export async function downloadAudioById(idLigacao: string | number): Promise<AudioDownload> {
   if (!BASE_URL || !TOKEN) throw new Error("ARGUS não configurado")
 
-  const controller = new AbortController()
-  // Audio files can be large — allow 30s
-  const timer = setTimeout(() => controller.abort(), 30_000)
+  const raw = await fetchArgusAudio(String(idLigacao))
+  if (!raw) throw new Error("Argus downloadgravacao: resposta vazia ou erro HTTP")
 
-  const res = await fetch(`${BASE_URL}/cmd/downloadgravacao`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Token-Signature": TOKEN },
-    body: JSON.stringify({ idLigacao: String(idLigacao), idCampanha: CAMPAIGN_ID }),
-    cache: "no-store",
-    signal: controller.signal,
-  }).finally(() => clearTimeout(timer))
-
-  if (!res.ok) throw new Error(`Argus downloadgravacao HTTP ${res.status}`)
-
-  // Response is raw binary audio — check Content-Type to handle JSON error responses
-  const ct = res.headers.get("content-type") ?? ""
-  if (ct.includes("application/json") || ct.includes("text/")) {
-    const json = await res.json() as Record<string, unknown>
-    if (typeof json?.codStatus === "number" && json.codStatus < 0) {
-      throw new Error(String(json.descStatus ?? "download falhou"))
-    }
+  // If Argus returned a recognized audio container, use it directly
+  if (hasKnownHeader(raw.buffer)) {
+    return { base64: raw.buffer.toString("base64"), contentType: raw.contentType }
   }
 
-  const buffer = await res.arrayBuffer()
-  if (buffer.byteLength === 0) throw new Error("Arquivo de áudio vazio")
-  return { base64: Buffer.from(buffer).toString("base64"), contentType: ct }
+  // Raw G.711 detected (bytes like ac 80 88 9f — no RIFF/MP3 header).
+  // Some Argus versions accept a "formato" body field to transcode before sending.
+  const withFormat = await fetchArgusAudio(String(idLigacao), { formato: "mp3" }).catch(() => null)
+  if (withFormat && hasKnownHeader(withFormat.buffer)) {
+    return { base64: withFormat.buffer.toString("base64"), contentType: withFormat.contentType || "audio/mpeg" }
+  }
+
+  // Still raw G.711 — return as-is; transcribeAudio handles G.711 wrapping
+  return { base64: raw.buffer.toString("base64"), contentType: raw.contentType }
 }
 
 export async function downloadAudio(arquivo: string): Promise<AudioDownload> {
@@ -90,19 +122,20 @@ function detectAudioFormat(buffer: Buffer, contentTypeHint: string): { filename:
 // Wrap raw G.711 bytes (no file header) into a RIFF/WAV container so Whisper's
 // internal FFmpeg can identify and decode the codec (ulaw=7, alaw=6).
 // VoIP dialers like Argus often stream raw G.711 without any container header.
-function wrapRawAsWav(data: Buffer, formatCode: 6 | 7): Buffer {
+// sampleRate: 8000 (narrowband, most common) or 16000 (wideband VoIP).
+function wrapRawAsWav(data: Buffer, formatCode: 6 | 7, sampleRate: 8000 | 16000 = 8000): Buffer {
   const header = Buffer.alloc(44)
   header.write("RIFF", 0, "ascii")
-  header.writeUInt32LE(36 + data.length, 4)  // total chunk size
+  header.writeUInt32LE(36 + data.length, 4)
   header.write("WAVE", 8, "ascii")
   header.write("fmt ", 12, "ascii")
-  header.writeUInt32LE(16, 16)          // fmt chunk size
-  header.writeUInt16LE(formatCode, 20)  // 6=alaw, 7=ulaw
-  header.writeUInt16LE(1, 22)           // mono
-  header.writeUInt32LE(8000, 24)        // 8 kHz (VoIP standard)
-  header.writeUInt32LE(8000, 28)        // byte rate = 8000 × 1 × 1
-  header.writeUInt16LE(1, 32)           // block align
-  header.writeUInt16LE(8, 34)           // bits per sample
+  header.writeUInt32LE(16, 16)            // fmt chunk size
+  header.writeUInt16LE(formatCode, 20)    // 6=alaw, 7=ulaw
+  header.writeUInt16LE(1, 22)             // mono
+  header.writeUInt32LE(sampleRate, 24)
+  header.writeUInt32LE(sampleRate, 28)    // byte rate = sampleRate × 1ch × 1B/sample
+  header.writeUInt16LE(1, 32)             // block align
+  header.writeUInt16LE(8, 34)             // bits per sample
   header.write("data", 36, "ascii")
   header.writeUInt32LE(data.length, 40)
   return Buffer.concat([header, data])
@@ -116,44 +149,64 @@ export async function transcribeAudio(base64Audio: string, contentTypeHint = "")
 
   const primary = detectAudioFormat(buffer, contentTypeHint)
 
-  // Candidates in priority order. G.711 VoIP dialers (Argus) send raw ulaw/alaw
-  // without a RIFF header — wrapping in WAV lets Whisper's FFmpeg decode the codec.
-  const candidates: AudioCandidate[] = [
-    { filename: primary.filename,      mimeType: primary.mimeType,  data: buffer },
-    { filename: "gravacao.wav",        mimeType: "audio/wav",        data: buffer },
-    { filename: "gravacao.mp3",        mimeType: "audio/mpeg",       data: buffer },
-    { filename: "gravacao_ulaw.wav",   mimeType: "audio/wav",        data: wrapRawAsWav(buffer, 7) },
-    { filename: "gravacao_alaw.wav",   mimeType: "audio/wav",        data: wrapRawAsWav(buffer, 6) },
-    { filename: "gravacao.webm",       mimeType: "audio/webm",       data: buffer },
+  // ── Phase 1: known container formats — retry on 400 (Whisper rejects unknown containers) ──
+  const phase1: AudioCandidate[] = [
+    { filename: primary.filename, mimeType: primary.mimeType, data: buffer },
+    { filename: "gravacao.wav",   mimeType: "audio/wav",       data: buffer },
+    { filename: "gravacao.mp3",   mimeType: "audio/mpeg",      data: buffer },
+    { filename: "gravacao.webm",  mimeType: "audio/webm",      data: buffer },
   ].filter((f, i, arr) => arr.findIndex((x) => x.filename === f.filename) === i)
 
-  let lastError: Error | undefined
-  for (const { filename, mimeType, data } of candidates) {
+  for (const { filename, mimeType, data } of phase1) {
     try {
       const file = new File([new Uint8Array(data)], filename, { type: mimeType })
       const result = await openaiClient.audio.transcriptions.create({
-        file,
-        model: "whisper-1",
-        language: "pt",
-        response_format: "text",
+        file, model: "whisper-1", language: "pt", response_format: "text",
       })
       return typeof result === "string" ? result : (result as { text?: string }).text ?? ""
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg.includes("could not be decoded") || msg.includes("format is not supported") || msg.includes("400")) {
-        lastError = err instanceof Error ? err : new Error(msg)
-        continue  // try next candidate
+        continue
       }
       throw err  // auth / rate-limit / network — don't retry
     }
   }
 
-  // All candidates failed — include magic bytes for format diagnosis
+  // ── Phase 2: raw G.711 audio — try all 4 codec×rate combinations in parallel ──
+  // Whisper returns HTTP 200 (not 400) even when G.711 codec params are wrong, but produces
+  // garbled text (e.g. "encerramento de vídeo"). Running all 4 in parallel and picking the
+  // transcription with the most words is the only reliable way to find the correct combination.
+  const g711Variants = [
+    { filename: "gravacao_ulaw_8k.wav",  data: wrapRawAsWav(buffer, 7, 8000)  },
+    { filename: "gravacao_alaw_8k.wav",  data: wrapRawAsWav(buffer, 6, 8000)  },
+    { filename: "gravacao_ulaw_16k.wav", data: wrapRawAsWav(buffer, 7, 16000) },
+    { filename: "gravacao_alaw_16k.wav", data: wrapRawAsWav(buffer, 6, 16000) },
+  ]
+
+  const g711Results = await Promise.allSettled(
+    g711Variants.map(async ({ filename, data }) => {
+      const file = new File([new Uint8Array(data)], filename, { type: "audio/wav" })
+      const result = await openaiClient!.audio.transcriptions.create({
+        file, model: "whisper-1", language: "pt", response_format: "text",
+      })
+      const text = typeof result === "string" ? result : (result as { text?: string }).text ?? ""
+      return { filename, text, words: text.trim().split(/\s+/).filter(Boolean).length }
+    })
+  )
+
+  let best: { filename: string; text: string; words: number } | undefined
+  for (const r of g711Results) {
+    if (r.status === "fulfilled" && r.value.words > (best?.words ?? 0)) {
+      best = r.value
+    }
+  }
+  if (best?.text) return best.text
+
   const hexBytes = buffer.subarray(0, 16).toString("hex").replace(/(.{2})/g, "$1 ").trim()
   throw new Error(
-    `Whisper rejeitou todos os formatos (wav, mp3, ulaw, alaw, webm). ` +
-    `Bytes iniciais: [${hexBytes}]. ` +
-    `Último erro: ${lastError?.message ?? "desconhecido"}`
+    `Whisper rejeitou todos os formatos G.711 (ulaw/alaw × 8k/16k). ` +
+    `Bytes iniciais: [${hexBytes}].`
   )
 }
 
