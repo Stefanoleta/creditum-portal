@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server"
 import { generateMockRecordings } from "@/lib/mock-calls"
+import { getVendasAllowlist } from "@/lib/argus-adapter"
 import type { CallRecording } from "@/types/calls"
 
 const BASE_URL    = process.env.ARGUS_BASE_URL
 const TOKEN       = process.env.ARGUS_TOKEN
 const CAMPAIGN_ID = Number(process.env.ARGUS_CAMPAIGN_ID ?? "1")
+const VENDAS_LIST = getVendasAllowlist(process.env.ARGUS_SDR_ALLOWLIST)
 
 function maskPhone(phone: string): string {
   const digits = phone.replace(/\D/g, "")
@@ -40,17 +42,23 @@ export async function GET() {
 
     const items = (json.ligacoesDetalhadas ?? []) as Record<string, unknown>[]
 
-    // Keep only SDR-handled calls from the Vendas group, exclude auto-dialer misses
+    // DEBUG — log unique operators before filter to verify names from Argus
+    const uniqueOps = [...new Set(items.map((i) => String(i.usuarioOperador ?? "__null__")))]
+    console.log("[DEBUG calls/list] operadores únicos:", JSON.stringify(uniqueOps))
+    console.log("[DEBUG calls/list] allowlist:", VENDAS_LIST)
+
+    // Keep only answered calls from Vendas SDRs (allowlist by name, same as cockpit)
     const recordings: CallRecording[] = items
       .filter((item) => {
-        const operador  = String(item.usuarioOperador ?? "").toUpperCase()
+        const operador  = String(item.usuarioOperador ?? "").toUpperCase().trim()
         const resultado = String(item.resultadoLigacao ?? "")
-        const grupo     = String(item.grupoOrigem ?? "")
-        return (
-          resultado === "ATENDIMENTO" &&
-          operador !== "DISCADOR" &&
-          operador !== "" &&
-          grupo.toUpperCase().includes("VENDAS")
+        if (resultado !== "ATENDIMENTO") return false
+        if (!operador || operador === "DISCADOR") return false
+        return VENDAS_LIST.some((allowed) =>
+          operador === allowed ||
+          operador.startsWith(allowed) ||
+          allowed.startsWith(operador) ||
+          operador.split(" ")[0] === allowed.split(" ")[0]
         )
       })
       .sort((a, b) =>
