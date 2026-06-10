@@ -103,6 +103,14 @@ export interface ArgusLigacoesResponse {
 }
 
 export interface ArgusTabulacaoItem {
+  // Confirmed Argus field names from tabulacoesdetalhadas
+  tabulado?: string             // confirmed: tabulação text ("CLIENTE DESLIGOU", etc.)
+  categoriaTabulacao?: string   // confirmed: high-level category ("SUCESSO", "AGENDAMENTO GRUPO", "RECUSA", "NÃO TABULADO")
+  usuarioOperador?: string      // confirmed: agent name
+  nomeCliente?: string          // confirmed: lead name
+  dataEvento?: string           // confirmed: tabulação timestamp
+  idTabulacao?: number
+  // legacy / alternative field names
   tabulacao?: string
   descricao?: string
   tipo?: string

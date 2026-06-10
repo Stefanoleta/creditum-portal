@@ -48,12 +48,12 @@ export function adaptSDRs(items: ArgusDesempenhoItem[]): SDR[] {
     // desempenhoresumido is a day-summary, not real-time — can't distinguish em_ligacao vs disponivel
     const status: SDRStatus = isLoggedIn ? "disponivel" : "offline"
 
-    // qtdeAtendimentoTotal = calls answered by this SDR (i.e., atendidas, not total dialed)
-    // true realizadas (total dialed) comes from ligacoesdetalhadas; use atendimentos here for SDR-level stats
+    // qtdeAtendimentoTotal = calls Rafaella received from the dialer and handled (= atendidas)
     const atendidas  = pickNum(item.qtdeAtendimentoTotal, item.qtdeAtendimentoAutomatico, item.qtdAtendidas, item.ligacoesAtendidas, item.totalAtendidas)
-    const realizadas = atendidas  // overridden at route level with real discadas count
+    const realizadas = atendidas
     const conversoes = pickNum(item.conversoes, item.qtdConversoes)
     const tma        = pickNum(item.tempoMedioAtendimento, item.tma)
+    const tme        = pickNum(item.tempoMedioEspera, item.tme)
 
     return {
       id: `${ramal}-${name}`,
@@ -65,6 +65,7 @@ export function adaptSDRs(items: ArgusDesempenhoItem[]): SDR[] {
       ligacoes_atendidas: atendidas,
       conversoes,
       tma_segundos: tma,
+      tme_segundos: tme,
     } satisfies SDR
   })
 }
@@ -106,33 +107,17 @@ export function adaptLiveCalls(items: ArgusLigacaoItem[]): LiveCall[] {
 }
 
 // ─── tabulacoesdetalhadas → Objection[] + Occurrence[] + conversão total ────
+// Confirmed Argus field names: tabulado (tabulação text), categoriaTabulacao (category).
+// Each record = 1 call; no `quantidade` field exists in this Argus configuration.
 
-// The 8 predefined occurrence categories with keyword matchers and colors.
-// Matched against tabulacaoDesc (or tabulacao/descricao) from the Argus response.
-const OCCURRENCE_CATEGORIES: {
-  label: string
-  color: string
-  keywords: string[]
-}[] = [
-  { label: "Contrato Fechado",       color: "bg-emerald-500", keywords: ["contrato", "fechado", "venda", "matric", "acordo"] },
-  { label: "Qualificação",           color: "bg-blue-500",    keywords: ["qualif"] },
-  { label: "Agendamento Confirmado", color: "bg-sky-400",     keywords: ["agend"] },
-  { label: "Cliente Desligou",       color: "bg-red-500",     keywords: ["desligou", "desconect", "ocupado", "congestion"] },
-  { label: "Não Atendeu",            color: "bg-gray-400",    keywords: ["nao atendeu", "não atendeu", "no answer", "nao atende", "não atende", "nao aten"] },
-  { label: "Caixa Postal",           color: "bg-gray-300",    keywords: ["caixa postal", "voicemail", "correio de voz", "caixa"] },
-  { label: "Retornar Ligação",       color: "bg-yellow-500",  keywords: ["retornar", "callback", "ligar depois", "retorno", "religar"] },
-  { label: "Sem Interesse",          color: "bg-orange-500",  keywords: ["sem interesse", "nao quer", "não quer", "nao tem interesse"] },
+// Direct mapping from Argus categoriaTabulacao values to display labels + colors.
+const CATEGORIA_MAP: { key: string; label: string; color: string }[] = [
+  { key: "SUCESSO",                label: "Contrato Fechado",        color: "bg-emerald-500" },
+  { key: "AGENDAMENTO GRUPO",      label: "Agendamento Grupo",        color: "bg-blue-500"    },
+  { key: "AGENDAMENTO INDIVIDUAL", label: "Agendamento Individual",   color: "bg-sky-400"     },
+  { key: "RECUSA",                 label: "Recusa",                   color: "bg-orange-500"  },
+  { key: "NÃO TABULADO",           label: "Não Tabulado",             color: "bg-gray-400"    },
 ]
-
-function matchOccurrenceCategory(label: string): typeof OCCURRENCE_CATEGORIES[number] | null {
-  const l = label.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
-  for (const cat of OCCURRENCE_CATEGORIES) {
-    if (cat.keywords.some((k) => l.includes(k.normalize("NFD").replace(/[̀-ͯ]/g, "")))) {
-      return cat
-    }
-  }
-  return null
-}
 
 export function adaptTabulacoes(items: ArgusTabulacaoItem[]): {
   objections: Objection[]
@@ -140,56 +125,49 @@ export function adaptTabulacoes(items: ArgusTabulacaoItem[]): {
   total_conversoes: number
 } {
   let total_conversoes = 0
-  const objectionItems: { label: string; count: number }[] = []
-  // Accumulate counts per predefined occurrence category
-  const occurrenceMap = new Map<string, number>(
-    OCCURRENCE_CATEGORIES.map((c) => [c.label, 0])
-  )
+  // Count by categoriaTabulacao for occurrences panel
+  const categoriaCount = new Map<string, number>()
+  // Count by tabulado text for objections panel
+  const tabuladoCount  = new Map<string, number>()
 
   for (const item of items) {
-    // tabulacaoDesc is the primary field name used by the Argus API
-    const label = pickStr(
-      (item as Record<string, unknown>).tabulacaoDesc as string,
+    const categoria = pickStr(item.categoriaTabulacao, "NÃO TABULADO")
+    // tabulado is the confirmed field name; fall back to legacy alternatives
+    const tabulado  = pickStr(
+      item.tabulado,
+      (item as Record<string, unknown>).tabulacaoDesc as string | undefined,
       item.tabulacao,
       item.descricao,
-      item.tipo,
-      item.nome,
       "Sem tabulação"
     )
-    const count = pickNum(item.quantidade, item.qtd, item.total)
+    // Each record = 1 call (quantidade is null in this Argus config)
+    const count = pickNum(item.quantidade, item.qtd, item.total) || 1
 
-    const cat = matchOccurrenceCategory(label)
-    if (cat) {
-      if (cat.label === "Contrato Fechado") total_conversoes += count
-      occurrenceMap.set(cat.label, (occurrenceMap.get(cat.label) ?? 0) + count)
-    } else {
-      // Unmatched tabulações fall into the objections list
-      objectionItems.push({ label, count })
+    categoriaCount.set(categoria, (categoriaCount.get(categoria) ?? 0) + count)
+    if (tabulado && tabulado !== "Sem tabulação") {
+      tabuladoCount.set(tabulado, (tabuladoCount.get(tabulado) ?? 0) + count)
     }
+
+    if (categoria === "SUCESSO") total_conversoes += count
   }
 
-  // Build Objection[]
-  const objectionTotal = objectionItems.reduce((s, i) => s + i.count, 0) || 1
-  const objections: Objection[] = objectionItems
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5)
-    .map((o) => ({
-      label: o.label,
-      count: o.count,
-      percentage: Math.round((o.count / objectionTotal) * 100),
-    }))
-
-  // Build Occurrence[] — show all 8 categories, sort by count desc
-  const occurrenceTotal = Array.from(occurrenceMap.values()).reduce((a, b) => a + b, 0) || 1
-  const occurrences: Occurrence[] = OCCURRENCE_CATEGORIES.map((cat) => {
-    const count = occurrenceMap.get(cat.label) ?? 0
-    return {
-      label: cat.label,
-      count,
-      percentage: Math.round((count / occurrenceTotal) * 100),
-      color: cat.color,
-    }
+  // Occurrences — one row per predefined category, sorted by count
+  const occTotal = Array.from(categoriaCount.values()).reduce((a, b) => a + b, 0) || 1
+  const occurrences: Occurrence[] = CATEGORIA_MAP.map(({ key, label, color }) => {
+    const count = categoriaCount.get(key) ?? 0
+    return { label, count, percentage: Math.round((count / occTotal) * 100), color }
   }).sort((a, b) => b.count - a.count)
+
+  // Objections — top 5 tabulado texts
+  const objTotal = Array.from(tabuladoCount.values()).reduce((a, b) => a + b, 0) || 1
+  const objections: Objection[] = Array.from(tabuladoCount.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([label, count]) => ({
+      label,
+      count,
+      percentage: Math.round((count / objTotal) * 100),
+    }))
 
   return { objections, occurrences, total_conversoes }
 }
@@ -208,17 +186,21 @@ export function buildMetrics(
   const available = sdrs.filter((s) => s.status === "disponivel")
   const offline = sdrs.filter((s) => s.status === "offline")
 
-  // totalDiscadasOverride = all calls dialed (DISCADOR + SDR) from ligacoesdetalhadas
-  // Falls back to summing SDR-level realizadas if not provided (less accurate)
-  const totalLigacoes = totalDiscadasOverride ?? sdrs.reduce((s, r) => s + r.ligacoes_realizadas, 0)
+  // total_ligacoes = SDR-handled calls (qtdeAtendimentoTotal from desempenhoresumido)
   const totalAtendidas = sdrs.reduce((s, r) => s + r.ligacoes_atendidas, 0)
+  const totalLigacoes  = totalAtendidas
 
   const tmaValues = active.filter((s) => s.tma_segundos > 0).map((s) => s.tma_segundos)
   const tma = tmaValues.length ? Math.round(tmaValues.reduce((a, b) => a + b, 0) / tmaValues.length) : 0
 
-  const tme = 0  // ligacoesdetalhadas has no live ringing calls; TME not available from this API
+  // TME from desempenhoresumido.tempoMedioEspera (stored in SDR.tme_segundos)
+  const tmeValues = active.filter((s) => s.tme_segundos && s.tme_segundos > 0).map((s) => s.tme_segundos!)
+  const tme = tmeValues.length ? Math.round(tmeValues.reduce((a, b) => a + b, 0) / tmeValues.length) : 0
 
-  const taxa_contato = totalLigacoes > 0 ? (totalAtendidas / totalLigacoes) * 100 : 0
+  // Taxa de contato = SDR atendimentos / total discadas (DISCADOR + SDR) from ligacoesdetalhadas
+  const taxa_contato = totalDiscadasOverride && totalDiscadasOverride > 0
+    ? (totalAtendidas / totalDiscadasOverride) * 100
+    : 0
   const taxa_conversao = totalAtendidas > 0 ? (total_conversoes / totalAtendidas) * 100 : 0
 
   return {

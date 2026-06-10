@@ -9,6 +9,8 @@ import { ObjectionsBar } from "@/components/dashboard/ObjectionsBar"
 import { OccurrencesBar } from "@/components/dashboard/OccurrencesBar"
 import { HourlyChart } from "@/components/dashboard/HourlyChart"
 import { StatusBar } from "@/components/dashboard/StatusBar"
+import { MockDataBanner } from "@/components/ui-shared/MockDataBanner"
+import { DataTimestamp } from "@/components/ui-shared/DataTimestamp"
 import { formatSeconds, formatPercent } from "@/lib/utils"
 import {
   Clock,
@@ -49,6 +51,7 @@ export default function CockpitPage() {
 
   return (
     <div className="min-h-screen bg-[#F5F5F5] text-gray-900 flex flex-col select-none">
+      <MockDataBanner isDemo={source === "mock"} reason="Argus inacessível" />
       <StatusBar metrics={metrics} lastUpdated={last_updated} source={source} />
 
       {/* Header */}
@@ -65,13 +68,16 @@ export default function CockpitPage() {
           <div className="w-px h-6 bg-gray-200" />
           <p className="text-xs text-gray-400">SDR Cockpit — Dashboard em tempo real</p>
         </div>
-        <div className="text-xs text-gray-500">
-          {new Date().toLocaleDateString("pt-BR", {
-            weekday: "long",
-            day: "2-digit",
-            month: "long",
-            year: "numeric",
-          })}
+        <div className="flex items-center gap-4 text-xs text-gray-500">
+          <DataTimestamp updatedAt={last_updated} label="Atualizado em" />
+          <span>
+            {new Date().toLocaleDateString("pt-BR", {
+              weekday: "long",
+              day: "2-digit",
+              month: "long",
+              year: "numeric",
+            })}
+          </span>
         </div>
       </div>
 
@@ -122,11 +128,10 @@ export default function CockpitPage() {
           />
           <MetricCard
             label="SDRs em Ligação"
-            value={metrics.sdrs_em_ligacao.toString()}
-            sublabel={`${metrics.sdrs_disponiveis} disponíveis`}
+            value="—"
+            sublabel={`${metrics.sdrs_disponiveis} disponíveis · tempo real indisponível`}
             icon={Target}
-            variant={metrics.sdrs_em_ligacao >= 3 ? "success" : "default"}
-            pulse={metrics.sdrs_em_ligacao > 0}
+            variant="default"
           />
         </div>
 
@@ -146,14 +151,10 @@ export default function CockpitPage() {
         <div className="col-span-4 row-span-1 bg-white border border-gray-200 rounded-xl shadow-sm p-4 flex flex-col gap-3">
           <div className="flex items-center justify-between shrink-0">
             <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wider">
-              Ligações ao Vivo
+              Ligações do Dia
             </h2>
-            <span className="flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-              </span>
-              {live_calls.length} ativas
+            <span className="text-xs text-gray-400">
+              {live_calls.length} hoje
             </span>
           </div>
           <div className="flex-1 overflow-y-auto">

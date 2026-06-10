@@ -11,6 +11,7 @@ export interface SDR {
   ligacoes_atendidas: number
   conversoes: number
   tma_segundos: number
+  tme_segundos?: number   // from desempenhoresumido.tempoMedioEspera
   score_ia?: number
 }
 
