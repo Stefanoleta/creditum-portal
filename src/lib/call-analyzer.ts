@@ -87,25 +87,50 @@ function detectAudioFormat(buffer: Buffer, contentTypeHint: string): { filename:
 
 // ─── Transcribe with OpenAI Whisper ─────────────────────────────────────────
 
+// Wrap raw G.711 bytes (no file header) into a RIFF/WAV container so Whisper's
+// internal FFmpeg can identify and decode the codec (ulaw=7, alaw=6).
+// VoIP dialers like Argus often stream raw G.711 without any container header.
+function wrapRawAsWav(data: Buffer, formatCode: 6 | 7): Buffer {
+  const header = Buffer.alloc(44)
+  header.write("RIFF", 0, "ascii")
+  header.writeUInt32LE(36 + data.length, 4)  // total chunk size
+  header.write("WAVE", 8, "ascii")
+  header.write("fmt ", 12, "ascii")
+  header.writeUInt32LE(16, 16)          // fmt chunk size
+  header.writeUInt16LE(formatCode, 20)  // 6=alaw, 7=ulaw
+  header.writeUInt16LE(1, 22)           // mono
+  header.writeUInt32LE(8000, 24)        // 8 kHz (VoIP standard)
+  header.writeUInt32LE(8000, 28)        // byte rate = 8000 × 1 × 1
+  header.writeUInt16LE(1, 32)           // block align
+  header.writeUInt16LE(8, 34)           // bits per sample
+  header.write("data", 36, "ascii")
+  header.writeUInt32LE(data.length, 40)
+  return Buffer.concat([header, data])
+}
+
+type AudioCandidate = { filename: string; mimeType: string; data: Buffer }
+
 export async function transcribeAudio(base64Audio: string, contentTypeHint = ""): Promise<string> {
   if (!openaiClient) throw new Error("OPENAI_API_KEY não configurado")
   const buffer = Buffer.from(base64Audio, "base64")
 
-  // Try the detected format first, then common fallbacks in order.
-  // Whisper returns HTTP 400 "could not be decoded" when the MIME type or container
-  // doesn't match the actual bytes — retry with other formats before giving up.
   const primary = detectAudioFormat(buffer, contentTypeHint)
-  const candidates = [
-    primary,
-    { filename: "gravacao.wav",  mimeType: "audio/wav"  },
-    { filename: "gravacao.mp3",  mimeType: "audio/mpeg" },
-    { filename: "gravacao.webm", mimeType: "audio/webm" },
-  ].filter((f, i, arr) => arr.findIndex((x) => x.mimeType === f.mimeType) === i)
+
+  // Candidates in priority order. G.711 VoIP dialers (Argus) send raw ulaw/alaw
+  // without a RIFF header — wrapping in WAV lets Whisper's FFmpeg decode the codec.
+  const candidates: AudioCandidate[] = [
+    { filename: primary.filename,      mimeType: primary.mimeType,  data: buffer },
+    { filename: "gravacao.wav",        mimeType: "audio/wav",        data: buffer },
+    { filename: "gravacao.mp3",        mimeType: "audio/mpeg",       data: buffer },
+    { filename: "gravacao_ulaw.wav",   mimeType: "audio/wav",        data: wrapRawAsWav(buffer, 7) },
+    { filename: "gravacao_alaw.wav",   mimeType: "audio/wav",        data: wrapRawAsWav(buffer, 6) },
+    { filename: "gravacao.webm",       mimeType: "audio/webm",       data: buffer },
+  ].filter((f, i, arr) => arr.findIndex((x) => x.filename === f.filename) === i)
 
   let lastError: Error | undefined
-  for (const { filename, mimeType } of candidates) {
+  for (const { filename, mimeType, data } of candidates) {
     try {
-      const file = new File([buffer], filename, { type: mimeType })
+      const file = new File([new Uint8Array(data)], filename, { type: mimeType })
       const result = await openaiClient.audio.transcriptions.create({
         file,
         model: "whisper-1",
@@ -117,17 +142,17 @@ export async function transcribeAudio(base64Audio: string, contentTypeHint = "")
       const msg = err instanceof Error ? err.message : String(err)
       if (msg.includes("could not be decoded") || msg.includes("format is not supported") || msg.includes("400")) {
         lastError = err instanceof Error ? err : new Error(msg)
-        continue  // try next format
+        continue  // try next candidate
       }
       throw err  // auth / rate-limit / network — don't retry
     }
   }
 
-  // All formats failed — include magic bytes so the caller can diagnose the container
+  // All candidates failed — include magic bytes for format diagnosis
   const hexBytes = buffer.subarray(0, 16).toString("hex").replace(/(.{2})/g, "$1 ").trim()
   throw new Error(
-    `Whisper rejeitou todos os formatos (wav, mp3, webm). ` +
-    `Bytes iniciais do arquivo: [${hexBytes}]. ` +
+    `Whisper rejeitou todos os formatos (wav, mp3, ulaw, alaw, webm). ` +
+    `Bytes iniciais: [${hexBytes}]. ` +
     `Último erro: ${lastError?.message ?? "desconhecido"}`
   )
 }
