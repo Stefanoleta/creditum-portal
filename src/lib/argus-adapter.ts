@@ -71,6 +71,8 @@ function matchesAllowlist(name: string, allowlist: string[]): boolean {
 // ─── desempenhoresumido → SDR[] ─────────────────────────────────────────────
 
 export function adaptSDRs(items: ArgusDesempenhoItem[], allowlist: string[] = DEFAULT_VENDAS): SDR[] {
+  // DEBUG TEMPORÁRIO — remover após confirmar nomes exatos do Argus
+  console.log("AGENTES ARGUS:", items.map(i => JSON.stringify(i.nomeUsuario)))
   return items
     .filter((item) => {
       const name = pickStr(item.nomeUsuario, item.nomeAgente, item.nome, "")
