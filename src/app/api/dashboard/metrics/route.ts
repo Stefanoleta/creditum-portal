@@ -65,8 +65,9 @@ async function fetchTabulacoes(): Promise<{
     try {
       const raw = await argusPost("report/tabulacoesdetalhadas", body)
       const items = extractArray<ArgusTabulacaoItem>(raw, [
-        "itens", "data", "tabulacoes", "resultados",
+        "itens", "data", "tabulacoes", "resultados", "tabulacoesDetalhadas",
       ])
+      if (items.length === 0) continue  // empty response → try next attempt or fall back to mock
       const result = adaptTabulacoes(items)
       return { ...result, tabulacoes_source: "argus" }
     } catch {
@@ -142,7 +143,7 @@ export async function GET() {
 
     const sdrs      = adaptSDRs(desempenhoItems)
     const liveCalls = adaptLiveCalls(ligacoesItems)  // filtered to SDR-only, excludes DISCADOR
-    const metrics   = buildMetrics(sdrs, liveCalls, total_conversoes, totalDiscadas)
+    const metrics   = buildMetrics(sdrs, liveCalls, total_conversoes, totalDiscadas, totalAtendidas)
 
     const hourlyChart = buildHourlyChart(
       totalDiscadas,

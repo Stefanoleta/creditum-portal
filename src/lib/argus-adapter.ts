@@ -86,7 +86,22 @@ export function adaptLiveCalls(items: ArgusLigacaoItem[]): LiveCall[] {
     return (now - new Date(startStr).getTime()) <= LIVE_WINDOW_MS
   })
 
-  return sdrCalls.map((item, idx) => {
+  // Dedup: keep only the most recent call per SDR name
+  const latestBySdr = new Map<string, ArgusLigacaoItem>()
+  for (const item of sdrCalls) {
+    const sdrName = ((item.usuarioOperador ?? item.nomeAgente ?? item.nome ?? item.agente ?? "")).trim()
+    const existing = latestBySdr.get(sdrName)
+    if (!existing) {
+      latestBySdr.set(sdrName, item)
+    } else {
+      const existingTime = new Date(existing.dataHoraLigacao ?? existing.dataHora ?? existing.horarioInicio ?? existing.inicio ?? 0).getTime()
+      const currentTime  = new Date(item.dataHoraLigacao   ?? item.dataHora   ?? item.horarioInicio   ?? item.inicio   ?? 0).getTime()
+      if (currentTime > existingTime) latestBySdr.set(sdrName, item)
+    }
+  }
+  const dedupedCalls = Array.from(latestBySdr.values())
+
+  return dedupedCalls.map((item, idx) => {
     // usuarioOperador is the confirmed field name for the agent
     const sdrName = pickStr(item.usuarioOperador, item.nomeAgente, item.nome, item.agente, "SDR")
     const phone   = maskPhone(pickStr(item.telefone, item.numero, item.numeroDiscado, ""))
@@ -207,15 +222,17 @@ export function buildMetrics(
   liveCalls: LiveCall[],
   total_conversoes: number,
   /** Total calls dialed by the system (all agents + auto-dialer), from ligacoesdetalhadas */
-  totalDiscadasOverride?: number
+  totalDiscadasOverride?: number,
+  /** Total calls answered (resultadoLigacao=ATENDIMENTO), from ligacoesdetalhadas filter */
+  totalAtendidasOverride?: number
 ): DashboardMetrics {
   const active = sdrs.filter((s) => s.status !== "offline")
   const inCall = sdrs.filter((s) => s.status === "em_ligacao")
   const available = sdrs.filter((s) => s.status === "disponivel")
   const offline = sdrs.filter((s) => s.status === "offline")
 
-  // total_ligacoes = all calls dialed by the system (from ligacoesdetalhadas length)
-  const totalAtendidas = sdrs.reduce((s, r) => s + r.ligacoes_atendidas, 0)
+  // Prefer totalAtendidasOverride (from ligacoesdetalhadas ATENDIMENTO filter) over SDR aggregate
+  const totalAtendidas = totalAtendidasOverride ?? sdrs.reduce((s, r) => s + r.ligacoes_atendidas, 0)
   const totalLigacoes  = totalDiscadasOverride ?? totalAtendidas
 
   const tmaValues = active.filter((s) => s.tma_segundos > 0).map((s) => s.tma_segundos)
