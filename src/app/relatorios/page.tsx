@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import {
+  ArrowLeft,
   BarChart3,
   Clock,
   Monitor,
@@ -24,9 +25,9 @@ const HEALTH_MS  = 60 * 1000
 // ─── System Health types ──────────────────────────────────────────────────────
 
 interface HealthPayload {
-  openai:      { balance: number | null; status: "ok" | "low" | "critical" | "error" | "unconfigured" }
+  openai:      { balance: null; status: "ok" | "low" | "critical" | "error" | "unconfigured" }
   argus:       { status: "ok" | "error" | "unconfigured"; latencyMs?: number }
-  supabase:    { pendingCount: number; status: "ok" | "error" | "unconfigured" }
+  supabase:    { pendingCount: number; status: "ok" | "error" | "unconfigured"; configured?: boolean }
   lastWebhook: { receivedAt: string | null }
 }
 
@@ -102,16 +103,8 @@ function SystemHealthPanel() {
             openai.status === "critical"    ? "text-red-600"     :
             openai.status === "unconfigured"? "text-gray-400"    : "text-red-600"
           )}>
-            OpenAI {openai.balance !== null
-              ? `$${openai.balance.toFixed(2)}`
-              : openai.status === "unconfigured" ? "—" : "Erro"}
+            OpenAI {openai.status === "ok" ? "Online" : openai.status === "unconfigured" ? "—" : "Erro"}
           </span>
-          {openai.status === "low" && (
-            <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-semibold">Saldo baixo</span>
-          )}
-          {openai.status === "critical" && (
-            <span className="text-[9px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-semibold">Recarregar agora</span>
-          )}
         </div>
 
         <span className="text-gray-200 select-none">|</span>
@@ -139,7 +132,11 @@ function SystemHealthPanel() {
           <span>
             Último webhook:{" "}
             <span className="font-medium text-gray-700">
-              {lastWebhook.receivedAt ? relativeTime(lastWebhook.receivedAt) : "—"}
+              {lastWebhook.receivedAt
+                ? relativeTime(lastWebhook.receivedAt)
+                : sb.configured === false
+                  ? "Supabase não configurado"
+                  : "—"}
             </span>
           </span>
         </div>
@@ -682,7 +679,11 @@ export default function RelatoriosPage() {
       {/* Top nav */}
       <header className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-14">
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4">
+            <Link href="/cockpit" className="flex items-center gap-1.5 text-gray-400 hover:text-gray-700 transition-colors text-sm font-medium">
+              <ArrowLeft className="w-4 h-4" />
+              <span className="hidden sm:inline">Cockpit</span>
+            </Link>
             <Link href="/">
               <Image src="/logo-creditum.png" alt="Creditum" height={26} width={74} priority className="object-contain" />
             </Link>

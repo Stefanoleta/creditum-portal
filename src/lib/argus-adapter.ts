@@ -35,10 +35,31 @@ function maskPhone(phone: string): string {
   return phone.replace(/\d(?=\d{4})/g, "*")
 }
 
+// ─── Vendas group allowlist ──────────────────────────────────────────────────
+// Only agents in this list are shown in rankings and live calls.
+// Override via ARGUS_SDR_ALLOWLIST="Rafaella Gomes,Marcela Sampaio" (case-insensitive).
+const DEFAULT_VENDAS = ["RAFAELLA GOMES", "MARCELA SAMPAIO"]
+
+export function getVendasAllowlist(envOverride?: string): string[] {
+  if (envOverride) return envOverride.split(",").map((n) => n.trim().toUpperCase())
+  return DEFAULT_VENDAS
+}
+
+function matchesAllowlist(name: string, allowlist: string[]): boolean {
+  if (allowlist.length === 0) return true
+  const upper = name.toUpperCase().trim()
+  return allowlist.some((a) => upper.includes(a) || a.includes(upper))
+}
+
 // ─── desempenhoresumido → SDR[] ─────────────────────────────────────────────
 
-export function adaptSDRs(items: ArgusDesempenhoItem[]): SDR[] {
-  return items.map((item, idx) => {
+export function adaptSDRs(items: ArgusDesempenhoItem[], allowlist: string[] = DEFAULT_VENDAS): SDR[] {
+  return items
+  .filter((item) => {
+    const name = pickStr(item.nomeUsuario, item.nomeAgente, item.nome, "")
+    return matchesAllowlist(name, allowlist)
+  })
+  .map((item, idx) => {
     const name = pickStr(item.nomeUsuario, item.nomeAgente, item.nome, `SDR ${idx + 1}`)
     const ramal = pickStr(item.ramal, item.ramalAgente, `300${idx + 1}`)
 
@@ -76,11 +97,12 @@ export function adaptSDRs(items: ArgusDesempenhoItem[]): SDR[] {
 
 const LIVE_WINDOW_MS = 30 * 60 * 1000
 
-export function adaptLiveCalls(items: ArgusLigacaoItem[]): LiveCall[] {
+export function adaptLiveCalls(items: ArgusLigacaoItem[], allowlist: string[] = DEFAULT_VENDAS): LiveCall[] {
   const now = Date.now()
   const sdrCalls = items.filter((item) => {
     const op = (item.usuarioOperador ?? "").toUpperCase().trim()
     if (!op || op === "DISCADOR") return false
+    if (!matchesAllowlist(op, allowlist)) return false
     const startStr = item.dataHoraLigacao ?? item.dataHora ?? item.horarioInicio ?? item.inicio
     if (!startStr) return true
     return (now - new Date(startStr).getTime()) <= LIVE_WINDOW_MS

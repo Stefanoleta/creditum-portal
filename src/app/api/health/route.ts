@@ -6,14 +6,14 @@ const ANTHROPIC_KEY  = process.env.ANTHROPIC_API_KEY
 const ARGUS_BASE_URL = process.env.ARGUS_BASE_URL
 const ARGUS_TOKEN    = process.env.ARGUS_TOKEN
 
-export type OpenAIStatus  = "ok" | "error" | "unconfigured"
+export type OpenAIStatus  = "ok" | "low" | "critical" | "error" | "unconfigured"
 export type ServiceStatus = "ok" | "error" | "unconfigured"
 
 export interface HealthPayload {
-  openai:      { status: OpenAIStatus }
+  openai:      { status: OpenAIStatus; balance: null }
   anthropic:   { status: ServiceStatus }
   argus:       { status: ServiceStatus; latencyMs?: number }
-  supabase:    { pendingCount: number; status: ServiceStatus }
+  supabase:    { pendingCount: number; status: ServiceStatus; configured: boolean }
   lastWebhook: { receivedAt: string | null }
 }
 
@@ -30,20 +30,24 @@ export async function GET() {
   const argus     = argusResult.status === "fulfilled"     ? argusResult.value     : { status: "error" as const }
   const sbData    = supabaseResult.status === "fulfilled"  ? supabaseResult.value  : { pendingCount: 0, lastWebhook: null }
 
+  const supabaseConfigured = !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
   return NextResponse.json<HealthPayload>({
     openai,
     anthropic,
     argus,
     supabase: {
       pendingCount: sbData.pendingCount,
-      status: supabaseResult.status === "fulfilled" ? "ok" : "error",
+      status: supabaseConfigured
+        ? (supabaseResult.status === "fulfilled" ? "ok" : "error")
+        : "unconfigured",
+      configured: supabaseConfigured,
     },
     lastWebhook: { receivedAt: sbData.lastWebhook },
   })
 }
 
-async function checkOpenAI(): Promise<{ status: OpenAIStatus }> {
-  if (!OPENAI_KEY) return { status: "unconfigured" }
+async function checkOpenAI(): Promise<{ status: OpenAIStatus; balance: null }> {
+  if (!OPENAI_KEY) return { status: "unconfigured", balance: null }
 
   try {
     // /v1/models works with any valid key and doesn't require billing permissions
@@ -52,9 +56,15 @@ async function checkOpenAI(): Promise<{ status: OpenAIStatus }> {
       signal: AbortSignal.timeout(8000),
       cache: "no-store",
     })
-    return { status: res.ok ? "ok" : "error" }
-  } catch {
-    return { status: "error" }
+    if (!res.ok) {
+      const body = await res.text().catch(() => "")
+      console.warn(`[health/openai] /v1/models → HTTP ${res.status}: ${body.slice(0, 200)}`)
+      return { status: "error", balance: null }
+    }
+    return { status: "ok", balance: null }
+  } catch (err) {
+    console.warn("[health/openai] fetch error:", err instanceof Error ? err.message : err)
+    return { status: "error", balance: null }
   }
 }
 

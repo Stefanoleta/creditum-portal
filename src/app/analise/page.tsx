@@ -208,8 +208,9 @@ export default function AnalisePage() {
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200 shadow-sm">
         <div className="flex items-center gap-4">
-          <Link href="/" className="flex items-center gap-1.5 text-gray-400 hover:text-gray-600 transition-colors text-sm">
+          <Link href="/cockpit" className="flex items-center gap-1.5 text-gray-400 hover:text-gray-700 transition-colors text-sm font-medium">
             <ArrowLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">Cockpit</span>
           </Link>
           <Image src="/logo-creditum.png" alt="Creditum" height={28} width={79} priority className="object-contain" />
           <div className="w-px h-6 bg-gray-200" />

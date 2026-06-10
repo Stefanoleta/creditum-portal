@@ -5,6 +5,7 @@ import {
   adaptTabulacoes,
   buildMetrics,
   extractArray,
+  getVendasAllowlist,
 } from "@/lib/argus-adapter"
 import { generateMockDashboard } from "@/lib/mock-data"
 import type {
@@ -17,6 +18,7 @@ import type { HourlyMetric, Objection, Occurrence } from "@/types/dashboard"
 const BASE_URL    = process.env.ARGUS_BASE_URL!
 const TOKEN       = process.env.ARGUS_TOKEN!
 const CAMPAIGN_ID = Number(process.env.ARGUS_CAMPAIGN_ID ?? "1")
+const VENDAS_LIST = getVendasAllowlist(process.env.ARGUS_SDR_ALLOWLIST)
 
 async function argusPost<T = Record<string, unknown>>(
   endpoint: string,
@@ -55,23 +57,34 @@ async function fetchTabulacoes(): Promise<{
   const mock = generateMockDashboard()
 
   // Attempt 1: standard payload
-  // Attempt 2: with idCampanha=1 (some Argus configs require campaign scope)
+  // Attempt 2: with idCampanha=CAMPAIGN_ID (some Argus configs require campaign scope)
+  // Attempt 3: broader window
   const attempts = [
     { ultimosMinutos: 480 },
+    { ultimosMinutos: 480, idCampanha: CAMPAIGN_ID },
     { ultimosMinutos: 480, idCampanha: 1 },
   ]
 
   for (const body of attempts) {
     try {
       const raw = await argusPost("report/tabulacoesdetalhadas", body)
+      // Diagnostic log: show top-level keys and sample of first item
+      const keys = Object.keys(raw as object)
+      const anyArray = keys.find((k) => Array.isArray((raw as Record<string, unknown>)[k]))
+      const firstItem = anyArray ? ((raw as Record<string, unknown>)[anyArray] as unknown[])[0] : null
+      console.log("[tabulacoes] payload keys:", keys, "| array key:", anyArray ?? "none", "| first item:", JSON.stringify(firstItem ?? raw).slice(0, 300))
+
       const items = extractArray<ArgusTabulacaoItem>(raw, [
         "itens", "data", "tabulacoes", "resultados", "tabulacoesDetalhadas",
       ])
-      if (items.length === 0) continue  // empty response → try next attempt or fall back to mock
+      if (items.length === 0) {
+        console.warn("[tabulacoes] attempt", JSON.stringify(body), "→ 0 items — tentando próximo")
+        continue
+      }
       const result = adaptTabulacoes(items)
       return { ...result, tabulacoes_source: "argus" }
-    } catch {
-      // try next attempt or fall through to mock
+    } catch (err) {
+      console.warn("[tabulacoes] attempt", JSON.stringify(body), "→ erro:", err instanceof Error ? err.message : err)
     }
   }
 
@@ -141,8 +154,8 @@ export async function GET() {
     const { objections, occurrences, total_conversoes, tabulacoes_source } =
       await fetchTabulacoes()
 
-    const sdrs      = adaptSDRs(desempenhoItems)
-    const liveCalls = adaptLiveCalls(ligacoesItems)  // filtered to SDR-only, excludes DISCADOR
+    const sdrs      = adaptSDRs(desempenhoItems, VENDAS_LIST)
+    const liveCalls = adaptLiveCalls(ligacoesItems, VENDAS_LIST)  // filtered to Vendas SDRs only
     const metrics   = buildMetrics(sdrs, liveCalls, total_conversoes, totalDiscadas, totalAtendidas)
 
     const hourlyChart = buildHourlyChart(

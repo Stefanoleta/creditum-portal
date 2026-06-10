@@ -63,8 +63,14 @@ export function SDRRanking({ sdrs }: SDRRankingProps) {
               {index + 1}
             </span>
 
-            <div className="w-8 h-8 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center text-xs font-bold text-blue-700 shrink-0">
-              {getInitials(sdr.name)}
+            <div className="relative shrink-0">
+              <div className="w-8 h-8 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center text-xs font-bold text-blue-700">
+                {getInitials(sdr.name)}
+              </div>
+              <span className={cn(
+                "absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white",
+                sdr.status === "offline" ? "bg-gray-300" : sdr.status === "pausado" ? "bg-yellow-400" : "bg-emerald-400"
+              )} />
             </div>
 
             <div className="flex-1 min-w-0">

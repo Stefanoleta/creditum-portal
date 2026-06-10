@@ -3,27 +3,18 @@
 import { cn, formatSeconds } from "@/lib/utils"
 import type { LiveCall } from "@/types/dashboard"
 import { PhoneCall, PhoneIncoming, Clock } from "lucide-react"
-import { useEffect, useState } from "react"
 
 interface LiveCallsProps {
   calls: LiveCall[]
 }
 
-function CallTimer({ startedAt }: { startedAt: string }) {
-  const [elapsed, setElapsed] = useState(0)
-
-  useEffect(() => {
-    const start = new Date(startedAt).getTime()
-    const tick = () => setElapsed(Math.floor((Date.now() - start) / 1000))
-    tick()
-    const id = setInterval(tick, 1000)
-    return () => clearInterval(id)
-  }, [startedAt])
-
-  const isLong = elapsed > 300
+// ligacoesdetalhadas returns completed calls — show duration_seconds statically.
+// A live counting timer would inflate to hours because started_at is in the past.
+function CallDuration({ durationSeconds }: { durationSeconds: number }) {
+  const isLong = durationSeconds > 300
   return (
     <span className={cn("tabular-nums font-mono text-sm font-bold", isLong ? "text-red-600" : "text-emerald-600")}>
-      {formatSeconds(elapsed)}
+      {formatSeconds(durationSeconds)}
     </span>
   )
 }
@@ -65,7 +56,7 @@ export function LiveCalls({ calls }: LiveCallsProps) {
             </div>
 
             <div className="flex flex-col items-end gap-0.5 shrink-0">
-              <CallTimer startedAt={call.started_at} />
+              <CallDuration durationSeconds={call.duration_seconds} />
               <div className="flex items-center gap-1 text-xs text-gray-400">
                 <Clock className="w-2.5 h-2.5" />
                 {isRinging ? "Chamando..." : "Em andamento"}
