@@ -217,7 +217,15 @@ export async function GET() {
     ])
 
     const sdrs = adaptSDRs(desempenhoItems, vendasList)
-    const tentativas = sdrs.reduce((s, r) => s + r.ligacoes_realizadas, 0) || ligacoesItems.length
+
+    // Mirror cockpit logic: SDR discadas sum is reliable only when it exceeds atendidas.
+    // ligacoesdetalhadas may include unanswered calls that desempenhoresumido doesn't expose
+    // for the filtered vendas subset — so fall back to total ligacoes record count.
+    const totalDiscadasFromSDR = sdrs.reduce((s, r) => s + r.ligacoes_realizadas, 0)
+    const totalAtendidasCount  = ligacoesItems.filter(i => (i.resultadoLigacao ?? "").toUpperCase() === "ATENDIMENTO").length
+    const tentativas = totalDiscadasFromSDR > totalAtendidasCount
+      ? totalDiscadasFromSDR
+      : ligacoesItems.length
 
     const hojeBase = buildHojeFromItems(ligacoesItems, tabulacaoItems, tentativas)
     const { melhor_hora, pior_hora } = buildHourlyDestaques(ligacoesItems, tabulacaoItems)
