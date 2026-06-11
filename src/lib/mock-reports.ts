@@ -43,6 +43,7 @@ export interface ReportsPayload {
   historico: DailyRow[]
   source: "argus" | "mock"
   updated_at: string
+  fallback_reason?: string
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────

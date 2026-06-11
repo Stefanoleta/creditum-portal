@@ -2,8 +2,8 @@ import { NextResponse } from "next/server"
 import { generateMockReports } from "@/lib/mock-reports"
 import type { OperatorRow, HourlyRow } from "@/lib/mock-reports"
 import { adaptSDRs, adaptTabulacoes, extractArray, getVendasAllowlist } from "@/lib/argus-adapter"
-import type { ArgusDesempenhoItem, ArgusTabulacaoItem } from "@/types/argus"
-import { HR_BASE, DAILY_BASE } from "@/lib/mock-reports"
+import type { ArgusDesempenhoItem, ArgusTabulacaoItem, ArgusLigacaoItem } from "@/types/argus"
+import { DAILY_BASE } from "@/lib/mock-reports"
 
 const BASE_URL   = process.env.ARGUS_BASE_URL
 const TOKEN      = process.env.ARGUS_TOKEN
@@ -35,6 +35,42 @@ async function argusPost<T = Record<string, unknown>>(
   }
 
   return json as T
+}
+
+function buildIntradayFromLigacoes(items: ArgusLigacaoItem[]): HourlyRow[] {
+  interface Bucket { ligacoes: number; atendidas: number; conversoes: number }
+  const buckets = new Map<string, Bucket>()
+
+  for (const item of items) {
+    const raw = item.dataHoraLigacao ?? item.dataHora ?? item.horarioInicio ?? item.inicio
+    if (!raw) continue
+    const hour = parseInt(raw.substring(11, 13), 10)
+    if (isNaN(hour)) continue
+    const key = `${String(hour).padStart(2, "0")}h`
+
+    if (!buckets.has(key)) buckets.set(key, { ligacoes: 0, atendidas: 0, conversoes: 0 })
+    const b = buckets.get(key)!
+    b.ligacoes++
+
+    if ((item.resultadoLigacao ?? "").toUpperCase() === "ATENDIMENTO") b.atendidas++
+
+    const tab = (item.tabulacao ?? "").toUpperCase()
+    const cat = (item.categoriaTabulacao ?? "").toUpperCase()
+    if (tab === "PROPOSTA ENVIADA" || tab.startsWith("PROPOSTA ENVIADA") || cat === "SUCESSO") {
+      b.conversoes++
+    }
+  }
+
+  return Array.from(buckets.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([hora, b]) => ({
+      hora,
+      ligacoes:       b.ligacoes,
+      atendidas:      b.atendidas,
+      conversoes:     b.conversoes,
+      taxa_contato:   b.ligacoes  > 0 ? Math.round((b.atendidas  / b.ligacoes)  * 1000) / 10 : 0,
+      taxa_conversao: b.atendidas > 0 ? Math.round((b.conversoes / b.atendidas) * 1000) / 10 : 0,
+    }))
 }
 
 export async function GET() {
@@ -84,22 +120,10 @@ export async function GET() {
       receita: conversoes * 1600,
     }
 
-    // Scale HR_BASE proportionally to today's actual totals
-    const hrTotal = HR_BASE.reduce((s, r) => s + r.ligacoes, 0)
-    const scale   = hrTotal > 0 ? ligacoes / hrTotal : 1
-    const intraday: HourlyRow[] = HR_BASE.map((r) => {
-      const l = Math.round(r.ligacoes * scale)
-      const a = Math.round(r.atendidas * scale)
-      const c = Math.round(r.conversoes * scale)
-      return {
-        hora: r.hora,
-        ligacoes: l,
-        atendidas: a,
-        conversoes: c,
-        taxa_contato:   l > 0 ? Math.round((a / l) * 1000) / 10 : 0,
-        taxa_conversao: a > 0 ? Math.round((c / a) * 1000) / 10 : 0,
-      }
-    })
+    const ligacaoItems = extractArray<ArgusLigacaoItem>(rawLigacoes, [
+      "ligacoesDetalhadas", "itens", "data", "ligacoes",
+    ])
+    const intraday = buildIntradayFromLigacoes(ligacaoItems)
 
     const operadores: OperatorRow[] = sdrs.map((s, i) => ({
       id: s.id,
@@ -129,10 +153,12 @@ export async function GET() {
     })
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err)
-    console.warn("[reports/daily] Argus indisponível — usando mock:", reason)
+    console.warn("[reports/daily] Argus indisponível:", reason)
 
     return NextResponse.json({
       ...generateMockReports(),
+      intraday:      [],
+      por_hora:      [],
       fallback_reason: reason,
     })
   }
