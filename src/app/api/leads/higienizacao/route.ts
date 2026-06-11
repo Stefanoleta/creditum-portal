@@ -45,8 +45,9 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  // tipo === "pendentes" (default): leads com telefone problemático sem correção ainda
-  // Filtra sugestao_substituicao = false OU null (leads inseridos antes da migration ter DEFAULT false)
+  // tipo === "pendentes" (default): leads com telefone problemático, sem correção e sem sugestão
+  // Usa not.is.true em vez de eq.false para cobrir tanto false quanto null
+  // (leads inseridos antes da migration ter DEFAULT false podem ter sugestao_substituicao = null)
   const { data, error, count } = await supabase
     .from("leads")
     .select(
@@ -55,7 +56,7 @@ export async function GET(req: NextRequest) {
     )
     .eq("precisa_higienizacao", true)
     .is("higienizado_em", null)
-    .or("sugestao_substituicao.eq.false,sugestao_substituicao.is.null")
+    .not("sugestao_substituicao", "is", true)
     .order("created_at", { ascending: false })
     .range(from, to)
 

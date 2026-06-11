@@ -395,6 +395,7 @@ function HigienizacaoTab({ onResolved }: { onResolved: () => void }) {
   const [pageSugestoes, setPageSugestoes] = useState(1)
 
   const [loading, setLoading] = useState(true)
+  const [apiError, setApiError] = useState<string | null>(null)
   const [corrections, setCorrections] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState<Record<string, boolean>>({})
 
@@ -402,17 +403,29 @@ function HigienizacaoTab({ onResolved }: { onResolved: () => void }) {
 
   const loadPendentes = useCallback(() => {
     setLoading(true)
+    setApiError(null)
     fetch(`/api/leads/higienizacao?tipo=pendentes&page=${pagePendentes}&per_page=${PER_PAGE}`)
-      .then(r => r.json())
-      .then(d => { setPendentes(d.leads ?? []); setTotalPendentes(d.total ?? 0) })
+      .then(async r => {
+        const d = await r.json()
+        if (!r.ok) { setApiError(d.error ?? `Erro ${r.status}`); return }
+        setPendentes(d.leads ?? [])
+        setTotalPendentes(d.total ?? 0)
+      })
+      .catch(e => setApiError(e instanceof Error ? e.message : "Erro de rede"))
       .finally(() => setLoading(false))
   }, [pagePendentes])
 
   const loadSugestoes = useCallback(() => {
     setLoading(true)
+    setApiError(null)
     fetch(`/api/leads/higienizacao?tipo=sugestoes&page=${pageSugestoes}&per_page=${PER_PAGE}`)
-      .then(r => r.json())
-      .then(d => { setSugestoes(d.leads ?? []); setTotalSugestoes(d.total ?? 0) })
+      .then(async r => {
+        const d = await r.json()
+        if (!r.ok) { setApiError(d.error ?? `Erro ${r.status}`); return }
+        setSugestoes(d.leads ?? [])
+        setTotalSugestoes(d.total ?? 0)
+      })
+      .catch(e => setApiError(e instanceof Error ? e.message : "Erro de rede"))
       .finally(() => setLoading(false))
   }, [pageSugestoes])
 
@@ -488,12 +501,19 @@ function HigienizacaoTab({ onResolved }: { onResolved: () => void }) {
         {/* ── Sub-tab: Pendentes ──────────────────────────────────────────── */}
         {subTab === "pendentes" && (
           <>
+            {apiError && (
+              <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-lg px-4 py-3 mb-3">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                Erro ao carregar: {apiError}
+                <button className="ml-auto text-xs underline" onClick={loadPendentes}>Tentar novamente</button>
+              </div>
+            )}
             {loading ? (
               <div className="flex items-center gap-3 py-8 justify-center text-sm text-gray-400">
                 <div className="w-4 h-4 border-2 border-gray-200 border-t-emerald-500 rounded-full animate-spin" />
                 Carregando...
               </div>
-            ) : pendentes.length === 0 ? (
+            ) : !apiError && pendentes.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-12 text-gray-400">
                 <Check className="w-8 h-8 text-emerald-200" />
                 <p className="text-sm">Nenhum contato pendente de higienização</p>

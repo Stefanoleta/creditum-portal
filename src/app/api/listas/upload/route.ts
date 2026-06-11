@@ -237,7 +237,7 @@ export async function POST(req: NextRequest) {
     // Insere leads em lotes de 200 (Caso 2 + Caso 3 + Caso 4)
     const BATCH = 200
     for (let i = 0; i < allToInsert.length; i += BATCH) {
-      const batch = allToInsert.slice(i, i + BATCH).map(l => ({ ...l, lista_id }))
+      const batch = allToInsert.slice(i, i + BATCH).map(l => ({ ...l, lista_id, sugestao_substituicao: false }))
       const { error: leadsErr } = await supabase.from("leads").insert(batch)
       if (leadsErr) {
         console.error("[upload] insert leads batch:", leadsErr.message)
