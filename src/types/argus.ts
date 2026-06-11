@@ -124,6 +124,7 @@ export interface ArgusTabulacaoItem {
   categoriaTabulacao?: string   // confirmed: high-level category ("SUCESSO", "AGENDAMENTO GRUPO", "RECUSA", "NÃO TABULADO")
   usuarioOperador?: string      // confirmed: agent name
   nomeCliente?: string          // confirmed: lead name
+  telefone?: string             // confirmed: lead phone
   dataEvento?: string           // confirmed: tabulação timestamp
   idTabulacao?: number
   ligacaoRelevante?: ArgusLigacaoRelevante  // confirmed: linked call details

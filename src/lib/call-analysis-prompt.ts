@@ -17,7 +17,8 @@ Analise a ligação e retorne um JSON com exatamente esta estrutura:
     "abertura": <0-25>,
     "engajamento_lead": <0-25>,
     "tratamento_objecao": <0-25>,
-    "proposta_beneficio": <0-25>
+    "proposta_beneficio": <0-25>,
+    "tempo_resposta": <0-25>
   },
   "resultado": "converteu" | "nao_atendeu" | "sem_interesse" | "recontato" | "fora_politica",
   "duracao_segundos": <número>,
@@ -55,23 +56,30 @@ REGRAS:
 - Nunca sugira pressão ou urgência falsa
 - Se o lead mencionou dificuldade financeira real, sugira empatia antes da proposta
 - Sugestões de script devem soar naturais em português brasileiro, tom informal mas profissional
-- Se a ligação foi muito curta (menos de 30s), informe que não há dados suficientes para análise completa`
+- Se a ligação foi muito curta (menos de 30s), informe que não há dados suficientes para análise completa
+- score_breakdown.tempo_resposta: avalie a velocidade e qualidade das respostas do SDR às perguntas e objeções do lead — SDR rápido e preciso = 25, lento ou impreciso = 0
+- Se lead_desligou = true, considere que o lead encerrou a chamada como sinal de contexto para abertura, engajamento e tempo_resposta`
 
 export function buildUserMessage(params: {
   sdrName: string
   schoolName: string
   durationSeconds: number
   transcript: string
+  leadDesligou?: boolean
 }): string {
-  const { sdrName, schoolName, durationSeconds, transcript } = params
+  const { sdrName, schoolName, durationSeconds, transcript, leadDesligou } = params
   const min = Math.floor(durationSeconds / 60)
   const sec = durationSeconds % 60
   const dur = `${min}min${sec}s`
 
+  const desligouLine = leadDesligou !== undefined
+    ? `Quem encerrou: ${leadDesligou ? "o lead desligou" : "o SDR encerrou a ligação"}\n`
+    : ""
+
   return `SDR: ${sdrName}
 Escola parceira: ${schoolName}
 Duração da ligação: ${dur}
-
+${desligouLine}
 TRANSCRIÇÃO:
 ${transcript || "[Transcrição não disponível]"}
 

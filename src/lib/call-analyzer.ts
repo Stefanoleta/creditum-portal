@@ -246,10 +246,17 @@ export async function analyzeWithClaude(params: {
   schoolName: string
   durationSeconds: number
   transcript: string
+  leadDesligou?: boolean
 }): Promise<ClaudeResult> {
   if (!anthropic) throw new Error("ANTHROPIC_API_KEY não configurado")
 
-  const userMessage = buildUserMessage(params)
+  const userMessage = buildUserMessage({
+    sdrName:         params.sdrName,
+    schoolName:      params.schoolName,
+    durationSeconds: params.durationSeconds,
+    transcript:      params.transcript,
+    leadDesligou:    params.leadDesligou,
+  })
 
   const message = await anthropic.messages.create({
     model: "claude-opus-4-8",

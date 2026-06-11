@@ -38,10 +38,11 @@ export type AnalysisStatus = "completed" | "pendente"
 // ─── Rich coaching types (new prompt) ─────────────────────────────────────────
 
 export interface ScoreBreakdown {
-  abertura: number         // 0-25
-  engajamento_lead: number // 0-25
+  abertura: number           // 0-25
+  engajamento_lead: number   // 0-25
   tratamento_objecao: number // 0-25
   proposta_beneficio: number // 0-25
+  tempo_resposta?: number    // 0-25: velocidade e qualidade de resposta do SDR (novo)
 }
 
 export interface MomentoCritico {
