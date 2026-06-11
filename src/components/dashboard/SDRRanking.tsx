@@ -95,11 +95,19 @@ export function SDRRanking({ sdrs }: SDRRankingProps) {
                 </div>
               </div>
 
-              {/* Status + TMA */}
+              {/* Status + TMA + Ocupação */}
               <div className="shrink-0 text-right hidden sm:block">
                 <div className="text-[10px] text-gray-400 leading-none">{statusLabel(sdr.status)}</div>
                 {sdr.tma_segundos > 0 && (
                   <div className="text-[10px] text-gray-300 mt-0.5">TMA {formatSeconds(sdr.tma_segundos)}</div>
+                )}
+                {sdr.taxa_ocupacao !== undefined && (
+                  <div className={cn(
+                    "text-[10px] mt-0.5 tabular-nums",
+                    sdr.taxa_ocupacao >= 40 ? "text-emerald-500" : sdr.taxa_ocupacao >= 25 ? "text-amber-400" : "text-red-400"
+                  )}>
+                    {sdr.taxa_ocupacao}% ocup.
+                  </div>
                 )}
               </div>
             </div>

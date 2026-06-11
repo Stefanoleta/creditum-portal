@@ -32,10 +32,13 @@ export interface ArgusDesempenhoItem {
   totalAtendidas?: number
 
   // Time in seconds
-  tempoMedioAtendimento?: number     // confirmed: TMA
-  tempoMedioEspera?: number          // confirmed: TME
-  tempoLivreSegundos?: number        // confirmed: seconds currently free
-  tempoAtendimentoSegundos?: number  // confirmed: total seconds in calls today
+  tempoMedioAtendimento?: number          // confirmed: TMA
+  tempoMedioEspera?: number              // confirmed: TME
+  tempoLivreSegundos?: number            // confirmed: seconds currently free
+  tempoAtendimentoSegundos?: number      // confirmed: total seconds in calls today
+  tempoLogadoPermanenteSegundos?: number // confirmed: total logged-in time
+  tempoPosChamadaSegundos?: number       // confirmed: post-call wrap (ACW)
+  tempoPausaSegundos?: number            // confirmed: total pause time
   tma?: number
   tme?: number
 

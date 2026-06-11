@@ -87,6 +87,14 @@ export function adaptSDRs(items: ArgusDesempenhoItem[], allowlist: string[] = DE
       const tma        = pickNum(item.tempoMedioAtendimento, item.tma)
       const tme        = pickNum(item.tempoMedioEspera, item.tme)
 
+      const tempoLogado      = pickNum(item.tempoLogadoPermanenteSegundos)
+      const tempoAtendimento = pickNum(item.tempoAtendimentoSegundos)
+      const tempoPosChamada  = pickNum(item.tempoPosChamadaSegundos)
+      const tempoPausa       = pickNum(item.tempoPausaSegundos)
+      const taxaOcupacao     = tempoLogado > 0
+        ? Math.round(((tempoAtendimento + tempoPosChamada) / tempoLogado) * 100)
+        : undefined
+
       return {
         id: `${ramal}-${name}`,
         name,
@@ -98,6 +106,11 @@ export function adaptSDRs(items: ArgusDesempenhoItem[], allowlist: string[] = DE
         conversoes,
         tma_segundos: tma,
         tme_segundos: tme,
+        tempo_logado_segundos: tempoLogado || undefined,
+        tempo_atendimento_segundos: tempoAtendimento || undefined,
+        pos_chamada_segundos: tempoPosChamada || undefined,
+        pausa_segundos: tempoPausa || undefined,
+        taxa_ocupacao: taxaOcupacao,
       } satisfies SDR
     })
 }

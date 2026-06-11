@@ -11,8 +11,13 @@ export interface SDR {
   ligacoes_atendidas: number
   conversoes: number
   tma_segundos: number
-  tme_segundos?: number   // from desempenhoresumido.tempoMedioEspera
+  tme_segundos?: number                  // from desempenhoresumido.tempoMedioEspera
   score_ia?: number
+  tempo_logado_segundos?: number         // tempoLogadoPermanenteSegundos
+  tempo_atendimento_segundos?: number    // tempoAtendimentoSegundos
+  pos_chamada_segundos?: number          // tempoPosChamadaSegundos
+  pausa_segundos?: number                // tempoPausaSegundos
+  taxa_ocupacao?: number                 // (atendimento + pos_chamada) / logado * 100
 }
 
 export interface LiveCall {
