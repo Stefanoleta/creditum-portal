@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   BarChart3,
   Clock,
+  LayoutList,
   Monitor,
   Phone,
   RefreshCw,
@@ -798,6 +799,9 @@ export default function RelatoriosPage() {
               </Link>
               <Link href="/relatorios" className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-teal-50 text-teal-700 border border-teal-200">
                 <BarChart3 className="w-3.5 h-3.5" /> Relatórios
+              </Link>
+              <Link href="/listas" className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors">
+                <LayoutList className="w-3.5 h-3.5" /> Listas
               </Link>
             </div>
           </div>

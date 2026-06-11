@@ -9,6 +9,7 @@ import {
   Loader2,
   AlertCircle,
   BarChart2,
+  LayoutList,
   Radio,
   RefreshCw,
 } from "lucide-react"
@@ -258,6 +259,11 @@ export default function AnalisePage() {
               webhook · Supabase não configurado
             </span>
           )}
+        </div>
+        <div className="hidden sm:flex items-center gap-1 mr-2">
+          <Link href="/listas" className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors">
+            <LayoutList className="w-3.5 h-3.5" /> Listas
+          </Link>
         </div>
         <DataTimestamp updatedAt={lastFetch} label="Atualizado em" />
 
