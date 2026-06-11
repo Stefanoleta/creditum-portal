@@ -188,6 +188,13 @@ export async function POST(req: NextRequest) {
     const allToInsert  = [...caso2.map(c => c.lead), ...caso3.map(c => c.lead), ...caso4.map(c => c.lead)]
     const preview      = allToInsert.slice(0, 5)
 
+    // DEBUG: conta quantos leads têm precisa_higienizacao=true antes de salvar
+    console.log(`[upload] ${allToInsert.length} leads a inserir | higienizacao: ${leadsHigienizacao} | novos: ${novosLeads} | sugestao: ${caso3.length} | duplicatas: ${duplicatasIgn}`)
+    if (leadsHigienizacao > 0) {
+      const motivos = caso4.map(c => `${c.lead.nome} → ${c.lead.motivo_higienizacao} (${c.lead.telefone_principal ?? "sem tel"})`)
+      console.log("[upload] Leads higienizacao:", motivos.slice(0, 10))
+    }
+
     // ── Fase de preview — nunca salva ─────────────────────────────────────────
 
     if (!confirmar) {
