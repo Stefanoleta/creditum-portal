@@ -1,0 +1,18 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <!-- Fundo branco levemente arredondado para favicon -->
+  <rect width="100" height="100" fill="white" rx="14"/>
+
+  <!-- Símbolo "C" Creditum -->
+
+  <!-- Barra vertical esquerda -->
+  <rect x="10" y="10" width="24" height="80" fill="#0C3C3A"/>
+
+  <!-- Barra horizontal superior (dark teal) -->
+  <rect x="10" y="10" width="60" height="24" fill="#0C3C3A"/>
+
+  <!-- Barra horizontal inferior -->
+  <rect x="10" y="66" width="60" height="24" fill="#0C3C3A"/>
+
+  <!-- Acento mint — quadrado no canto superior direito -->
+  <rect x="70" y="10" width="22" height="22" fill="#2ED4A0"/>
+</svg>
