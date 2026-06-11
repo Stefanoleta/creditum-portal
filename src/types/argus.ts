@@ -125,6 +125,7 @@ export interface ArgusTabulacaoItem {
   tabulado?: string             // confirmed: tabulação text ("CLIENTE DESLIGOU", etc.)
   categoriaTabulacao?: string   // confirmed: high-level category ("SUCESSO", "AGENDAMENTO GRUPO", "RECUSA", "NÃO TABULADO")
   usuarioOperador?: string      // confirmed: agent name
+  idUsuario?: number            // confirmed: agent user ID
   nomeCliente?: string          // confirmed: lead name
   telefone?: string             // confirmed: lead phone
   dataEvento?: string           // confirmed: tabulação timestamp

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { NextResponse, after } from "next/server"
 import {
   adaptSDRs,
   adaptLiveCalls,
@@ -8,12 +8,15 @@ import {
   getVendasAllowlist,
 } from "@/lib/argus-adapter"
 import { generateMockDashboard } from "@/lib/mock-data"
+import { supabase, saveAnalysis } from "@/lib/supabase-server"
+import { maskPhone } from "@/lib/call-analyzer"
 import type {
   ArgusDesempenhoItem,
   ArgusLigacaoItem,
   ArgusTabulacaoItem,
 } from "@/types/argus"
 import type { HourlyMetric, Objection, Occurrence } from "@/types/dashboard"
+import type { CallAnalysis } from "@/types/calls"
 
 const BASE_URL    = process.env.ARGUS_BASE_URL!
 const TOKEN       = process.env.ARGUS_TOKEN!
@@ -134,6 +137,61 @@ function buildHourlyChartFromCalls(
   }
 }
 
+async function createPendingRecords(
+  tabulacaoItems: ArgusTabulacaoItem[],
+  campaignId: number
+): Promise<void> {
+  if (!supabase) return
+
+  // Deduplicate by idLigacao — keep last tabulação per call
+  const byLigacao = new Map<string, ArgusTabulacaoItem>()
+  for (const tab of tabulacaoItems) {
+    const id = String(tab.ligacaoRelevante?.idLigacao ?? "")
+    if (id) byLigacao.set(id, tab)
+  }
+  if (byLigacao.size === 0) return
+
+  const callIds = Array.from(byLigacao.keys()).map((id) => `argus-${id}`)
+
+  // Batch-check which already exist in Supabase
+  const { data: existing } = await supabase
+    .from("call_analyses")
+    .select("call_id")
+    .in("call_id", callIds)
+  const existingSet = new Set((existing ?? []).map((r) => r.call_id as string))
+
+  for (const [idLigacao, tab] of byLigacao) {
+    const call_id = `argus-${idLigacao}`
+    if (existingSet.has(call_id)) continue
+
+    const pending: CallAnalysis = {
+      call_id,
+      sdr_name:         tab.usuarioOperador ?? "SDR",
+      sdr_id:           String(tab.idUsuario ?? ""),
+      phone:            maskPhone(tab.telefone ?? tab.ligacaoRelevante?.telefone),
+      school_name:      `Campanha ${campaignId}`,
+      started_at:       tab.dataEvento
+        ? new Date(tab.dataEvento).toISOString()
+        : new Date().toISOString(),
+      duration_seconds: tab.ligacaoRelevante?.tempoSegundos ?? 0,
+      transcript:       "[Pendente — aguardando processamento]",
+      score: 0, tom: "neutro", resultado: "outros",
+      tempo_resposta_inicial_segundos: 0,
+      palavras_conversao: [], palavras_perda: [], objecoes: [],
+      como_tratou_objecoes: "",
+      pontos_positivos: [], pontos_negativos: [],
+      analisado_em:    new Date().toISOString(),
+      source:          "mock",
+      data_source:     "pending",
+      status:          "pendente",
+      pending_payload: JSON.stringify(tab),
+    }
+
+    await saveAnalysis(pending)
+    console.log(`[metrics] pending criado: ${call_id}`)
+  }
+}
+
 export async function GET() {
   if (!BASE_URL || !TOKEN) {
     return NextResponse.json(
@@ -182,6 +240,10 @@ export async function GET() {
       ligacoesItems,
       tabulacaoItems
     )
+
+    // Fire-and-forget: create pending records for calls seen in tabulacoesdetalhadas
+    // that don't yet have an analysis in Supabase.
+    after(() => createPendingRecords(tabulacaoItems, CAMPAIGN_ID))
 
     return NextResponse.json({
       metrics,

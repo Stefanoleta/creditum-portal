@@ -76,10 +76,14 @@ export function buildUserMessage(params: {
     ? `Quem encerrou: ${leadDesligou ? "o lead desligou" : "o SDR encerrou a ligação"}\n`
     : ""
 
+  const desligouInstrucao = leadDesligou === true
+    ? "\nINSTRUÇÃO ADICIONAL: O lead encerrou a ligação antes do SDR. Avalie se houve demora na resposta, abordagem inadequada ou momento errado. Inclua isso na análise de momento_critico.\n"
+    : ""
+
   return `SDR: ${sdrName}
 Escola parceira: ${schoolName}
 Duração da ligação: ${dur}
-${desligouLine}
+${desligouLine}${desligouInstrucao}
 TRANSCRIÇÃO:
 ${transcript || "[Transcrição não disponível]"}
 

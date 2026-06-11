@@ -1,17 +1,60 @@
-import { NextResponse, type NextRequest } from "next/server"
+import { NextResponse, type NextRequest, after } from "next/server"
 import {
   downloadAudio,
+  downloadAudioById,
   transcribeAudio,
   analyzeWithClaude,
   openaiClient,
   type AudioDownload,
 } from "@/lib/call-analyzer"
-import { saveAnalysis } from "@/lib/supabase-server"
+import {
+  saveAnalysis,
+  fetchPendingAnalyses,
+  updateAnalysis,
+} from "@/lib/supabase-server"
 import { generateMockAnalyses } from "@/lib/mock-calls"
 import type { CallAnalysis } from "@/types/calls"
 
 const BASE_URL = process.env.ARGUS_BASE_URL!
 const TOKEN    = process.env.ARGUS_TOKEN!
+
+async function processPending(): Promise<void> {
+  const pending = await fetchPendingAnalyses()
+  for (const p of pending) {
+    const argusId = p.call_id.replace(/^argus-/, "")
+    try {
+      const { base64, contentType } = await downloadAudioById(argusId)
+
+      const transcript = openaiClient
+        ? await transcribeAudio(base64, contentType)
+        : `[OPENAI_API_KEY não configurado. SDR: ${p.sdr_name}]`
+
+      const aiResult = await analyzeWithClaude({
+        sdrName:         p.sdr_name,
+        schoolName:      p.school_name,
+        durationSeconds: p.duration_seconds,
+        transcript,
+      })
+
+      await updateAnalysis(p.call_id, {
+        ...aiResult,
+        transcript,
+        source:          "ai",
+        data_source:     "argus_real",
+        status:          "completed",
+        pending_payload: undefined,
+      })
+      console.log(`[analyze/pending] ✓ ${p.call_id} score=${aiResult.score}`)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn(`[analyze/pending] ✗ ${p.call_id}: ${msg}`)
+      await updateAnalysis(p.call_id, {
+        data_source: "pending",
+        status:      "pendente",
+      }).catch(() => undefined)
+    }
+  }
+}
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
@@ -107,6 +150,11 @@ export async function POST(req: NextRequest) {
     saveAnalysis(analysis).catch((err) =>
       console.warn("[analyze] Supabase save failed:", err)
     )
+
+    // Step 5 — Process other pending records in the background
+    after(() => processPending().catch((err) =>
+      console.warn("[analyze] processPending error:", err)
+    ))
 
     return NextResponse.json({ analysis })
   } catch (err) {
