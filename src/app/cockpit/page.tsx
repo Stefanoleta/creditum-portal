@@ -12,7 +12,7 @@ import { StatusBar } from "@/components/dashboard/StatusBar"
 import { MockDataBanner } from "@/components/ui-shared/MockDataBanner"
 import { formatSeconds, formatPercent } from "@/lib/utils"
 import { cn } from "@/lib/utils"
-import { AlertCircle, BarChart3, Microscope } from "lucide-react"
+import { AlertCircle, BarChart3, Microscope, List } from "lucide-react"
 
 export default function CockpitPage() {
   const { data, isLoading, error, source, tabulacoesSource } = useDashboard()
@@ -68,6 +68,9 @@ export default function CockpitPage() {
           </Link>
           <Link href="/analise" className="flex items-center gap-1.5 hover:text-gray-700 transition-colors">
             <Microscope className="w-3.5 h-3.5" /> Análise
+          </Link>
+          <Link href="/listas" className="flex items-center gap-1.5 hover:text-gray-700 transition-colors">
+            <List className="w-3.5 h-3.5" /> Listas
           </Link>
           <span className="text-gray-300">·</span>
           <span className="tabular-nums text-[11px]">

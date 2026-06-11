@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "WebFetch(domain:creditum-portal.vercel.app)",
-      "Bash(grep -v \"^$\")"
+      "Bash(grep -v \"^$\")",
+      "Bash(mkdir -p /workspaces/creditum-portal/supabase/migrations)",
+      "Bash(mkdir -p /workspaces/creditum-portal/src/app/api/listas/upload /workspaces/creditum-portal/src/app/api/listas/\\\\[id\\\\]/leads)"
+    ],
+    "additionalDirectories": [
+      "/workspaces/creditum-portal/supabase",
+      "/workspaces/creditum-portal/src/app/api/listas/[id]"
     ]
   }
 }
