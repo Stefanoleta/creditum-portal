@@ -1,6 +1,6 @@
 export interface CallRecording {
   id: string
-  arquivo: string // filename/path used to download from Argus
+  arquivo: string
   sdr_name: string
   sdr_id: string
   phone: string
@@ -10,13 +10,19 @@ export interface CallRecording {
 }
 
 export type CallTom = "positivo" | "neutro" | "negativo"
+
+// Legacy values kept for stored analyses; new prompt returns: converteu, nao_atendeu,
+// sem_interesse, recontato, fora_politica
 export type CallResultado =
-  | "conversao"
-  | "agendamento"
-  | "callback"
+  | "conversao"      // legacy
+  | "agendamento"    // legacy
+  | "callback"       // legacy
   | "sem_interesse"
   | "nao_atendeu"
-  | "outros"
+  | "outros"         // legacy
+  | "converteu"      // new
+  | "recontato"      // new
+  | "fora_politica"  // new
 
 /**
  * data_source: audit field stored in Supabase
@@ -29,6 +35,42 @@ export type DataSource = "argus_real" | "metadata_only" | "mock" | "pending"
 
 export type AnalysisStatus = "completed" | "pendente"
 
+// ─── Rich coaching types (new prompt) ─────────────────────────────────────────
+
+export interface ScoreBreakdown {
+  abertura: number         // 0-25
+  engajamento_lead: number // 0-25
+  tratamento_objecao: number // 0-25
+  proposta_beneficio: number // 0-25
+}
+
+export interface MomentoCritico {
+  tempo: string
+  descricao: string
+  alternativa: string
+}
+
+export interface AnaliseAbertura {
+  avaliacao: "forte" | "media" | "fraca"
+  descricao: string
+  sugestao: string
+}
+
+export interface ObjecaoIdentificada {
+  objecao: string
+  como_foi_tratada: string
+  sugestao_de_resposta: string
+}
+
+export interface SugestaoRecontato {
+  vale_recontato: boolean
+  motivo: string
+  melhor_horario: string
+  abertura_sugerida: string
+}
+
+// ─── Main analysis type ───────────────────────────────────────────────────────
+
 export interface CallAnalysis {
   call_id: string
   sdr_name: string
@@ -38,9 +80,17 @@ export interface CallAnalysis {
   started_at: string
   duration_seconds: number
   transcript: string
+  // Score: 0-100 (new scale — old stored values 0-10 will display as low scores)
   score: number
-  tom: CallTom
   resultado: CallResultado
+  analisado_em: string
+  source: "ai" | "mock"
+  data_source: DataSource
+  status?: AnalysisStatus
+  pending_payload?: string
+
+  // ── Legacy fields (required for backward compat; filled with defaults on new analyses) ──
+  tom: CallTom
   tempo_resposta_inicial_segundos: number
   palavras_conversao: string[]
   palavras_perda: string[]
@@ -48,11 +98,17 @@ export interface CallAnalysis {
   como_tratou_objecoes: string
   pontos_positivos: string[]
   pontos_negativos: string[]
-  analisado_em: string
-  source: "ai" | "mock"           // legacy UI field — kept for backward compat
-  data_source: DataSource         // authoritative audit field
-  status?: AnalysisStatus         // undefined = "completed"
-  pending_payload?: string        // JSON of original Argus webhook payload (for retry)
+
+  // ── Rich coaching fields (new prompt; absent on legacy stored analyses) ────
+  score_breakdown?: ScoreBreakdown
+  resumo?: string
+  momento_critico?: MomentoCritico | null
+  analise_abertura?: AnaliseAbertura | null
+  objecoes_identificadas?: ObjecaoIdentificada[]
+  pontos_fortes?: string[]
+  pontos_melhoria?: string[]
+  sugestao_recontato?: SugestaoRecontato | null
+  insight_gestor?: string
 }
 
 export interface SdrRanking {

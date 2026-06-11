@@ -9,7 +9,7 @@ interface DailyPatternsProps {
 }
 
 const scoreColor = (s: number) =>
-  s >= 8 ? "text-emerald-600" : s >= 6 ? "text-yellow-600" : "text-red-500"
+  s >= 80 ? "text-emerald-600" : s >= 60 ? "text-yellow-600" : "text-red-500"
 
 export function DailyPatternsPanel({ patterns }: DailyPatternsProps) {
   return (
@@ -19,9 +19,9 @@ export function DailyPatternsPanel({ patterns }: DailyPatternsProps) {
         <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-center">
           <p className="text-xs text-blue-600 font-medium">Score Médio</p>
           <p className={cn("text-2xl font-extrabold mt-0.5", scoreColor(patterns.score_medio))}>
-            {patterns.score_medio.toFixed(1)}
+            {Math.round(patterns.score_medio)}
           </p>
-          <p className="text-xs text-blue-400">/10</p>
+          <p className="text-xs text-blue-400">/100</p>
         </div>
         <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-center">
           <p className="text-xs text-emerald-600 font-medium">Taxa Conversão</p>
@@ -96,7 +96,7 @@ export function DailyPatternsPanel({ patterns }: DailyPatternsProps) {
               <span className="text-xs text-gray-700 font-medium flex-1 truncate">{sdr.sdr_name}</span>
               <span className="text-xs text-gray-400">{sdr.total_analisadas} lig.</span>
               <span className={cn("text-xs font-bold", scoreColor(sdr.score_medio))}>
-                {sdr.score_medio.toFixed(1)}
+                {Math.round(sdr.score_medio)}
               </span>
             </div>
           ))}
@@ -120,6 +120,9 @@ export function DailyPatternsPanel({ patterns }: DailyPatternsProps) {
                 sem_interesse: "Sem Interesse",
                 nao_atendeu: "Não Atendeu",
                 outros: "Outros",
+                converteu: "Converteu",
+                recontato: "Recontato",
+                fora_politica: "Fora da Política",
               }
               const colors: Record<string, string> = {
                 conversao: "bg-emerald-50 border-emerald-200 text-emerald-700",
@@ -128,6 +131,9 @@ export function DailyPatternsPanel({ patterns }: DailyPatternsProps) {
                 sem_interesse: "bg-orange-50 border-orange-200 text-orange-600",
                 nao_atendeu: "bg-gray-50 border-gray-200 text-gray-500",
                 outros: "bg-gray-50 border-gray-200 text-gray-500",
+                converteu: "bg-emerald-50 border-emerald-200 text-emerald-700",
+                recontato: "bg-blue-50 border-blue-200 text-blue-700",
+                fora_politica: "bg-purple-50 border-purple-200 text-purple-600",
               }
               return (
                 <span key={result} className={cn("text-xs border rounded-full px-2 py-0.5", colors[result] ?? "bg-gray-50 border-gray-200 text-gray-500")}>

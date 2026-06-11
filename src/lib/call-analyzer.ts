@@ -1,6 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk"
 import OpenAI from "openai"
-import type { CallAnalysis, CallTom, CallResultado } from "@/types/calls"
+import type {
+  CallAnalysis, CallTom, CallResultado,
+  ScoreBreakdown, MomentoCritico, AnaliseAbertura,
+  ObjecaoIdentificada, SugestaoRecontato,
+} from "@/types/calls"
+import { ANALYSIS_SYSTEM_PROMPT, buildUserMessage } from "./call-analysis-prompt"
 
 const BASE_URL    = process.env.ARGUS_BASE_URL!
 const TOKEN       = process.env.ARGUS_TOKEN!
@@ -212,10 +217,28 @@ export async function transcribeAudio(base64Audio: string, contentTypeHint = "")
 
 // ─── Analyze transcript with Claude Opus 4.8 ────────────────────────────────
 
+// Raw shape returned by the AI (before we fill in legacy compat fields)
+interface RawClaudeCoaching {
+  score: number
+  score_breakdown?: ScoreBreakdown
+  resultado: string
+  duracao_segundos?: number
+  resumo?: string
+  momento_critico?: MomentoCritico | null
+  analise_abertura?: AnaliseAbertura | null
+  objecoes_identificadas?: ObjecaoIdentificada[]
+  pontos_fortes?: string[]
+  pontos_melhoria?: string[]
+  sugestao_recontato?: SugestaoRecontato | null
+  insight_gestor?: string
+}
+
+// Return type: all CallAnalysis fields except the metadata provided by the caller
 type ClaudeResult = Omit<
   CallAnalysis,
   | "call_id" | "sdr_name" | "sdr_id" | "phone" | "school_name"
-  | "started_at" | "duration_seconds" | "analisado_em" | "source" | "transcript"
+  | "started_at" | "duration_seconds" | "analisado_em" | "source"
+  | "transcript" | "data_source" | "status" | "pending_payload"
 >
 
 export async function analyzeWithClaude(params: {
@@ -226,35 +249,14 @@ export async function analyzeWithClaude(params: {
 }): Promise<ClaudeResult> {
   if (!anthropic) throw new Error("ANTHROPIC_API_KEY não configurado")
 
-  const { sdrName, schoolName, durationSeconds, transcript } = params
-  const dur = `${Math.floor(durationSeconds / 60)}min${durationSeconds % 60}s`
-
-  const prompt = `Você é um analista especializado em ligações de vendas de crédito educacional no Brasil.
-
-Analise a transcrição abaixo de uma ligação do SDR ${sdrName} da Creditum (fintech de crédito educacional em SP) com cliente da escola/faculdade "${schoolName}". Duração total: ${dur}.
-
-TRANSCRIÇÃO:
-${transcript}
-
-Retorne APENAS um JSON válido, sem markdown, com esta estrutura exata:
-{
-  "score": <número de 0.0 a 10.0 com 1 decimal>,
-  "tom": <"positivo" | "neutro" | "negativo">,
-  "resultado": <"conversao" | "agendamento" | "callback" | "sem_interesse" | "nao_atendeu" | "outros">,
-  "tempo_resposta_inicial_segundos": <número estimado de segundos até o SDR apresentar a proposta/produto>,
-  "palavras_conversao": [<até 5 palavras ou frases-chave que contribuíram para engajamento/conversão>],
-  "palavras_perda": [<até 5 palavras ou frases que prejudicaram a ligação, array vazio se nenhuma>],
-  "objecoes": [<lista de objeções levantadas pelo cliente, array vazio se nenhuma>],
-  "como_tratou_objecoes": "<como o SDR respondeu às objeções — 'Sem objeções' se não houve>",
-  "pontos_positivos": [<3 a 5 pontos positivos do desempenho do SDR>],
-  "pontos_negativos": [<2 a 4 pontos negativos ou oportunidades de melhoria>]
-}`
+  const userMessage = buildUserMessage(params)
 
   const message = await anthropic.messages.create({
     model: "claude-opus-4-8",
-    max_tokens: 1024,
+    max_tokens: 2048,
     thinking: { type: "adaptive" },
-    messages: [{ role: "user", content: prompt }],
+    system: ANALYSIS_SYSTEM_PROMPT,
+    messages: [{ role: "user", content: userMessage }],
   })
 
   const textBlock = message.content.find((b) => b.type === "text")
@@ -263,7 +265,42 @@ Retorne APENAS um JSON válido, sem markdown, com esta estrutura exata:
   let raw = textBlock.text.trim()
   raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim()
 
-  return JSON.parse(raw) as ClaudeResult
+  let parsed: RawClaudeCoaching
+  try {
+    parsed = JSON.parse(raw) as RawClaudeCoaching
+  } catch {
+    throw new Error(`Claude retornou JSON inválido: ${raw.slice(0, 200)}`)
+  }
+
+  const objecoesId = parsed.objecoes_identificadas ?? []
+  const pontosFortes = parsed.pontos_fortes ?? []
+  const pontosMelhoria = parsed.pontos_melhoria ?? []
+
+  // Fill legacy fields from new data so computeMockPatterns/DailyPatterns continue working
+  return {
+    score:    parsed.score,
+    resultado: parsed.resultado as CallResultado,
+    tom:       "neutro" as CallTom,
+    tempo_resposta_inicial_segundos: 0,
+    palavras_conversao: pontosFortes.slice(0, 5),
+    palavras_perda:     pontosMelhoria.slice(0, 5),
+    objecoes:           objecoesId.map((o) => o.objecao),
+    como_tratou_objecoes: objecoesId.length
+      ? objecoesId.map((o) => o.como_foi_tratada).join(" | ")
+      : "Sem objeções",
+    pontos_positivos: pontosFortes,
+    pontos_negativos: pontosMelhoria,
+    // Rich coaching fields
+    score_breakdown:       parsed.score_breakdown,
+    resumo:                parsed.resumo,
+    momento_critico:       parsed.momento_critico ?? null,
+    analise_abertura:      parsed.analise_abertura ?? null,
+    objecoes_identificadas: objecoesId,
+    pontos_fortes:         pontosFortes,
+    pontos_melhoria:       pontosMelhoria,
+    sugestao_recontato:    parsed.sugestao_recontato ?? null,
+    insight_gestor:        parsed.insight_gestor,
+  }
 }
 
 // ─── Parse tempoLigacao (may be "HH:MM:SS", seconds int, or ms) ─────────────

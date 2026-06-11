@@ -12,6 +12,9 @@ const RESULTADO_LABELS: Record<CallResultado, string> = {
   sem_interesse:"Sem Interesse",
   nao_atendeu:  "Não Atendeu",
   outros:       "Outros",
+  converteu:    "Converteu",
+  recontato:    "Recontato",
+  fora_politica:"Fora da Política",
 }
 
 const RESULTADO_COLORS: Record<CallResultado, string> = {
@@ -21,6 +24,9 @@ const RESULTADO_COLORS: Record<CallResultado, string> = {
   sem_interesse:"bg-orange-100 text-orange-700",
   nao_atendeu:  "bg-gray-100 text-gray-500",
   outros:       "bg-gray-100 text-gray-500",
+  converteu:    "bg-emerald-100 text-emerald-700",
+  recontato:    "bg-blue-100 text-blue-700",
+  fora_politica:"bg-purple-100 text-purple-700",
 }
 
 function formatDuration(seconds: number) {

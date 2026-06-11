@@ -160,6 +160,23 @@ export default function AnalisePage() {
     return computeMockPatterns(allAnalyses)
   }, [allAnalyses])
 
+  // Per-SDR average score for the "X pts acima/abaixo da média" line in CallDetail
+  const sdrAvgMap = useMemo(() => {
+    const map: Record<string, { sum: number; count: number }> = {}
+    for (const a of allAnalyses) {
+      if (!map[a.sdr_name]) map[a.sdr_name] = { sum: 0, count: 0 }
+      map[a.sdr_name].sum += a.score
+      map[a.sdr_name].count += 1
+    }
+    const result: Record<string, number> = {}
+    for (const [name, v] of Object.entries(map)) {
+      result[name] = v.sum / v.count
+    }
+    return result
+  }, [allAnalyses])
+
+  const selectedSdrAvg = selectedAnalysis ? sdrAvgMap[selectedAnalysis.sdr_name] : undefined
+
   // ─── Retry a pending webhook analysis ──────────────────────────────────────
   const retryAnalysis = useCallback(async (call_id: string) => {
     if (retrying.has(call_id)) return
@@ -313,11 +330,11 @@ export default function AnalisePage() {
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full border ${
-                          analysis.score >= 8 ? "bg-emerald-100 text-emerald-700 border-emerald-200" :
-                          analysis.score >= 6 ? "bg-yellow-100 text-yellow-700 border-yellow-200" :
+                          analysis.score >= 80 ? "bg-emerald-100 text-emerald-700 border-emerald-200" :
+                          analysis.score >= 60 ? "bg-yellow-100 text-yellow-700 border-yellow-200" :
                           "bg-red-100 text-red-600 border-red-200"
                         }`}>
-                          {analysis.score.toFixed(1)}
+                          {Math.round(analysis.score)}
                         </span>
                         <span className="text-[10px] text-emerald-600 font-medium">webhook</span>
                       </div>
@@ -365,6 +382,7 @@ export default function AnalisePage() {
             {selectedAnalysis ? (
               <CallDetail
                 analysis={selectedAnalysis}
+                sdrAvg={selectedSdrAvg}
                 onRetry={selectedAnalysis.data_source === "pending" ? () => retryAnalysis(selectedAnalysis.call_id) : undefined}
                 retrying={retrying.has(selectedAnalysis.call_id)}
               />
