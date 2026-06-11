@@ -109,6 +109,15 @@ export interface ArgusLigacoesResponse {
   [key: string]: unknown
 }
 
+export interface ArgusLigacaoRelevante {
+  idLigacao?: string | number   // confirmed: call ID
+  tempoSegundos?: number
+  telefone?: string
+  callID?: string
+  byeEnviado?: string           // confirmed: BYE sent flag/text
+  byeRecebido?: string          // confirmed: BYE received flag/text
+}
+
 export interface ArgusTabulacaoItem {
   // Confirmed Argus field names from tabulacoesdetalhadas
   tabulado?: string             // confirmed: tabulação text ("CLIENTE DESLIGOU", etc.)
@@ -117,6 +126,7 @@ export interface ArgusTabulacaoItem {
   nomeCliente?: string          // confirmed: lead name
   dataEvento?: string           // confirmed: tabulação timestamp
   idTabulacao?: number
+  ligacaoRelevante?: ArgusLigacaoRelevante  // confirmed: linked call details
   // legacy / alternative field names
   tabulacao?: string
   descricao?: string
