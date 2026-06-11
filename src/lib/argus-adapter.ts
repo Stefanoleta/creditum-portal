@@ -156,34 +156,24 @@ export function adaptLiveCalls(items: ArgusLigacaoItem[], allowlist: string[] = 
   })
 }
 
-// ─── tabulacoesdetalhadas → Objection[] + Occurrence[] + conversão total ────
-// Confirmed Argus field names: tabulado (tabulação text), categoriaTabulacao (category).
-// Each record = 1 call; no `quantidade` field exists in this Argus configuration.
+// ─── tabulacoesdetalhadas → Occurrence[] + conversão total ──────────────────
+// Groups by exact tabulacaoDesc/tabulado text as returned by Argus — no renaming.
+// Colors assigned by position so new categories always get a distinct color.
 
-// Direct mapping from Argus categoriaTabulacao values to display labels + colors.
-// Includes both accented and unaccented variants for Argus installations that strip diacritics.
-const CATEGORIA_MAP: { key: string; label: string; color: string }[] = [
-  { key: "SUCESSO",                  label: "Contrato Fechado",        color: "bg-emerald-500" },
-  { key: "PROPOSTA ENVIADA",         label: "Proposta Enviada",        color: "bg-emerald-400" },
-  { key: "PROPOSTA",                 label: "Proposta Enviada",        color: "bg-emerald-400" },
-  { key: "AGENDAMENTO GRUPO",        label: "Agendamento Grupo",        color: "bg-blue-500"    },
-  { key: "AGENDAMENTO INDIVIDUAL",   label: "Agendamento Individual",   color: "bg-sky-400"     },
-  { key: "AGENDAMENTO",              label: "Agendamento",              color: "bg-blue-400"    },
-  { key: "QUALIFICAÇÃO",             label: "Qualificação",             color: "bg-indigo-500"  },
-  { key: "QUALIFICACAO",             label: "Qualificação",             color: "bg-indigo-500"  },
-  { key: "RETORNAR",                 label: "Retornar Ligação",         color: "bg-yellow-500"  },
-  { key: "RETORNO",                  label: "Retornar Ligação",         color: "bg-yellow-500"  },
-  { key: "CAIXA POSTAL",             label: "Caixa Postal",             color: "bg-gray-300"    },
-  { key: "CLIENTE DESLIGOU",         label: "Cliente Desligou",         color: "bg-red-500"     },
-  { key: "NÃO ATENDEU",              label: "Não Atendeu",              color: "bg-gray-400"    },
-  { key: "NAO ATENDEU",              label: "Não Atendeu",              color: "bg-gray-400"    },
-  { key: "SEM INTERESSE",            label: "Sem Interesse",            color: "bg-orange-500"  },
-  { key: "RECUSA",                   label: "Recusa",                   color: "bg-orange-400"  },
-  { key: "NÃO TABULADO",             label: "Não Tabulado",             color: "bg-gray-200"    },
-  { key: "NAO TABULADO",             label: "Não Tabulado",             color: "bg-gray-200"    },
+const OCCURRENCE_COLORS = [
+  "bg-emerald-500",
+  "bg-blue-500",
+  "bg-amber-500",
+  "bg-red-500",
+  "bg-indigo-500",
+  "bg-orange-400",
+  "bg-teal-500",
+  "bg-purple-400",
+  "bg-gray-400",
+  "bg-sky-400",
+  "bg-pink-400",
+  "bg-lime-500",
 ]
-
-const EXTRA_COLORS = ["bg-purple-400", "bg-teal-500", "bg-cyan-500", "bg-pink-400", "bg-lime-500"]
 
 export function adaptTabulacoes(items: ArgusTabulacaoItem[]): {
   objections: Objection[]
@@ -191,60 +181,44 @@ export function adaptTabulacoes(items: ArgusTabulacaoItem[]): {
   total_conversoes: number
 } {
   let total_conversoes = 0
-  const categoriaCount = new Map<string, number>()
-  const tabuladoCount  = new Map<string, number>()
+  const textCount = new Map<string, number>()
 
   for (const item of items) {
-    const categoria = pickStr(item.categoriaTabulacao, "NÃO TABULADO")
-    const tabulado  = pickStr(
-      item.tabulado,
+    // Exact text from Argus — tabulacaoDesc first (confirmed field), then tabulado
+    const label = pickStr(
       (item as Record<string, unknown>).tabulacaoDesc as string | undefined,
+      item.tabulado,
       item.tabulacao,
       item.descricao,
       "Sem tabulação"
     )
     const count = pickNum(item.quantidade, item.qtd, item.total) || 1
 
-    categoriaCount.set(categoria, (categoriaCount.get(categoria) ?? 0) + count)
-    if (tabulado && tabulado !== "Sem tabulação") {
-      tabuladoCount.set(tabulado, (tabuladoCount.get(tabulado) ?? 0) + count)
-    }
+    textCount.set(label, (textCount.get(label) ?? 0) + count)
 
-    // Count as conversion: "PROPOSTA ENVIADA" tabulado (confirmed for this Argus setup)
-    // or categoriaTabulacao "SUCESSO" as fallback for other Argus configurations.
-    const tabuladoUpper = tabulado.toUpperCase()
+    // Conversion: covers common Argus naming variations
+    const upper = label.toUpperCase()
     const isConversao =
-      tabuladoUpper === "PROPOSTA ENVIADA" ||
-      tabuladoUpper.startsWith("PROPOSTA ENVIADA") ||
-      categoria.toUpperCase() === "SUCESSO"
+      upper.includes("PROPOSTA ENVIADA") ||
+      upper.includes("CONTRATO FECHADO") ||
+      upper.includes("FECHAMENTO") ||
+      upper.includes("PROPOSTA ACEITA") ||
+      upper.includes("VENDA") ||
+      upper === "SUCESSO"
     if (isConversao) total_conversoes += count
   }
 
-  const occTotal = Array.from(categoriaCount.values()).reduce((a, b) => a + b, 0) || 1
-  let extraColorIdx = 0
-  const occurrences: Occurrence[] = Array.from(categoriaCount.entries())
+  const total = Array.from(textCount.values()).reduce((a, b) => a + b, 0) || 1
+  const occurrences: Occurrence[] = Array.from(textCount.entries())
     .sort((a, b) => b[1] - a[1])
-    .map(([key, count]) => {
-      const mapped = CATEGORIA_MAP.find((m) => m.key === key.toUpperCase().trim())
-      return {
-        label: mapped?.label ?? key,
-        count,
-        percentage: Math.round((count / occTotal) * 100),
-        color: mapped?.color ?? EXTRA_COLORS[extraColorIdx++ % EXTRA_COLORS.length],
-      }
-    })
-
-  const objTotal = Array.from(tabuladoCount.values()).reduce((a, b) => a + b, 0) || 1
-  const objections: Objection[] = Array.from(tabuladoCount.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([label, count]) => ({
+    .map(([label, count], idx) => ({
       label,
       count,
-      percentage: Math.round((count / objTotal) * 100),
+      percentage: Math.round((count / total) * 100),
+      color: OCCURRENCE_COLORS[idx % OCCURRENCE_COLORS.length],
     }))
 
-  return { objections, occurrences, total_conversoes }
+  return { objections: [], occurrences, total_conversoes }
 }
 
 // ─── compose full metrics ────────────────────────────────────────────────────

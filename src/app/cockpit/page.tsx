@@ -6,7 +6,6 @@ import { useDashboard } from "@/hooks/useDashboard"
 import { MetricCard } from "@/components/dashboard/MetricCard"
 import { SDRRanking } from "@/components/dashboard/SDRRanking"
 import { LiveCalls } from "@/components/dashboard/LiveCalls"
-import { ObjectionsBar } from "@/components/dashboard/ObjectionsBar"
 import { OccurrencesBar } from "@/components/dashboard/OccurrencesBar"
 import { StatusBar } from "@/components/dashboard/StatusBar"
 import { MockDataBanner } from "@/components/ui-shared/MockDataBanner"
@@ -180,20 +179,8 @@ export default function CockpitPage() {
           </div>
         </div>
 
-        {/* Row 3: Objeções | Ocorrências — largura total agora que o gráfico foi removido */}
-        <div className="col-span-6 bg-white rounded-lg shadow-sm p-5 flex flex-col gap-4">
-          <div className="flex items-center justify-between shrink-0">
-            <h2 className="text-sm font-semibold text-gray-600">Objeções</h2>
-            {tabulacoesSource === "mock" && source !== "mock" && (
-              <span className="text-[9px] text-[#D97706] bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5">demo</span>
-            )}
-          </div>
-          <div className="flex-1 flex flex-col justify-center">
-            <ObjectionsBar objections={top_objections} />
-          </div>
-        </div>
-
-        <div className="col-span-6 bg-white rounded-lg shadow-sm p-5 flex flex-col gap-4">
+        {/* Row 3: Ocorrências — valores exatos do Argus, largura total */}
+        <div className="col-span-12 bg-white rounded-lg shadow-sm p-5 flex flex-col gap-4">
           <div className="flex items-center justify-between shrink-0">
             <h2 className="text-sm font-semibold text-gray-600">Ocorrências</h2>
             {tabulacoesSource === "mock" && source !== "mock" && (
