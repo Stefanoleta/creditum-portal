@@ -3,7 +3,7 @@
 import Image from "next/image"
 import Link from "next/link"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { BarChart3, Microscope, List, Upload, X, ChevronRight, AlertTriangle, CheckCircle2, Clock } from "lucide-react"
+import { BarChart3, Microscope, List, Upload, X, ChevronRight, AlertTriangle, CheckCircle2, Clock, PhoneOff, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { type ListaMeta, type LeadInput } from "@/lib/lista-parser"
 
@@ -36,6 +36,23 @@ interface Lead {
   fora_politica: boolean
   recontato_em: string | null
   whatsapp_enviado_em: string | null
+}
+
+interface LeadHigienizacao {
+  id: string
+  nome: string
+  telefone_principal: string | null
+  motivo_higienizacao: string | null
+  lista_id: string
+  listas: { id: string; unidade: string; tipo_lista: string; nome_arquivo: string } | null
+}
+
+const MOTIVO_LABEL: Record<string, string> = {
+  telefone_fixo:              "Telefone fixo",
+  sem_ddd:                    "Sem DDD",
+  numero_incompleto:          "Número incompleto",
+  formato_invalido:           "Formato inválido",
+  numero_inexistente_discador:"Inexistente (Argus)",
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -124,7 +141,18 @@ function PreviewTable({ leads }: { leads: LeadInput[] }) {
           {leads.map((l, i) => (
             <tr key={i} className="bg-white hover:bg-gray-50/50">
               <td className="px-3 py-2 text-gray-800 font-medium">{l.nome}</td>
-              <td className="px-3 py-2 text-gray-500 tabular-nums">{l.telefone_principal ?? "—"}</td>
+              <td className="px-3 py-2 tabular-nums">
+                <span className="flex items-center gap-1.5">
+                  <span className={l.precisa_higienizacao ? "text-amber-600" : "text-gray-500"}>
+                    {l.telefone_principal ?? "—"}
+                  </span>
+                  {l.precisa_higienizacao && (
+                    <span title={MOTIVO_LABEL[l.motivo_higienizacao ?? ""] ?? l.motivo_higienizacao ?? "Verificar"}>
+                      <PhoneOff className="w-3 h-3 text-amber-500 shrink-0" />
+                    </span>
+                  )}
+                </span>
+              </td>
               <td className="px-3 py-2 text-gray-500">{l.situacao ?? "—"}</td>
               <td className="px-3 py-2 text-gray-500">{l.pendencia_financeira ?? "—"}</td>
             </tr>
@@ -342,13 +370,167 @@ function LeadsPanel({
   )
 }
 
+// ─── Higienização tab ─────────────────────────────────────────────────────────
+
+function HigienizacaoTab({ onResolved }: { onResolved: () => void }) {
+  const [leads, setLeads] = useState<LeadHigienizacao[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [corrections, setCorrections] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState<Record<string, boolean>>({})
+  const LIMIT = 50
+
+  const load = useCallback(() => {
+    setLoading(true)
+    fetch(`/api/leads/higienizacao?page=${page}&limit=${LIMIT}`)
+      .then(r => r.json())
+      .then(d => { setLeads(d.leads ?? []); setTotal(d.total ?? 0) })
+      .finally(() => setLoading(false))
+  }, [page])
+
+  useEffect(() => { load() }, [load])
+
+  async function resolve(lead_id: string, telefone_corrigido: string | null) {
+    setSaving(s => ({ ...s, [lead_id]: true }))
+    await fetch("/api/leads/higienizacao", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lead_id, telefone_corrigido }),
+    })
+    setLeads(prev => prev.filter(l => l.id !== lead_id))
+    setTotal(t => t - 1)
+    setSaving(s => ({ ...s, [lead_id]: false }))
+    onResolved()
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm p-5 flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-gray-600">Higienização de Contatos</h2>
+        {total > 0 && (
+          <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-0.5 font-medium">
+            {total} pendente{total > 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-3 py-8 justify-center text-sm text-gray-400">
+          <div className="w-4 h-4 border-2 border-gray-200 border-t-emerald-500 rounded-full animate-spin" />
+          Carregando...
+        </div>
+      ) : leads.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 py-12 text-gray-400">
+          <Check className="w-8 h-8 text-emerald-200" />
+          <p className="text-sm">Todos os contatos estão higienizados</p>
+        </div>
+      ) : (
+        <>
+          <div className="overflow-x-auto rounded-lg border border-gray-100">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-gray-50 text-gray-400 font-medium">
+                  <th className="px-3 py-2.5 text-left">Nome</th>
+                  <th className="px-3 py-2.5 text-left">Telefone original</th>
+                  <th className="px-3 py-2.5 text-left">Motivo</th>
+                  <th className="px-3 py-2.5 text-left">Lista</th>
+                  <th className="px-3 py-2.5 text-left">Unidade</th>
+                  <th className="px-3 py-2.5 text-left">Correção</th>
+                  <th className="px-3 py-2.5" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {leads.map(l => (
+                  <tr key={l.id} className="bg-white hover:bg-gray-50/30">
+                    <td className="px-3 py-2.5 text-gray-800 font-medium max-w-[150px] truncate">{l.nome}</td>
+                    <td className="px-3 py-2.5 text-amber-600 tabular-nums font-mono">
+                      {l.telefone_principal ?? "—"}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className="text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-0.5">
+                        {MOTIVO_LABEL[l.motivo_higienizacao ?? ""] ?? l.motivo_higienizacao ?? "—"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-gray-500 max-w-[130px] truncate">
+                      {l.listas?.nome_arquivo ?? "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-gray-600">{l.listas?.unidade ?? "—"}</td>
+                    <td className="px-3 py-2.5">
+                      <input
+                        type="tel"
+                        placeholder="DDD + número"
+                        value={corrections[l.id] ?? ""}
+                        onChange={e => setCorrections(c => ({ ...c, [l.id]: e.target.value }))}
+                        className="w-32 text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-400 tabular-nums"
+                      />
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          disabled={saving[l.id] || !(corrections[l.id] ?? "").trim()}
+                          onClick={() => resolve(l.id, corrections[l.id].trim())}
+                          className="text-[10px] font-medium px-2.5 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          Resolver
+                        </button>
+                        <button
+                          disabled={saving[l.id]}
+                          onClick={() => resolve(l.id, null)}
+                          className="text-[10px] font-medium px-2 py-1 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 transition-colors"
+                          title="Sem contato possível"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {total > LIMIT && (
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-xs text-gray-400">
+                {page * LIMIT + 1}–{Math.min((page + 1) * LIMIT, total)} de {total}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  disabled={page === 0}
+                  onClick={() => setPage(p => p - 1)}
+                  className="text-xs px-3 py-1 rounded border border-gray-200 text-gray-600 disabled:opacity-30 hover:bg-gray-50"
+                >
+                  Anterior
+                </button>
+                <button
+                  disabled={(page + 1) * LIMIT >= total}
+                  onClick={() => setPage(p => p + 1)}
+                  className="text-xs px-3 py-1 rounded border border-gray-200 text-gray-600 disabled:opacity-30 hover:bg-gray-50"
+                >
+                  Próxima
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function ListasPage() {
+  // ── Tab
+  const [activeTab, setActiveTab] = useState<"listas" | "higienizacao">("listas")
+  const [higienizacaoCount, setHigienizacaoCount] = useState(0)
+
   // ── Upload state
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [parsing, setParsing] = useState(false)
   const [parseResult, setParseResult] = useState<{ meta: ListaMeta; leads: LeadInput[] } | null>(null)
+  const [totalHigienizacao, setTotalHigienizacao] = useState(0)
   const [metaOverride, setMetaOverride] = useState({ unidade: "", tipo_lista: "", data_lista: "" })
   const [importing, setImporting] = useState(false)
   const [importOk, setImportOk] = useState<{ lista_id: string; total: number } | null>(null)
@@ -370,12 +552,15 @@ export default function ListasPage() {
 
   useEffect(() => { loadListas() }, [loadListas])
 
-  // ── Detectar recontatos próximos em todas as listas (banner global)
-  const [globalRecontato, setGlobalRecontato] = useState(0)
-  useEffect(() => {
-    // Não há dados locais de leads — o banner global só aparece após abrir listas
-    setGlobalRecontato(0)
-  }, [listas])
+  // ── Carregar contagem global de higienização
+  const loadHigienizacaoCount = useCallback(() => {
+    fetch("/api/leads/higienizacao?limit=1")
+      .then(r => r.json())
+      .then(d => setHigienizacaoCount(d.total ?? 0))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => { loadHigienizacaoCount() }, [loadHigienizacaoCount])
 
   // ── Parsear arquivo no cliente via API de parse-only (sem salvar)
   async function handleFile(f: File) {
@@ -383,6 +568,7 @@ export default function ListasPage() {
     setImportOk(null)
     setUploadError(null)
     setParseResult(null)
+    setTotalHigienizacao(0)
     setParsing(true)
 
     const form = new FormData()
@@ -396,6 +582,7 @@ export default function ListasPage() {
         // 422 = meta incompleta mas com preview
         if (res.status === 422 && json.preview) {
           setParseResult({ meta: json.meta, leads: json.preview })
+          setTotalHigienizacao(json.total_higienizacao ?? 0)
           setMetaOverride({
             unidade:    json.meta.unidade    ?? "",
             tipo_lista: json.meta.tipo_lista ?? "",
@@ -410,21 +597,23 @@ export default function ListasPage() {
       // warning = supabase não configurado, mas temos preview
       if (json.warning) {
         setParseResult({ meta: json.meta, leads: json.preview })
+        setTotalHigienizacao(json.total_higienizacao ?? 0)
         setMetaOverride({
           unidade:    json.meta.unidade    ?? "",
           tipo_lista: json.meta.tipo_lista ?? "",
           data_lista: json.meta.data_lista ?? "",
         })
-        // Se salvou com sucesso (tem lista_id), registra
         if (json.lista_id) {
           setImportOk({ lista_id: json.lista_id, total: json.total_leads })
           loadListas()
+          loadHigienizacaoCount()
         }
         return
       }
 
       // Sucesso completo
       setParseResult({ meta: json.meta, leads: json.preview })
+      setTotalHigienizacao(json.total_higienizacao ?? 0)
       setMetaOverride({
         unidade:    json.meta.unidade    ?? "",
         tipo_lista: json.meta.tipo_lista ?? "",
@@ -432,6 +621,7 @@ export default function ListasPage() {
       })
       setImportOk({ lista_id: json.lista_id, total: json.total_leads })
       loadListas()
+      loadHigienizacaoCount()
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Erro desconhecido")
     } finally {
@@ -462,6 +652,7 @@ export default function ListasPage() {
 
       setImportOk({ lista_id: json.lista_id, total: json.total_leads })
       loadListas()
+      loadHigienizacaoCount()
       setParseResult(null)
       setUploadFile(null)
     } catch (err) {
@@ -510,6 +701,43 @@ export default function ListasPage() {
       </div>
 
       <div className="flex-1 p-4 flex flex-col gap-4 max-w-6xl mx-auto w-full">
+
+        {/* ── Tab bar ──────────────────────────────────────────────────────── */}
+        <div className="flex items-center gap-1 border-b border-gray-100 pb-0">
+          <button
+            onClick={() => setActiveTab("listas")}
+            className={cn(
+              "text-xs font-medium px-4 py-2 border-b-2 transition-colors -mb-px",
+              activeTab === "listas"
+                ? "border-emerald-600 text-emerald-700"
+                : "border-transparent text-gray-400 hover:text-gray-600"
+            )}
+          >
+            Listas
+          </button>
+          <button
+            onClick={() => setActiveTab("higienizacao")}
+            className={cn(
+              "flex items-center gap-1.5 text-xs font-medium px-4 py-2 border-b-2 transition-colors -mb-px",
+              activeTab === "higienizacao"
+                ? "border-amber-500 text-amber-700"
+                : "border-transparent text-gray-400 hover:text-gray-600"
+            )}
+          >
+            Higienização
+            {higienizacaoCount > 0 && (
+              <span className="text-[10px] font-bold bg-amber-100 text-amber-700 rounded-full px-1.5 py-px">
+                {higienizacaoCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {activeTab === "higienizacao" && (
+          <HigienizacaoTab onResolved={() => setHigienizacaoCount(c => Math.max(0, c - 1))} />
+        )}
+
+        {activeTab === "listas" && <>
 
         {/* ── Seção 1: Upload ──────────────────────────────────────────────── */}
         <div className="bg-white rounded-lg shadow-sm p-5 flex flex-col gap-4">
@@ -601,6 +829,13 @@ export default function ListasPage() {
                 </div>
               )}
 
+              {totalHigienizacao > 0 && (
+                <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+                  <PhoneOff className="w-3.5 h-3.5 shrink-0" />
+                  <strong>{totalHigienizacao} contato{totalHigienizacao > 1 ? "s" : ""}</strong>&nbsp;precisam de higienização (telefone fixo, sem DDD ou formato inválido).
+                </div>
+              )}
+
               {/* Preview */}
               <div>
                 <p className="text-xs text-gray-400 mb-2">Preview — primeiros {parseResult.leads.length} leads</p>
@@ -638,7 +873,7 @@ export default function ListasPage() {
           )}
         </div>
 
-        {/* ── Seção 2: Listas importadas ───────────────────────────────────── */}
+        {/* ── Seção 2: Listas importadas (aba Listas) ──────────────────────── */}
         <div className="bg-white rounded-lg shadow-sm p-5 flex flex-col gap-4">
           <h2 className="text-sm font-semibold text-gray-600">Listas Importadas</h2>
 
@@ -704,6 +939,8 @@ export default function ListasPage() {
             </div>
           )}
         </div>
+
+        </>}
       </div>
 
       {/* Painel lateral de leads */}

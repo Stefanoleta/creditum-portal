@@ -25,6 +25,9 @@ export interface LeadInput {
   pendencia_financeira: string | null
   faltas_consecutivas: number | null
   data_vencimento: string | null  // ISO date
+  precisa_higienizacao: boolean
+  motivo_higienizacao: string | null
+  // 'telefone_fixo' | 'sem_ddd' | 'numero_incompleto' | 'formato_invalido'
 }
 
 export interface ParseResult {
@@ -102,6 +105,27 @@ function normalizePhone(raw: string | number | null | undefined): string | null 
   return digits || null
 }
 
+// Classifica se o telefone normalizado precisa de higienização manual
+// Regras:
+//   null / < 8d         → formato_invalido / numero_incompleto
+//   8–9d                → sem_ddd
+//   10–11d, digits[2] !== "9" → telefone_fixo (ex: (21) 3xxx-xxxx)
+//   11d, digits[2] === "9"   → válido
+//   10d, digits[2] === "9"   → válido (formato antigo)
+//   > 11d               → formato_invalido
+function classifyPhone(digits: string | null): {
+  precisa_higienizacao: boolean
+  motivo_higienizacao: string | null
+} {
+  if (!digits) return { precisa_higienizacao: true, motivo_higienizacao: "formato_invalido" }
+  if (digits.length < 8) return { precisa_higienizacao: true, motivo_higienizacao: "numero_incompleto" }
+  if (digits.length <= 9) return { precisa_higienizacao: true, motivo_higienizacao: "sem_ddd" }
+  if (digits.length > 11)  return { precisa_higienizacao: true, motivo_higienizacao: "formato_invalido" }
+  // 10 ou 11 dígitos: se o 3º dígito não for "9" → fixo
+  if (digits[2] !== "9") return { precisa_higienizacao: true, motivo_higienizacao: "telefone_fixo" }
+  return { precisa_higienizacao: false, motivo_higienizacao: null }
+}
+
 // ─── Cell helpers ─────────────────────────────────────────────────────────────
 
 function str(val: unknown): string | null {
@@ -163,9 +187,11 @@ function findCol(row: Row, ...candidates: string[]): string | number | null | un
 }
 
 function extractFormatoA(row: Row): LeadInput {
+  const tel = normalizePhone(findCol(row, "celular", "cel"))
+  const { precisa_higienizacao, motivo_higienizacao } = classifyPhone(tel)
   return {
     nome:                str(findCol(row, "nome")) ?? "(sem nome)",
-    telefone_principal:  normalizePhone(findCol(row, "celular", "cel")),
+    telefone_principal:  tel,
     telefone_secundario: normalizePhone(findCol(row, "telefone 1", "telefone1", "fone")),
     matricula:           str(findCol(row, "matricula", "matrícula")),
     cpf:                 str(findCol(row, "cpf")),
@@ -175,13 +201,17 @@ function extractFormatoA(row: Row): LeadInput {
     pendencia_financeira: null,
     faltas_consecutivas: null,
     data_vencimento:     dateStr(findCol(row, "data")),
+    precisa_higienizacao,
+    motivo_higienizacao,
   }
 }
 
 function extractFormatoB(row: Row): LeadInput {
+  const tel = normalizePhone(findCol(row, "fone cel", "celular", "telefone", "fone"))
+  const { precisa_higienizacao, motivo_higienizacao } = classifyPhone(tel)
   return {
     nome:                str(findCol(row, "nome")) ?? "(sem nome)",
-    telefone_principal:  normalizePhone(findCol(row, "fone cel", "celular", "telefone", "fone")),
+    telefone_principal:  tel,
     telefone_secundario: null,
     matricula:           str(findCol(row, "pré-matrícula", "pre-matricula", "prematricula")),
     cpf:                 null,
@@ -191,13 +221,17 @@ function extractFormatoB(row: Row): LeadInput {
     pendencia_financeira: str(findCol(row, "pend. financ", "pendencia financ", "financ")),
     faltas_consecutivas: int(findCol(row, "faltas consecutivas", "faltas")),
     data_vencimento:     null,
+    precisa_higienizacao,
+    motivo_higienizacao,
   }
 }
 
 function extractFormatoC(row: Row): LeadInput {
+  const tel = normalizePhone(findCol(row, "telefone", "fone", "celular"))
+  const { precisa_higienizacao, motivo_higienizacao } = classifyPhone(tel)
   return {
     nome:                str(findCol(row, "nome")) ?? "(sem nome)",
-    telefone_principal:  normalizePhone(findCol(row, "telefone", "fone", "celular")),
+    telefone_principal:  tel,
     telefone_secundario: null,
     matricula:           null,
     cpf:                 null,
@@ -207,6 +241,8 @@ function extractFormatoC(row: Row): LeadInput {
     pendencia_financeira: null,
     faltas_consecutivas: null,
     data_vencimento:     null,
+    precisa_higienizacao,
+    motivo_higienizacao,
   }
 }
 

@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         lista_id: null,
         total_leads: meta.total,
+        total_higienizacao: leads.filter(l => l.precisa_higienizacao).length,
         meta,
         preview: leads.slice(0, 5),
         warning: "Supabase não configurado — dados não foram salvos",
@@ -38,6 +39,7 @@ export async function POST(req: NextRequest) {
         error: "Não foi possível detectar unidade, tipo_lista ou data_lista no nome do arquivo. Envie esses campos no form.",
         meta,
         preview: leads.slice(0, 10),
+        total_higienizacao: leads.filter(l => l.precisa_higienizacao).length,
       }, { status: 422 })
     }
 
@@ -76,6 +78,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       lista_id,
       total_leads: meta.total,
+      total_higienizacao: leads.filter(l => l.precisa_higienizacao).length,
       meta,
       preview: leads.slice(0, 5),
     })
