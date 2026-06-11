@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx"
+import { hashCpf } from "./cpf-hash"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -18,7 +19,7 @@ export interface LeadInput {
   telefone_principal: string | null
   telefone_secundario: string | null
   matricula: string | null
-  cpf: string | null
+  cpf_hash: string | null   // CPF nunca em texto — apenas HMAC-SHA256
   turma: string | null
   situacao: string | null
   descricao: string | null
@@ -189,12 +190,15 @@ function findCol(row: Row, ...candidates: string[]): string | number | null | un
 function extractFormatoA(row: Row): LeadInput {
   const tel = normalizePhone(findCol(row, "celular", "cel"))
   const { precisa_higienizacao, motivo_higienizacao } = classifyPhone(tel)
+  // CPF: aplicar hash imediatamente — nunca salvar texto puro (LGPD)
+  const cpfRaw = str(findCol(row, "cpf"))
+  const cpf_hash = cpfRaw ? hashCpf(cpfRaw) : null
   return {
     nome:                str(findCol(row, "nome")) ?? "(sem nome)",
     telefone_principal:  tel,
     telefone_secundario: normalizePhone(findCol(row, "telefone 1", "telefone1", "fone")),
     matricula:           str(findCol(row, "matricula", "matrícula")),
-    cpf:                 str(findCol(row, "cpf")),
+    cpf_hash,
     turma:               str(findCol(row, "turma")),
     situacao:            str(findCol(row, "situação", "situacao")),
     descricao:           null,
@@ -214,7 +218,7 @@ function extractFormatoB(row: Row): LeadInput {
     telefone_principal:  tel,
     telefone_secundario: null,
     matricula:           str(findCol(row, "pré-matrícula", "pre-matricula", "prematricula")),
-    cpf:                 null,
+    cpf_hash:            null,
     turma:               null,
     situacao:            str(findCol(row, "situação", "situacao")),
     descricao:           str(findCol(row, "descrição", "descricao")),
@@ -234,7 +238,7 @@ function extractFormatoC(row: Row): LeadInput {
     telefone_principal:  tel,
     telefone_secundario: null,
     matricula:           null,
-    cpf:                 null,
+    cpf_hash:            null,
     turma:               null,
     situacao:            null,
     descricao:           null,
