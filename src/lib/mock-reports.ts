@@ -69,7 +69,7 @@ export interface OperatorRow {
   ligacoes_atendidas: number
   conversoes: number
   tma_segundos: number
-  score_ia: number
+  score_ia: number | null
   taxa_contato: number
   taxa_conversao: number
 }

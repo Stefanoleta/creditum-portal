@@ -4,6 +4,7 @@ import type { HojeData, HojeOntem, OperatorRow, HourlyRow } from "@/lib/mock-rep
 import { adaptSDRs, adaptTabulacoes, extractArray, getVendasAllowlist } from "@/lib/argus-adapter"
 import type { ArgusDesempenhoItem, ArgusTabulacaoItem, ArgusLigacaoItem } from "@/types/argus"
 import { DAILY_BASE } from "@/lib/mock-reports"
+import { supabase } from "@/lib/supabase-server"
 
 const BASE_URL    = process.env.ARGUS_BASE_URL
 const TOKEN       = process.env.ARGUS_TOKEN
@@ -184,6 +185,46 @@ function buildHourlyDestaques(
   return { melhor_hora, pior_hora }
 }
 
+// ─── per-operator helpers ─────────────────────────────────────────────────────
+
+function buildQualifByOperator(items: ArgusTabulacaoItem[]): Map<string, number> {
+  const map = new Map<string, number>()
+  for (const item of items) {
+    const op = (item.usuarioOperador ?? "").toUpperCase().trim()
+    if (!op) continue
+    const label = (item.tabulado ?? item.tabulacao ?? "").toUpperCase()
+    if (label.includes("QUALIFICA")) {
+      map.set(op, (map.get(op) ?? 0) + 1)
+    }
+  }
+  return map
+}
+
+function findInOpMap(name: string, map: Map<string, number>): number {
+  const upper = name.toUpperCase().trim()
+  if (map.has(upper)) return map.get(upper)!
+  const firstName = upper.split(" ")[0]
+  if (firstName.length > 2) {
+    for (const [key, val] of map) {
+      if (key.includes(firstName)) return val
+    }
+  }
+  return 0
+}
+
+function findScore(name: string, map: Map<string, number>): number | null {
+  if (map.size === 0) return null
+  const upper = name.toUpperCase().trim()
+  if (map.has(upper)) return map.get(upper)!
+  const firstName = upper.split(" ")[0]
+  if (firstName.length > 2) {
+    for (const [key, val] of map) {
+      if (key.includes(firstName)) return val
+    }
+  }
+  return null
+}
+
 // ─── GET /api/reports/daily ────────────────────────────────────────────────────
 
 export async function GET() {
@@ -266,21 +307,56 @@ export async function GET() {
     const hoje: HojeData = { ...hojeBase, ontem, melhor_hora, pior_hora }
     const intraday = buildIntradayFromLigacoes(ligacoesItems)
 
+    // ── Per-operator qualificações from tabulacoesdetalhadas ─────────────────
+    const qualifByOp = buildQualifByOperator(tabulacaoItems)
+
+    // ── Score IA from Supabase (silent failure) ──────────────────────────────
+    const scoreByOp = new Map<string, number>()
+    if (supabase) {
+      try {
+        const todayStr = today.toISOString().split("T")[0]
+        const { data: analyses } = await supabase
+          .from("call_analyses")
+          .select("sdr_name, score")
+          .gte("started_at", `${todayStr}T00:00:00`)
+          .lte("started_at", `${todayStr}T23:59:59`)
+          .neq("status", "pendente")
+        const acc = new Map<string, { sum: number; count: number }>()
+        for (const a of (analyses ?? [])) {
+          const name = ((a as { sdr_name?: string }).sdr_name ?? "").toUpperCase().trim()
+          const score = (a as { score?: number }).score
+          if (!name || typeof score !== "number") continue
+          if (!acc.has(name)) acc.set(name, { sum: 0, count: 0 })
+          acc.get(name)!.sum += score
+          acc.get(name)!.count++
+        }
+        for (const [name, { sum, count }] of acc) {
+          scoreByOp.set(name, Math.round(sum / count))
+        }
+      } catch (err) {
+        console.warn("[reports/daily] Score IA indisponível:", err instanceof Error ? err.message : String(err))
+      }
+    }
+
     // ── Operadores ────────────────────────────────────────────────────────────
-    const operadores: OperatorRow[] = sdrs.map((s) => ({
-      id: s.id,
-      name: s.name,
-      meta_dia: s.meta_dia,
-      ligacoes_realizadas: s.ligacoes_realizadas,
-      ligacoes_atendidas: s.ligacoes_atendidas,
-      conversoes: s.conversoes,
-      tma_segundos: s.tma_segundos,
-      score_ia: s.score_ia ?? 75,
-      taxa_contato: s.ligacoes_realizadas > 0
-        ? Math.round((s.ligacoes_atendidas / s.ligacoes_realizadas) * 1000) / 10 : 0,
-      taxa_conversao: s.ligacoes_atendidas > 0
-        ? Math.round((s.conversoes / s.ligacoes_atendidas) * 1000) / 10 : 0,
-    })).sort((a, b) => b.conversoes - a.conversoes)
+    const operadores: OperatorRow[] = sdrs.map((s) => {
+      const qualif = findInOpMap(s.name, qualifByOp)
+      const score  = findScore(s.name, scoreByOp)
+      return {
+        id: s.id,
+        name: s.name,
+        meta_dia: s.meta_dia,
+        ligacoes_realizadas: s.ligacoes_realizadas,
+        ligacoes_atendidas: s.ligacoes_atendidas,
+        conversoes: qualif,
+        tma_segundos: s.tma_segundos,
+        score_ia: score,
+        taxa_contato: s.ligacoes_realizadas > 0
+          ? Math.round((s.ligacoes_atendidas / s.ligacoes_realizadas) * 1000) / 10 : 0,
+        taxa_conversao: s.ligacoes_atendidas > 0
+          ? Math.round((qualif / s.ligacoes_atendidas) * 1000) / 10 : 0,
+      }
+    }).sort((a, b) => b.conversoes - a.conversoes)
 
     return NextResponse.json({
       hoje,

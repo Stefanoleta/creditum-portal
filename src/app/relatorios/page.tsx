@@ -577,7 +577,7 @@ function TabOperadores({ rows }: { rows: OperatorRow[] }) {
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-          Ranking de operadores — ordenado por conversões
+          Ranking de operadores — ordenado por qualificações
           <span className="ml-4 font-normal normal-case text-gray-400">
             Score IA: <span className="text-emerald-600">≥ 85</span>  ·  <span className="text-amber-600">70–84</span>  ·  <span className="text-red-500">&lt; 70</span>
           </span>
@@ -586,7 +586,7 @@ function TabOperadores({ rows }: { rows: OperatorRow[] }) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-100">
-            {["#", "Operador", "Ligações", "Atendidas", "Conv", "Taxa Cont", "Taxa Conv", "TMA", "Score IA"].map((h) => (
+            {["#", "Operador", "Ligações", "Atendidas", "Qualif", "Taxa Cont", "Taxa Qualif", "TMA", "Score IA"].map((h) => (
               <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide first:px-5">
                 {h}
               </th>
@@ -599,7 +599,7 @@ function TabOperadores({ rows }: { rows: OperatorRow[] }) {
               <td className="pl-5 pr-4 py-3 text-gray-400 text-xs font-mono">{i + 1}</td>
               <td className="px-4 py-3">
                 <div className="flex items-center gap-2">
-                  <span className={cn("w-2 h-2 rounded-full flex-shrink-0", scoreDot(r.score_ia))} />
+                  <span className={cn("w-2 h-2 rounded-full flex-shrink-0", r.score_ia !== null ? scoreDot(r.score_ia) : "bg-gray-300")} />
                   <span className="font-medium text-slate-800">{r.name}</span>
                 </div>
               </td>
@@ -613,8 +613,8 @@ function TabOperadores({ rows }: { rows: OperatorRow[] }) {
               <td className={cn("px-4 py-3 tabular-nums", r.tma_segundos <= 240 ? "text-gray-600" : "text-amber-700")}>
                 {r.tma_segundos > 0 ? formatSeconds(r.tma_segundos) : "—"}
               </td>
-              <td className={cn("px-4 py-3 tabular-nums", scoreText(r.score_ia))}>
-                {r.score_ia}
+              <td className={cn("px-4 py-3 tabular-nums", r.score_ia !== null ? scoreText(r.score_ia) : "text-gray-400")}>
+                {r.score_ia !== null ? r.score_ia : "—"}
               </td>
             </tr>
           ))}
