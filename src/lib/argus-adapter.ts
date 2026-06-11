@@ -283,6 +283,7 @@ export function buildMetrics(
     taxa_contato: Math.round(taxa_contato * 10) / 10,
     taxa_conversao: Math.round(taxa_conversao * 10) / 10,
     total_ligacoes: totalLigacoes,
+    total_contatos: totalAtendidas,
     total_conversoes,
     ligacoes_ativas: liveCalls.length,
     sdrs_disponiveis: available.length,

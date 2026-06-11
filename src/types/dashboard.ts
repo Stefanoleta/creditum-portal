@@ -32,6 +32,7 @@ export interface DashboardMetrics {
   taxa_contato: number
   taxa_conversao: number
   total_ligacoes: number
+  total_contatos: number   // calls actually answered (lead said "alô")
   total_conversoes: number
   ligacoes_ativas: number
   sdrs_disponiveis: number
@@ -66,6 +67,7 @@ export interface DashboardData {
   top_objections: Objection[]
   occurrences: Occurrence[]
   hourly_chart: HourlyMetric[]
+  hourly_source?: "from_calls" | "empty"  // "empty" = no timestamps found, all zeros
   last_updated: string
   tabulacoes_source?: "argus" | "mock"
 }

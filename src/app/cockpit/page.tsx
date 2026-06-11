@@ -41,7 +41,8 @@ export default function CockpitPage() {
 
   const { metrics, sdrs, live_calls, top_objections, occurrences, last_updated } = data
 
-  const taxaConvGood = metrics.taxa_conversao >= 10
+  const taxaConvGood   = metrics.taxa_conversao >= 10
+  const taxaContatoGood = metrics.taxa_contato >= 65
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-gray-900 flex flex-col select-none">
@@ -83,7 +84,7 @@ export default function CockpitPage() {
       <div className="flex-1 grid grid-cols-12 gap-3 p-4 content-start">
 
         {/* Row 1: KPI cards */}
-        <div className="col-span-12 grid grid-cols-6 gap-3">
+        <div className="col-span-12 grid grid-cols-7 gap-3">
           <MetricCard
             label="TME"
             value={formatSeconds(metrics.tme_segundos)}
@@ -100,7 +101,7 @@ export default function CockpitPage() {
             label="Taxa de Contato"
             value={formatPercent(metrics.taxa_contato)}
             sublabel="Meta: ≥ 65%"
-            variant={metrics.taxa_contato >= 65 ? "success" : "danger"}
+            variant={taxaContatoGood ? "success" : "danger"}
           />
 
           {/* Taxa de Conversão — destaque emerald */}
@@ -109,7 +110,7 @@ export default function CockpitPage() {
             <div className="px-4 pt-3 pb-4 flex flex-col gap-1.5 flex-1">
               <span className="text-[10px] font-medium text-emerald-700/60 leading-none">Taxa de Conversão</span>
               <div className={cn(
-                "font-bold tabular-nums leading-none text-[2.8rem] tracking-[-0.03em]",
+                "font-bold tabular-nums leading-none text-[2.5rem] tracking-[-0.03em]",
                 taxaConvGood ? "text-emerald-700" : "text-amber-600"
               )}>
                 {formatPercent(metrics.taxa_conversao)}
@@ -129,10 +130,24 @@ export default function CockpitPage() {
                 </span>
                 <span className="text-[10px] font-medium text-slate-500 leading-none">Ligações Hoje</span>
               </span>
-              <div className="font-bold tabular-nums leading-none text-[2.8rem] tracking-[-0.03em] text-slate-800">
+              <div className="font-bold tabular-nums leading-none text-[2.5rem] tracking-[-0.03em] text-slate-800">
                 {metrics.total_ligacoes.toString()}
               </div>
               <div className="text-[11px] text-slate-400">{metrics.total_conversoes} conversões</div>
+            </div>
+          </div>
+
+          {/* Contatos Hoje (alôs) — destaque amber */}
+          <div className="relative bg-amber-50 rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.06)] overflow-hidden flex flex-col">
+            <div className={cn("h-1 w-full shrink-0", taxaContatoGood ? "bg-amber-400" : "bg-red-400")} />
+            <div className="px-4 pt-3 pb-4 flex flex-col gap-1.5 flex-1">
+              <span className="text-[10px] font-medium text-amber-700/60 leading-none">Contatos Hoje</span>
+              <div className="font-bold tabular-nums leading-none text-[2.5rem] tracking-[-0.03em] text-amber-700">
+                {metrics.total_contatos.toString()}
+              </div>
+              <div className={cn("text-[11px]", taxaContatoGood ? "text-amber-500/70" : "text-red-400")}>
+                {formatPercent(metrics.taxa_contato)} contato
+              </div>
             </div>
           </div>
 

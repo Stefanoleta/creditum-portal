@@ -54,6 +54,7 @@ async function fetchTabulacoes(campaignId: number): Promise<{
   occurrences: Occurrence[]
   total_conversoes: number
   tabulacoes_source: "argus" | "mock"
+  rawItems: ArgusTabulacaoItem[]
 }> {
   try {
     const raw = await argusPost("report/tabulacoesdetalhadas", {
@@ -63,7 +64,7 @@ async function fetchTabulacoes(campaignId: number): Promise<{
     const items = extractArray<ArgusTabulacaoItem>(raw, [
       "itens", "data", "tabulacoes", "resultados", "tabulacoesDetalhadas",
     ])
-    return { ...adaptTabulacoes(items), tabulacoes_source: "argus" }
+    return { ...adaptTabulacoes(items), tabulacoes_source: "argus", rawItems: items }
   } catch {
     console.warn("[dashboard/metrics] tabulacoesdetalhadas indisponível — usando mock")
     const mock = generateMockDashboard()
@@ -72,33 +73,65 @@ async function fetchTabulacoes(campaignId: number): Promise<{
       occurrences: mock.occurrences,
       total_conversoes: mock.metrics.total_conversoes,
       tabulacoes_source: "mock",
+      rawItems: [],
     }
   }
 }
 
-function buildHourlyChart(
-  totalLigacoes: number,
-  totalConversoes: number,
-  totalAtendidas: number
-): HourlyMetric[] {
-  const now = new Date()
-  const currentHour = now.getHours()
-  const startHour = Math.max(8, currentHour - 8)
+/**
+ * Builds the hourly chart from real call timestamps.
+ * Groups ligacoesItems by hour of dataHoraLigacao.
+ * Uses tabulacaoItems.dataEvento to count per-hour conversions.
+ * Returns source="empty" (all-zero chart) if no timestamps are found.
+ */
+function buildHourlyChartFromCalls(
+  ligacoesItems: ArgusLigacaoItem[],
+  tabulacaoItems: ArgusTabulacaoItem[] = []
+): { chart: HourlyMetric[]; source: "from_calls" | "empty" } {
+  const hourMap = new Map<number, { ligacoes: number; contatos: number; conversoes: number }>()
 
-  return Array.from({ length: currentHour - startHour + 1 }, (_, i) => {
-    const h = startHour + i
-    const isCurrentHour = h === currentHour
-    const minutesElapsed = isCurrentHour ? now.getMinutes() + 1 : 60
-    const fraction = minutesElapsed / 60
-    const hours = currentHour - startHour + 1
+  for (const item of ligacoesItems) {
+    const startStr = item.dataHoraLigacao ?? item.dataHora ?? item.horarioInicio ?? item.inicio
+    if (!startStr) continue
+    const date = new Date(startStr)
+    if (isNaN(date.getTime())) continue
+    const h = date.getHours()
+    const entry = hourMap.get(h) ?? { ligacoes: 0, contatos: 0, conversoes: 0 }
+    entry.ligacoes++
+    if (item.resultadoLigacao?.toUpperCase() === "ATENDIMENTO") entry.contatos++
+    hourMap.set(h, entry)
+  }
 
-    return {
+  // Cross-reference tabulacoes with dataEvento for per-hour conversion counts
+  for (const tab of tabulacaoItems) {
+    if (!tab.dataEvento) continue
+    const date = new Date(tab.dataEvento)
+    if (isNaN(date.getTime())) continue
+    const h = date.getHours()
+    const entry = hourMap.get(h)
+    if (!entry) continue
+    const tabuladoUpper = (tab.tabulado ?? tab.tabulacao ?? "").toUpperCase()
+    const categoriaUpper = (tab.categoriaTabulacao ?? "").toUpperCase()
+    const isConversao =
+      tabuladoUpper.startsWith("PROPOSTA ENVIADA") ||
+      categoriaUpper === "SUCESSO"
+    if (isConversao) entry.conversoes++
+  }
+
+  if (hourMap.size === 0) {
+    return { chart: [], source: "empty" }
+  }
+
+  const hours = Array.from(hourMap.keys()).sort((a, b) => a - b)
+  return {
+    chart: hours.map((h) => ({
       hora: `${String(h).padStart(2, "0")}h`,
-      ligacoes:   isCurrentHour ? Math.round((totalLigacoes   / hours) * fraction) : Math.round(totalLigacoes   / hours),
-      contatos:   isCurrentHour ? Math.round((totalAtendidas  / hours) * fraction) : Math.round(totalAtendidas  / hours),
-      conversoes: isCurrentHour ? Math.round((totalConversoes / hours) * fraction) : Math.round(totalConversoes / hours),
-    }
-  })
+      ligacoes: hourMap.get(h)!.ligacoes,
+      contatos: hourMap.get(h)!.contatos,
+      conversoes: hourMap.get(h)!.conversoes,
+    })),
+    source: "from_calls",
+  }
 }
 
 export async function GET() {
@@ -128,7 +161,7 @@ export async function GET() {
     const totalAtendidas = ligacoesItems.filter((i) => i.resultadoLigacao?.toUpperCase() === "ATENDIMENTO").length
 
     // Try tabulações independently — won't throw even if unavailable
-    const { objections, occurrences, total_conversoes, tabulacoes_source } =
+    const { objections, occurrences, total_conversoes, tabulacoes_source, rawItems: tabulacaoItems } =
       await fetchTabulacoes(CAMPAIGN_ID)
 
     const sdrs      = adaptSDRs(desempenhoItems, VENDAS_LIST)
@@ -142,12 +175,12 @@ export async function GET() {
       ? totalDiscadasFromSDR   // desempenho returned real discadas count
       : ligacoesItems.length   // fallback: count all ligacoes records
 
-    const metrics   = buildMetrics(sdrs, liveCalls, total_conversoes, totalDiscadas, totalAtendidas)
+    const metrics = buildMetrics(sdrs, liveCalls, total_conversoes, totalDiscadas, totalAtendidas)
 
-    const hourlyChart = buildHourlyChart(
-      totalDiscadas,
-      metrics.total_conversoes,
-      totalAtendidas
+    // Build hourly chart from real call timestamps — no fake uniform distribution
+    const { chart: hourlyChart, source: hourlySource } = buildHourlyChartFromCalls(
+      ligacoesItems,
+      tabulacaoItems
     )
 
     return NextResponse.json({
@@ -157,6 +190,7 @@ export async function GET() {
       top_objections: objections,
       occurrences,
       hourly_chart: hourlyChart,
+      hourly_source: hourlySource,
       last_updated: new Date().toISOString(),
       source: "argus",
       tabulacoes_source,
