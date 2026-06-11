@@ -200,6 +200,19 @@ function buildQualifByOperator(items: ArgusTabulacaoItem[]): Map<string, number>
   return map
 }
 
+// desempenhoresumido for auto-dialer SDRs has no "discadas" field — SDRs receive
+// calls, they don't dial. Count all calls per operator from ligacoesdetalhadas
+// (all outcomes, not just ATENDIMENTO) to get a meaningful denominator for taxa_contato.
+function buildTotalLigacoesByOperator(items: ArgusLigacaoItem[]): Map<string, number> {
+  const map = new Map<string, number>()
+  for (const item of items) {
+    const op = (item.usuarioOperador ?? "").toUpperCase().trim()
+    if (!op || op === "DISCADOR") continue
+    map.set(op, (map.get(op) ?? 0) + 1)
+  }
+  return map
+}
+
 function findInOpMap(name: string, map: Map<string, number>): number {
   const upper = name.toUpperCase().trim()
   if (map.has(upper)) return map.get(upper)!
@@ -307,6 +320,9 @@ export async function GET() {
     const hoje: HojeData = { ...hojeBase, ontem, melhor_hora, pior_hora }
     const intraday = buildIntradayFromLigacoes(ligacoesItems)
 
+    // ── Per-operator ligacoes from ligacoesdetalhadas (all outcomes) ─────────
+    const totalLigByOp = buildTotalLigacoesByOperator(ligacoesItems)
+
     // ── Per-operator qualificações from tabulacoesdetalhadas ─────────────────
     const qualifByOp = buildQualifByOperator(tabulacaoItems)
 
@@ -340,21 +356,26 @@ export async function GET() {
 
     // ── Operadores ────────────────────────────────────────────────────────────
     const operadores: OperatorRow[] = sdrs.map((s) => {
+      // Use ligacoesdetalhadas count (all outcomes) as the denominator for taxa_contato.
+      // desempenhoresumido only exposes qtdeAtendimentoTotal for auto-dialer SDRs —
+      // there is no separate "discadas" field, so ligacoes_realizadas == ligacoes_atendidas there.
+      const totalLig = findInOpMap(s.name, totalLigByOp) || s.ligacoes_realizadas
+      const atendidas = s.ligacoes_atendidas
       const qualif = findInOpMap(s.name, qualifByOp)
       const score  = findScore(s.name, scoreByOp)
       return {
         id: s.id,
         name: s.name,
         meta_dia: s.meta_dia,
-        ligacoes_realizadas: s.ligacoes_realizadas,
-        ligacoes_atendidas: s.ligacoes_atendidas,
+        ligacoes_realizadas: totalLig,
+        ligacoes_atendidas: atendidas,
         conversoes: qualif,
         tma_segundos: s.tma_segundos,
         score_ia: score,
-        taxa_contato: s.ligacoes_realizadas > 0
-          ? Math.round((s.ligacoes_atendidas / s.ligacoes_realizadas) * 1000) / 10 : 0,
-        taxa_conversao: s.ligacoes_atendidas > 0
-          ? Math.round((qualif / s.ligacoes_atendidas) * 1000) / 10 : 0,
+        taxa_contato: totalLig > 0
+          ? Math.round((atendidas / totalLig) * 1000) / 10 : 0,
+        taxa_conversao: atendidas > 0
+          ? Math.round((qualif / atendidas) * 1000) / 10 : 0,
       }
     }).sort((a, b) => b.conversoes - a.conversoes)
 
