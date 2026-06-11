@@ -92,7 +92,7 @@ export function adaptSDRs(items: ArgusDesempenhoItem[], allowlist: string[] = DE
         name,
         status,
         extension: ramal,
-        meta_dia: 50,
+        meta_dia: 30,
         ligacoes_realizadas: realizadas,
         ligacoes_atendidas: atendidas,
         conversoes,

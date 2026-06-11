@@ -41,7 +41,7 @@ export function SDRRanking({ sdrs }: SDRRankingProps) {
   return (
     <div className="flex flex-col">
       {sorted.map((sdr, index) => {
-        const pct = Math.min(100, Math.round((sdr.ligacoes_realizadas / sdr.meta_dia) * 100))
+        const pct = Math.min(100, Math.round((sdr.conversoes / sdr.meta_dia) * 100))
         const isOffline = sdr.status === "offline"
         const barColor = pct >= 100 ? "bg-[#0D5C3A]" : pct >= 60 ? "bg-[#D97706]" : "bg-[#DC2626]"
 
@@ -82,15 +82,15 @@ export function SDRRanking({ sdrs }: SDRRankingProps) {
                     {sdr.conversoes}
                   </span>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5" title={`${sdr.conversoes} qualificações de ${sdr.meta_dia}`}>
                   <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
                     <div
                       className={cn("h-full rounded-full transition-all duration-700", barColor)}
                       style={{ width: `${pct}%` }}
                     />
                   </div>
-                  <span className="text-[10px] text-gray-400 shrink-0 tabular-nums w-10 text-right">
-                    {sdr.ligacoes_realizadas}/{sdr.meta_dia}
+                  <span className="text-[10px] text-gray-400 shrink-0 tabular-nums text-right">
+                    {sdr.conversoes}<span className="text-gray-300">/{sdr.meta_dia} qualif.</span>
                   </span>
                 </div>
               </div>
