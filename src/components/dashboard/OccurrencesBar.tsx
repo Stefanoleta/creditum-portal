@@ -23,10 +23,10 @@ export function OccurrencesBar({ occurrences }: OccurrencesBarProps) {
   const max = Math.max(...occurrences.map((o) => o.count), 1)
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2.5 py-2">
       {occurrences.map((occ) => (
         <div key={occ.label} className="flex items-center gap-2">
-          <div className="w-[48%] text-[11px] text-gray-600 font-medium truncate text-right leading-tight">
+          <div className="w-[44%] text-[11px] text-gray-600 font-medium truncate text-right leading-tight">
             {occ.label}
           </div>
           <div className="flex-1 flex items-center gap-1.5">
@@ -36,8 +36,11 @@ export function OccurrencesBar({ occurrences }: OccurrencesBarProps) {
                 style={{ width: occ.count === 0 ? "2px" : `${(occ.count / max) * 100}%` }}
               />
             </div>
-            <span className="text-[10px] font-semibold text-gray-400 w-7 text-right tabular-nums shrink-0">
+            <span className="text-[10px] font-semibold text-gray-500 w-7 text-right tabular-nums shrink-0">
               {occ.count > 0 ? `${occ.percentage}%` : "—"}
+            </span>
+            <span className="text-[10px] text-gray-400 w-6 text-right tabular-nums shrink-0">
+              {occ.count > 0 ? occ.count : ""}
             </span>
           </div>
         </div>

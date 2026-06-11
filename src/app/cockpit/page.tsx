@@ -180,7 +180,7 @@ export default function CockpitPage() {
         </div>
 
         {/* Row 3: Ocorrências — valores exatos do Argus, largura total */}
-        <div className="col-span-12 bg-white rounded-lg shadow-sm p-5 flex flex-col gap-4">
+        <div className="col-span-12 bg-white rounded-lg shadow-sm px-6 py-5 flex flex-col gap-4">
           <div className="flex items-center justify-between shrink-0">
             <h2 className="text-sm font-semibold text-gray-600">Ocorrências</h2>
             {tabulacoesSource === "mock" && source !== "mock" && (

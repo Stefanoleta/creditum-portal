@@ -199,6 +199,7 @@ export function adaptTabulacoes(items: ArgusTabulacaoItem[]): {
     // Conversion: covers common Argus naming variations
     const upper = label.toUpperCase()
     const isConversao =
+      upper.includes("QUALIFICA") ||       // QUALIFICAÇÃO / QUALIFICACAO
       upper.includes("PROPOSTA ENVIADA") ||
       upper.includes("CONTRATO FECHADO") ||
       upper.includes("FECHAMENTO") ||
