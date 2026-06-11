@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:creditum-portal.vercel.app)",
+      "Bash(grep -v \"^$\")"
+    ]
+  }
+}
