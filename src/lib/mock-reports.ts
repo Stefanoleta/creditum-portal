@@ -1,6 +1,45 @@
 // Mock data for Módulo 3 — Relatórios
 // RAF = Rafael Costa (high performer), MARC = Marcos Pinto (low performer)
 
+export interface HojeOntem {
+  tentativas: number
+  atendidas: number
+  qualificacoes: number
+  taxa_aproveitamento: number   // atendidas / tentativas * 100
+  taxa_qualificacao: number     // qualificacoes / atendidas * 100
+  tma_segundos: number
+  dia: string
+}
+
+export interface HoraDestaque {
+  hora: string
+  taxa_qualificacao: number
+  atendidas: number
+  qualificacoes: number
+}
+
+export interface HojeData {
+  // Block 1 — Volume
+  tentativas: number
+  atendidas: number
+  taxa_aproveitamento: number
+  qualificacoes: number
+
+  // Block 2 — Qualidade
+  tma_segundos: number
+  taxa_qualificacao: number
+  pct_nao_tabulado: number
+  ligacoes_curtas: number       // absolute count < 30s (of atendidas)
+  ligacoes_curtas_pct: number   // % of atendidas
+
+  // Block 3 — Comparativo
+  ontem?: HojeOntem
+
+  // Block 5 — Destaques
+  melhor_hora?: HoraDestaque
+  pior_hora?: HoraDestaque
+}
+
 export interface DailyRow {
   date: string
   dia: string
@@ -36,7 +75,7 @@ export interface OperatorRow {
 }
 
 export interface ReportsPayload {
-  hoje: DailyRow
+  hoje: HojeData
   intraday: HourlyRow[]
   por_hora: HourlyRow[]
   operadores: OperatorRow[]
@@ -171,13 +210,31 @@ export const MARC_BASE: OperatorRow = {
 // ─── full mock payload ────────────────────────────────────────────────────────
 
 export function generateMockReports(): ReportsPayload {
-  const todayDate = new Date()
-  const todayDay  = getRecentWorkingDays(1)[0] ?? {
-    date: todayDate.toISOString().split("T")[0],
-    wd: PT_DAY[todayDate.getDay()],
-    dd: `${String(todayDate.getDate()).padStart(2, "0")}/${String(todayDate.getMonth() + 1).padStart(2, "0")}`,
+  const hoje: HojeData = {
+    tentativas: 347,
+    atendidas: 221,
+    taxa_aproveitamento: 63.7,
+    qualificacoes: 41,
+    tma_segundos: 228,
+    taxa_qualificacao: 18.6,
+    pct_nao_tabulado: 8.5,
+    ligacoes_curtas: 18,
+    ligacoes_curtas_pct: 8.1,
+    ontem: {
+      tentativas: 308,
+      atendidas: 191,
+      qualificacoes: 22,
+      taxa_aproveitamento: 62.0,
+      taxa_qualificacao: 11.5,
+      tma_segundos: 251,
+      dia: (() => {
+        const d = new Date(); d.setDate(d.getDate() - 1)
+        return d.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" })
+      })(),
+    },
+    melhor_hora: { hora: "14h", taxa_qualificacao: 25.6, atendidas: 39, qualificacoes: 10 },
+    pior_hora:   { hora: "12h", taxa_qualificacao: 6.7,  atendidas: 15, qualificacoes: 1  },
   }
-  const hoje = makeDailyRow({ l: 347, a: 221, c: 41, tma: 228 }, todayDay)
 
   const allOperators: OperatorRow[] = [
     { id: "ana-001",   name: "Ana Beatriz",   meta_dia: 50, ligacoes_realizadas: 52, ligacoes_atendidas: 36, conversoes: 8, tma_segundos: 210, score_ia: 91, taxa_contato: 69.2, taxa_conversao: 22.2 },

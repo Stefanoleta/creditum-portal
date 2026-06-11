@@ -1,13 +1,30 @@
 import { NextResponse } from "next/server"
 import { generateMockReports } from "@/lib/mock-reports"
-import type { OperatorRow, HourlyRow } from "@/lib/mock-reports"
+import type { HojeData, HojeOntem, OperatorRow, HourlyRow } from "@/lib/mock-reports"
 import { adaptSDRs, adaptTabulacoes, extractArray, getVendasAllowlist } from "@/lib/argus-adapter"
-import type { ArgusDesempenhoItem, ArgusTabulacaoItem } from "@/types/argus"
+import type { ArgusDesempenhoItem, ArgusTabulacaoItem, ArgusLigacaoItem } from "@/types/argus"
 import { HR_BASE, DAILY_BASE } from "@/lib/mock-reports"
 
-const BASE_URL   = process.env.ARGUS_BASE_URL
-const TOKEN      = process.env.ARGUS_TOKEN
+const BASE_URL    = process.env.ARGUS_BASE_URL
+const TOKEN       = process.env.ARGUS_TOKEN
 const CAMPAIGN_ID = Number(process.env.ARGUS_CAMPAIGN_ID ?? "1")
+
+const MIN_ATENDIDAS_HORA = 10
+
+// ─── helpers ──────────────────────────────────────────────────────────────────
+
+function dateRange(date: Date) {
+  const d = date.toISOString().split("T")[0]
+  return { periodoInicial: `${d}T00:00:00`, periodoFinal: `${d}T23:59:00` }
+}
+
+function withCampaign(extra: Record<string, unknown>) {
+  return { IdCampanha: CAMPAIGN_ID, ...extra }
+}
+
+function getDur(item: ArgusLigacaoItem): number {
+  return item.tempoSegundos ?? item.duracao ?? item.tempoDuracao ?? item.tempoDecorrido ?? 0
+}
 
 async function argusPost<T = Record<string, unknown>>(
   endpoint: string,
@@ -25,8 +42,8 @@ async function argusPost<T = Record<string, unknown>>(
   })
 
   if (!res.ok) {
-    const body = await res.text().catch(() => "")
-    throw new Error(`Argus ${endpoint} → HTTP ${res.status}: ${body.slice(0, 400)}`)
+    const text = await res.text().catch(() => "")
+    throw new Error(`Argus ${endpoint} → HTTP ${res.status}: ${text.slice(0, 400)}`)
   }
 
   const json = await res.json() as Record<string, unknown>
@@ -37,17 +54,122 @@ async function argusPost<T = Record<string, unknown>>(
   return json as T
 }
 
+// ─── metrics builders ─────────────────────────────────────────────────────────
+
+function buildHojeFromItems(
+  ligacoesItems: ArgusLigacaoItem[],
+  tabulacaoItems: ArgusTabulacaoItem[],
+  tentativasOverride: number
+): Omit<HojeData, "ontem" | "melhor_hora" | "pior_hora"> {
+  const atendidas_items = ligacoesItems.filter(i =>
+    (i.resultadoLigacao ?? "").toUpperCase() === "ATENDIMENTO"
+  )
+
+  const atendidas = atendidas_items.length || 0
+  const tentativas = tentativasOverride || ligacoesItems.length
+
+  const tma_soma = atendidas_items.reduce((s, i) => s + getDur(i), 0)
+  const tma_segundos = atendidas > 0 ? Math.round(tma_soma / atendidas) : 0
+
+  const ligacoes_curtas = atendidas_items.filter(i => getDur(i) < 30).length
+  const ligacoes_curtas_pct = atendidas > 0
+    ? Math.round((ligacoes_curtas / atendidas) * 1000) / 10 : 0
+
+  const { total_conversoes: qualificacoes, occurrences } = adaptTabulacoes(tabulacaoItems)
+  const totalTab = occurrences.reduce((s, o) => s + o.count, 0)
+  const naoTabuladoItem = occurrences.find(o => {
+    const u = o.label.toUpperCase()
+    return u.includes("NÃO TABULADO") || u.includes("NAO TABULADO")
+  })
+  const pct_nao_tabulado = naoTabuladoItem && totalTab > 0
+    ? Math.round((naoTabuladoItem.count / totalTab) * 1000) / 10 : 0
+
+  const taxa_aproveitamento = tentativas > 0
+    ? Math.round((atendidas / tentativas) * 1000) / 10 : 0
+  const taxa_qualificacao = atendidas > 0
+    ? Math.round((qualificacoes / atendidas) * 1000) / 10 : 0
+
+  return {
+    tentativas,
+    atendidas,
+    taxa_aproveitamento,
+    qualificacoes,
+    tma_segundos,
+    taxa_qualificacao,
+    pct_nao_tabulado,
+    ligacoes_curtas,
+    ligacoes_curtas_pct,
+  }
+}
+
+function buildHourlyDestaques(
+  ligacoesItems: ArgusLigacaoItem[],
+  tabulacaoItems: ArgusTabulacaoItem[]
+): { melhor_hora?: HojeData["melhor_hora"]; pior_hora?: HojeData["pior_hora"] } {
+  const hourlyAtendidas = new Map<string, number>()
+  const hourlyQualif    = new Map<string, number>()
+
+  for (const item of ligacoesItems) {
+    if ((item.resultadoLigacao ?? "").toUpperCase() !== "ATENDIMENTO") continue
+    const ts = item.dataHoraLigacao ?? item.dataHora ?? item.horarioInicio ?? ""
+    if (!ts) continue
+    const hora = `${String(new Date(ts).getHours()).padStart(2, "0")}h`
+    hourlyAtendidas.set(hora, (hourlyAtendidas.get(hora) ?? 0) + 1)
+  }
+
+  for (const tab of tabulacaoItems) {
+    const u = (tab.tabulado ?? tab.tabulacao ?? "").toUpperCase()
+    if (!u.includes("QUALIFICA")) continue
+    const ts = tab.dataEvento ?? ""
+    if (!ts) continue
+    const hora = `${String(new Date(ts).getHours()).padStart(2, "0")}h`
+    hourlyQualif.set(hora, (hourlyQualif.get(hora) ?? 0) + 1)
+  }
+
+  const validas = Array.from(hourlyAtendidas.entries())
+    .filter(([, count]) => count >= MIN_ATENDIDAS_HORA)
+    .map(([hora, atend]) => {
+      const qual = hourlyQualif.get(hora) ?? 0
+      return {
+        hora,
+        atendidas: atend,
+        qualificacoes: qual,
+        taxa_qualificacao: Math.round((qual / atend) * 1000) / 10,
+      }
+    })
+
+  if (validas.length === 0) return {}
+
+  const melhor_hora = validas.reduce((best, h) => h.taxa_qualificacao > best.taxa_qualificacao ? h : best)
+  const restantes = validas.filter(h => h.hora !== melhor_hora.hora)
+  const pior_hora = restantes.length > 0
+    ? restantes.reduce((worst, h) => h.taxa_qualificacao < worst.taxa_qualificacao ? h : worst)
+    : undefined
+
+  return { melhor_hora, pior_hora }
+}
+
+// ─── GET /api/reports/daily ────────────────────────────────────────────────────
+
 export async function GET() {
   if (!BASE_URL || !TOKEN) {
     return NextResponse.json(generateMockReports())
   }
 
   try {
+    const today = new Date()
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+
+    const todayRange = withCampaign(dateRange(today))
+
     const [rawDesempenho, rawTabulacoes, rawLigacoes] = await Promise.all([
-      argusPost("report/desempenhoresumido", { ultimosMinutos: 480 }),
-      argusPost("report/tabulacoesdetalhadas", { ultimosMinutos: 480, idCampanha: CAMPAIGN_ID }),
-      argusPost("report/ligacoesdetalhadas",   { ultimosMinutos: 480, idCampanha: CAMPAIGN_ID }),
+      argusPost("report/desempenhoresumido",   todayRange),
+      argusPost("report/tabulacoesdetalhadas", todayRange),
+      argusPost("report/ligacoesdetalhadas",   todayRange),
     ])
+
+    const vendasList = getVendasAllowlist(process.env.ARGUS_SDR_ALLOWLIST)
 
     const desempenhoItems = extractArray<ArgusDesempenhoItem>(rawDesempenho, [
       "desempenhosResumidos", "itens", "data", "relatorio", "agentes", "operadores",
@@ -55,40 +177,56 @@ export async function GET() {
     const tabulacaoItems = extractArray<ArgusTabulacaoItem>(rawTabulacoes, [
       "itens", "data", "tabulacoes",
     ])
-
-    // Vendas allowlist: hardcoded default, optional env-var override.
-    // Do NOT detect group IDs dynamically — group numbering varies by Argus installation.
-    const vendasList = getVendasAllowlist(process.env.ARGUS_SDR_ALLOWLIST)
+    const ligacoesItems = extractArray<ArgusLigacaoItem>(rawLigacoes, [
+      "ligacoesDetalhadas", "itens", "data", "ligacoes",
+    ])
 
     const sdrs = adaptSDRs(desempenhoItems, vendasList)
-    const { total_conversoes } = adaptTabulacoes(tabulacaoItems)
+    const tentativas = sdrs.reduce((s, r) => s + r.ligacoes_realizadas, 0) || ligacoesItems.length
 
-    const ligacoes    = sdrs.reduce((s, r) => s + r.ligacoes_realizadas, 0)
-    const atendidas   = sdrs.reduce((s, r) => s + r.ligacoes_atendidas, 0)
-    const conversoes  = total_conversoes
-    const tmaSoma     = sdrs.filter((s) => s.tma_segundos > 0).reduce((s, r) => s + r.tma_segundos, 0)
-    const tmaCount    = sdrs.filter((s) => s.tma_segundos > 0).length
-    const tma_segundos = tmaCount > 0 ? Math.round(tmaSoma / tmaCount) : 228
-    const taxa_contato   = ligacoes  > 0 ? Math.round((atendidas  / ligacoes)  * 1000) / 10 : 0
-    const taxa_conversao = atendidas > 0 ? Math.round((conversoes / atendidas) * 1000) / 10 : 0
+    const hojeBase = buildHojeFromItems(ligacoesItems, tabulacaoItems, tentativas)
+    const { melhor_hora, pior_hora } = buildHourlyDestaques(ligacoesItems, tabulacaoItems)
 
-    const hoje = {
-      date: new Date().toISOString().split("T")[0],
-      dia: new Date().toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" }),
-      ligacoes,
-      atendidas,
-      conversoes,
-      tma_segundos,
-      taxa_contato,
-      taxa_conversao,
-      receita: conversoes * 1600,
+    // ── Yesterday comparison ──────────────────────────────────────────────────
+    let ontem: HojeOntem | undefined
+    try {
+      const ontemRange = withCampaign(dateRange(yesterday))
+      const [rawOntemLig, rawOntemTab, rawOntemDesemp] = await Promise.all([
+        argusPost("report/ligacoesdetalhadas",   ontemRange),
+        argusPost("report/tabulacoesdetalhadas", ontemRange),
+        argusPost("report/desempenhoresumido",   ontemRange),
+      ])
+      const ontemLigItems  = extractArray<ArgusLigacaoItem>(rawOntemLig, ["ligacoesDetalhadas", "itens", "data", "ligacoes"])
+      const ontemTabItems  = extractArray<ArgusTabulacaoItem>(rawOntemTab, ["itens", "data", "tabulacoes"])
+      const ontemDesempItems = extractArray<ArgusDesempenhoItem>(rawOntemDesemp, ["desempenhosResumidos", "itens", "data", "relatorio"])
+
+      const ontemSdrs      = adaptSDRs(ontemDesempItems, vendasList)
+      const ontemTentativas = ontemSdrs.reduce((s, r) => s + r.ligacoes_realizadas, 0) || ontemLigItems.length
+      const ontemAtendItems = ontemLigItems.filter(i => (i.resultadoLigacao ?? "").toUpperCase() === "ATENDIMENTO")
+      const ontemAtendidas  = ontemAtendItems.length
+      const { total_conversoes: ontemQualif } = adaptTabulacoes(ontemTabItems)
+      const ontemTmaSoma   = ontemAtendItems.reduce((s, i) => s + getDur(i), 0)
+
+      ontem = {
+        tentativas:        ontemTentativas,
+        atendidas:         ontemAtendidas,
+        qualificacoes:     ontemQualif,
+        taxa_aproveitamento: ontemTentativas > 0 ? Math.round((ontemAtendidas / ontemTentativas) * 1000) / 10 : 0,
+        taxa_qualificacao:   ontemAtendidas > 0  ? Math.round((ontemQualif / ontemAtendidas) * 1000) / 10 : 0,
+        tma_segundos:      ontemAtendidas > 0 ? Math.round(ontemTmaSoma / ontemAtendidas) : 0,
+        dia: yesterday.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" }),
+      }
+    } catch (err) {
+      console.warn("[reports/daily] Sem dados de ontem:", err instanceof Error ? err.message : String(err))
     }
 
-    // Scale HR_BASE proportionally to today's actual totals
+    const hoje: HojeData = { ...hojeBase, ontem, melhor_hora, pior_hora }
+
+    // ── Intraday / Por hora (scale HR_BASE to actual totals) ──────────────────
     const hrTotal = HR_BASE.reduce((s, r) => s + r.ligacoes, 0)
-    const scale   = hrTotal > 0 ? ligacoes / hrTotal : 1
+    const scale   = hrTotal > 0 && hojeBase.tentativas > 0 ? hojeBase.tentativas / hrTotal : 1
     const intraday: HourlyRow[] = HR_BASE.map((r) => {
-      const l = Math.round(r.ligacoes * scale)
+      const l = Math.round(r.ligacoes  * scale)
       const a = Math.round(r.atendidas * scale)
       const c = Math.round(r.conversoes * scale)
       return {
@@ -101,7 +239,8 @@ export async function GET() {
       }
     })
 
-    const operadores: OperatorRow[] = sdrs.map((s, i) => ({
+    // ── Operadores ────────────────────────────────────────────────────────────
+    const operadores: OperatorRow[] = sdrs.map((s) => ({
       id: s.id,
       name: s.name,
       meta_dia: s.meta_dia,
@@ -111,11 +250,9 @@ export async function GET() {
       tma_segundos: s.tma_segundos,
       score_ia: s.score_ia ?? 75,
       taxa_contato: s.ligacoes_realizadas > 0
-        ? Math.round((s.ligacoes_atendidas / s.ligacoes_realizadas) * 1000) / 10
-        : 0,
+        ? Math.round((s.ligacoes_atendidas / s.ligacoes_realizadas) * 1000) / 10 : 0,
       taxa_conversao: s.ligacoes_atendidas > 0
-        ? Math.round((s.conversoes / s.ligacoes_atendidas) * 1000) / 10
-        : 0,
+        ? Math.round((s.conversoes / s.ligacoes_atendidas) * 1000) / 10 : 0,
     })).sort((a, b) => b.conversoes - a.conversoes)
 
     return NextResponse.json({
@@ -130,7 +267,6 @@ export async function GET() {
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err)
     console.warn("[reports/daily] Argus indisponível — usando mock:", reason)
-
     return NextResponse.json({
       ...generateMockReports(),
       fallback_reason: reason,

@@ -15,7 +15,7 @@ import {
 } from "lucide-react"
 import { cn, formatSeconds } from "@/lib/utils"
 import { MockDataBanner } from "@/components/ui-shared/MockDataBanner"
-import type { ReportsPayload, DailyRow, HourlyRow, OperatorRow } from "@/lib/mock-reports"
+import type { ReportsPayload, HojeData, DailyRow, HourlyRow, OperatorRow } from "@/lib/mock-reports"
 
 const TABS = ["Hoje", "Intraday", "Por Hora", "Operadores", "Histórico"] as const
 type Tab = typeof TABS[number]
@@ -221,112 +221,205 @@ function KpiCard({
 
 // ─── Tab: Hoje ────────────────────────────────────────────────────────────────
 
-function TabHoje({ data }: { data: ReportsPayload }) {
-  const { hoje, historico } = data
-  const ontem = historico[historico.length - 1]
+function TabHoje({ hoje, isDemo }: { hoje: HojeData; isDemo: boolean }) {
+  const horaAtual = new Date().getHours()
 
-  const diffLig = ontem ? hoje.ligacoes - ontem.ligacoes : 0
-  const diffSign = diffLig >= 0 ? "+" : ""
+  const alerts = [
+    hoje.pct_nao_tabulado > 20 && {
+      level: "red" as const,
+      text: "NÃO TABULADO acima de 20% — revisar disciplina de tabulação",
+    },
+    horaAtual > 11 && hoje.qualificacoes === 0 && {
+      level: "red" as const,
+      text: "Nenhuma qualificação até 11h — dia em risco",
+    },
+    hoje.tma_segundos > 0 && hoje.tma_segundos < 30 && {
+      level: "amber" as const,
+      text: "TMA abaixo de 30s — possível problema de conexão ou lista fria",
+    },
+    hoje.taxa_aproveitamento > 0 && hoje.taxa_aproveitamento < 3 && {
+      level: "amber" as const,
+      text: "Taxa de aproveitamento abaixo de 3% — revisar lista ou horário",
+    },
+  ].filter(Boolean) as Array<{ level: "red" | "amber"; text: string }>
+
+  const ontem = hoje.ontem
 
   return (
     <div className="space-y-6">
-      {/* Primary KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard
-          label="Total Ligações"
-          value={hoje.ligacoes.toLocaleString("pt-BR")}
-          sub={ontem ? `${diffSign}${diffLig} vs. ontem` : "hoje"}
-          accent="bg-teal-500"
-        />
-        <KpiCard
-          label="Taxa de Contato"
-          value={pct(hoje.taxa_contato)}
-          sub="meta: 65%"
-          accent="bg-teal-500"
-          valueClass={hoje.taxa_contato >= 65 ? "text-emerald-700" : "text-red-600"}
-        />
-        <KpiCard
-          label="Conversões"
-          value={hoje.conversoes.toString()}
-          sub={brl(hoje.receita)}
-          accent="bg-emerald-500"
-          valueClass="text-emerald-700"
-        />
-        <KpiCard
-          label="TMA"
-          value={formatSeconds(hoje.tma_segundos)}
-          sub="meta: 4:00"
-          accent="bg-amber-500"
-          valueClass={hoje.tma_segundos <= 240 ? "text-emerald-700" : "text-amber-700"}
-        />
+
+      {/* Block 1 — Volume */}
+      <div>
+        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Volume</p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <KpiCard
+            label="Total Tentativas"
+            value={hoje.tentativas > 0 ? hoje.tentativas.toLocaleString("pt-BR") : isDemo ? "347" : "Aguardando"}
+            sub="discadas hoje"
+            accent="bg-slate-400"
+          />
+          <KpiCard
+            label="Total Atendidas"
+            value={hoje.atendidas > 0 ? hoje.atendidas.toLocaleString("pt-BR") : isDemo ? "221" : "Aguardando"}
+            sub={hoje.tentativas > 0 ? `de ${hoje.tentativas.toLocaleString("pt-BR")} tentativas` : "alôs"}
+            accent="bg-teal-500"
+          />
+          <KpiCard
+            label="Taxa Aproveitamento"
+            value={hoje.taxa_aproveitamento > 0 ? pct(hoje.taxa_aproveitamento) : "—"}
+            sub="atendidas / tentativas"
+            accent={hoje.taxa_aproveitamento >= 65 ? "bg-emerald-500" : hoje.taxa_aproveitamento >= 50 ? "bg-amber-400" : "bg-red-400"}
+            valueClass={hoje.taxa_aproveitamento >= 65 ? "text-emerald-700" : hoje.taxa_aproveitamento >= 50 ? "text-amber-700" : hoje.taxa_aproveitamento > 0 ? "text-red-600" : undefined}
+          />
+          <KpiCard
+            label="Qualificações Hoje"
+            value={hoje.qualificacoes > 0 ? hoje.qualificacoes.toString() : isDemo ? "41" : "Aguardando"}
+            sub="leads para closer"
+            accent="bg-emerald-500"
+            valueClass="text-emerald-700"
+          />
+        </div>
       </div>
 
-      {/* Secondary KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard
-          label="Atendidas"
-          value={hoje.atendidas.toLocaleString("pt-BR")}
-          sub={`de ${hoje.ligacoes} discadas`}
-          accent="bg-slate-300"
-        />
-        <KpiCard
-          label="Taxa Conversão"
-          value={pct(hoje.taxa_conversao)}
-          sub="conversões / atendidas"
-          accent={hoje.taxa_conversao >= 15 ? "bg-emerald-400" : hoje.taxa_conversao >= 10 ? "bg-amber-400" : "bg-red-400"}
-          valueClass={convText(hoje.taxa_conversao)}
-        />
-        <KpiCard
-          label="Receita Estimada"
-          value={brl(hoje.receita)}
-          sub="R$ 1.600 por conversão"
-          accent="bg-emerald-400"
-          valueClass="text-emerald-700"
-        />
-        <KpiCard
-          label="Ligações / Hora"
-          value={Math.round(hoje.ligacoes / 9).toString()}
-          sub="média das 9h às 18h"
-          accent="bg-slate-300"
-        />
+      {/* Block 2 — Qualidade */}
+      <div>
+        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Qualidade</p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <KpiCard
+            label="TMA Médio"
+            value={hoje.tma_segundos > 0 ? formatSeconds(hoje.tma_segundos) : "—"}
+            sub="meta: 3:00 – 6:00"
+            accent="bg-amber-400"
+            valueClass={hoje.tma_segundos >= 180 && hoje.tma_segundos <= 360 ? "text-emerald-700" : hoje.tma_segundos > 0 ? "text-amber-700" : undefined}
+          />
+          <KpiCard
+            label="Taxa Qualificação"
+            value={hoje.taxa_qualificacao > 0 ? pct(hoje.taxa_qualificacao) : "—"}
+            sub="qualificações / atendidas"
+            accent={hoje.taxa_qualificacao >= 15 ? "bg-emerald-400" : hoje.taxa_qualificacao >= 10 ? "bg-amber-400" : "bg-red-400"}
+            valueClass={convText(hoje.taxa_qualificacao)}
+          />
+          <KpiCard
+            label="% Não Tabulado"
+            value={hoje.pct_nao_tabulado > 0 ? pct(hoje.pct_nao_tabulado) : "—"}
+            sub={hoje.pct_nao_tabulado > 20 ? "acima do limite!" : "meta: ≤ 20%"}
+            accent={hoje.pct_nao_tabulado > 20 ? "bg-red-500" : "bg-emerald-400"}
+            valueClass={hoje.pct_nao_tabulado > 20 ? "text-red-600" : "text-emerald-700"}
+          />
+          <KpiCard
+            label="Ligações < 30s"
+            value={hoje.ligacoes_curtas > 0 ? hoje.ligacoes_curtas.toString() : "0"}
+            sub={hoje.ligacoes_curtas_pct > 0 ? `${pct(hoje.ligacoes_curtas_pct)} das atendidas` : "das atendidas"}
+            accent={hoje.ligacoes_curtas_pct > 20 ? "bg-amber-400" : "bg-slate-200"}
+            valueClass={hoje.ligacoes_curtas_pct > 20 ? "text-amber-700" : undefined}
+          />
+        </div>
       </div>
 
-      {/* Comparison with yesterday */}
+      {/* Block 3 — Comparativo hoje vs. ontem */}
       {ontem && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Comparativo — hoje vs. ontem ({ontem.dia})</p>
-          </div>
-          <div className="divide-y divide-gray-100">
-            {[
-              { label: "Ligações",         hoje: hoje.ligacoes,         ontem: ontem.ligacoes,         fmt: (n: number) => n.toString() },
-              { label: "Atendidas",        hoje: hoje.atendidas,        ontem: ontem.atendidas,        fmt: (n: number) => n.toString() },
-              { label: "Conversões",       hoje: hoje.conversoes,       ontem: ontem.conversoes,       fmt: (n: number) => n.toString() },
-              { label: "Taxa Contato",     hoje: hoje.taxa_contato,     ontem: ontem.taxa_contato,     fmt: pct },
-              { label: "Taxa Conversão",   hoje: hoje.taxa_conversao,   ontem: ontem.taxa_conversao,   fmt: pct },
-              { label: "TMA",              hoje: hoje.tma_segundos,     ontem: ontem.tma_segundos,     fmt: formatSeconds },
-            ].map((row) => {
-              const delta = row.hoje - row.ontem
-              const up = delta > 0
-              const neutral = Math.abs(delta) < 0.1
-              const isTimeStat = row.label === "TMA"
-              const positive = isTimeStat ? !up : up
-              return (
-                <div key={row.label} className="flex items-center px-5 py-2.5 gap-4">
-                  <span className="w-36 text-sm text-gray-600">{row.label}</span>
-                  <span className="w-20 text-sm font-semibold text-slate-800 tabular-nums">{row.fmt(row.hoje)}</span>
-                  <span className="w-20 text-sm text-gray-400 tabular-nums">{row.fmt(row.ontem)}</span>
-                  {!neutral && (
-                    <span className={cn("text-xs font-medium tabular-nums", positive ? "text-emerald-600" : "text-red-600")}>
-                      {up ? "▲" : "▼"} {row.fmt(Math.abs(delta))}
-                    </span>
-                  )}
-                </div>
-              )
-            })}
+        <div>
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Comparativo</p>
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                Hoje vs. ontem ({ontem.dia})
+              </p>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {([
+                { label: "Tentativas",          hj: hoje.tentativas,          on: ontem.tentativas,          fmt: (n: number) => n.toString() },
+                { label: "Atendidas",            hj: hoje.atendidas,           on: ontem.atendidas,           fmt: (n: number) => n.toString() },
+                { label: "Qualificações",        hj: hoje.qualificacoes,       on: ontem.qualificacoes,       fmt: (n: number) => n.toString() },
+                { label: "Taxa Aproveitamento",  hj: hoje.taxa_aproveitamento, on: ontem.taxa_aproveitamento, fmt: pct },
+                { label: "Taxa Qualificação",    hj: hoje.taxa_qualificacao,   on: ontem.taxa_qualificacao,   fmt: pct },
+                { label: "TMA",                  hj: hoje.tma_segundos,        on: ontem.tma_segundos,        fmt: formatSeconds, invertDelta: true },
+              ] as Array<{ label: string; hj: number; on: number; fmt: (n: number) => string; invertDelta?: boolean }>)
+                .map((row) => {
+                  const delta = row.hj - row.on
+                  const up = delta > 0
+                  const neutral = Math.abs(delta) < 0.01
+                  const positive = row.invertDelta ? !up : up
+                  return (
+                    <div key={row.label} className="flex items-center px-5 py-2.5 gap-4">
+                      <span className="w-40 text-sm text-gray-600">{row.label}</span>
+                      <span className="w-20 text-sm font-semibold text-slate-800 tabular-nums">{row.fmt(row.hj)}</span>
+                      <span className="w-20 text-sm text-gray-400 tabular-nums">{row.fmt(row.on)}</span>
+                      {!neutral && (
+                        <span className={cn("text-xs font-medium tabular-nums", positive ? "text-emerald-600" : "text-red-500")}>
+                          {up ? "▲" : "▼"} {row.fmt(Math.abs(delta))}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+            </div>
           </div>
         </div>
       )}
+
+      {/* Block 4 — Alertas */}
+      {alerts.length > 0 && (
+        <div>
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Alertas</p>
+          <div className="flex flex-col gap-2">
+            {alerts.map((alert, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "flex items-center gap-3 px-4 py-3 rounded-lg border text-sm font-medium",
+                  alert.level === "red"
+                    ? "bg-red-50 border-red-200 text-red-700"
+                    : "bg-amber-50 border-amber-200 text-amber-700"
+                )}
+              >
+                <span className="shrink-0 text-base">{alert.level === "red" ? "🔴" : "🟡"}</span>
+                {alert.text}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Block 5 — Destaques do dia */}
+      {(hoje.melhor_hora || hoje.pior_hora) && (
+        <div>
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Destaques do Dia</p>
+          <div className="grid grid-cols-2 gap-4">
+            {hoje.melhor_hora && (
+              <div className="bg-white rounded-xl border border-emerald-100 shadow-sm overflow-hidden">
+                <div className="h-1.5 bg-emerald-400" />
+                <div className="p-5">
+                  <p className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider">Melhor hora</p>
+                  <p className="text-4xl font-bold text-slate-800 mt-2 tabular-nums">{hoje.melhor_hora.hora}</p>
+                  <p className="text-sm font-semibold text-emerald-700 mt-1">
+                    {pct(hoje.melhor_hora.taxa_qualificacao)} qualificação
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {hoje.melhor_hora.qualificacoes} qualif. em {hoje.melhor_hora.atendidas} atendidas
+                  </p>
+                </div>
+              </div>
+            )}
+            {hoje.pior_hora && (
+              <div className="bg-white rounded-xl border border-red-100 shadow-sm overflow-hidden">
+                <div className="h-1.5 bg-red-300" />
+                <div className="p-5">
+                  <p className="text-[11px] font-semibold text-red-500 uppercase tracking-wider">Pior hora</p>
+                  <p className="text-4xl font-bold text-slate-800 mt-2 tabular-nums">{hoje.pior_hora.hora}</p>
+                  <p className="text-sm font-semibold text-red-600 mt-1">
+                    {pct(hoje.pior_hora.taxa_qualificacao)} qualificação
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {hoje.pior_hora.qualificacoes} qualif. em {hoje.pior_hora.atendidas} atendidas
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
@@ -786,7 +879,7 @@ export default function RelatoriosPage() {
           </div>
         ) : (
           <>
-            {tab === "Hoje"       && <TabHoje       data={data} />}
+            {tab === "Hoje"       && <TabHoje       hoje={data.hoje} isDemo={data.source === "mock"} />}
             {tab === "Intraday"   && <TabIntraday   rows={data.intraday} />}
             {tab === "Por Hora"   && <TabPorHora    rows={data.por_hora} />}
             {tab === "Operadores" && <TabOperadores rows={data.operadores} />}
