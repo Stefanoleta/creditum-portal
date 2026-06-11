@@ -472,7 +472,15 @@ export default function ListasPage() {
   }
 
   const metaNeedsInput = parseResult && (!parseResult.meta.unidade || !parseResult.meta.tipo_lista || !parseResult.meta.data_lista)
-  const canConfirm = metaOverride.unidade && metaOverride.tipo_lista && metaOverride.data_lista
+
+  // Campos faltando — checa metaOverride atual, independente do nome do arquivo
+  const missingFields: string[] = [
+    metaOverride.unidade.trim()    === "" && "Unidade",
+    metaOverride.tipo_lista.trim() === "" && "Tipo de Lista",
+    metaOverride.data_lista        === "" && "Data da Lista",
+  ].filter((f): f is string => typeof f === "string")
+
+  const canConfirm = missingFields.length === 0
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-gray-900 flex flex-col select-none">
@@ -532,7 +540,7 @@ export default function ListasPage() {
             <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 rounded-lg px-4 py-3">
               <CheckCircle2 className="w-4 h-4 shrink-0" />
               {importOk.total} leads importados com sucesso
-              <button className="ml-auto text-xs underline" onClick={() => { setImportOk(null); setUploadFile(null) }}>
+              <button className="ml-auto text-xs underline" onClick={() => { setImportOk(null); setUploadFile(null); setParseResult(null); setMetaOverride({ unidade: "", tipo_lista: "", data_lista: "" }) }}>
                 Importar outra
               </button>
             </div>
@@ -599,25 +607,32 @@ export default function ListasPage() {
                 <PreviewTable leads={parseResult.leads} />
               </div>
 
-              <div className="flex items-center gap-3">
-                <button
-                  disabled={!canConfirm || importing}
-                  onClick={handleConfirmar}
-                  className={cn(
-                    "text-sm font-medium px-4 py-2 rounded-lg transition-colors",
-                    canConfirm
-                      ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                      : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  )}
-                >
-                  {importing ? "Importando..." : "Confirmar e importar"}
-                </button>
-                <button
-                  onClick={() => { setParseResult(null); setUploadFile(null); setUploadError(null) }}
-                  className="text-xs text-gray-400 hover:text-gray-600"
-                >
-                  Cancelar
-                </button>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-3">
+                  <button
+                    disabled={!canConfirm || importing}
+                    onClick={handleConfirmar}
+                    className={cn(
+                      "text-sm font-medium px-4 py-2 rounded-lg transition-colors",
+                      canConfirm
+                        ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                        : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    )}
+                  >
+                    {importing ? "Importando..." : "Confirmar e importar"}
+                  </button>
+                  <button
+                    onClick={() => { setParseResult(null); setUploadFile(null); setUploadError(null); setMetaOverride({ unidade: "", tipo_lista: "", data_lista: "" }) }}
+                    className="text-xs text-gray-400 hover:text-gray-600"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+                {!canConfirm && missingFields.length > 0 && (
+                  <p className="text-[11px] text-amber-600">
+                    Preencha: {missingFields.join(", ")}
+                  </p>
+                )}
               </div>
             </>
           )}
