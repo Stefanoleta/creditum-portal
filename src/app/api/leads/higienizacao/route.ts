@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
     const { data, error, count } = await supabase
       .from("leads")
       .select(
-        "id, nome, telefone_principal, motivo_higienizacao, telefone_sugerido, sugestao_origem_lista_id, listas(nome_arquivo, unidade, data_lista)",
+        "id, nome, telefone_principal, motivo_higienizacao, telefone_sugerido, sugestao_origem_lista_id, listas!leads_lista_id_fkey(nome_arquivo, unidade, data_lista)",
         { count: "exact" }
       )
       .eq("sugestao_substituicao", true)
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
   const { data, error, count } = await supabase
     .from("leads")
     .select(
-      "id, nome, telefone_principal, motivo_higienizacao, listas(nome_arquivo, unidade, data_lista)",
+      "id, nome, telefone_principal, motivo_higienizacao, listas!leads_lista_id_fkey(nome_arquivo, unidade, data_lista)",
       { count: "exact" }
     )
     .eq("precisa_higienizacao", true)
