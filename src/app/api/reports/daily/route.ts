@@ -200,18 +200,6 @@ function buildQualifByOperator(items: ArgusTabulacaoItem[]): Map<string, number>
   return map
 }
 
-// desempenhoresumido for auto-dialer SDRs has no "discadas" field — SDRs receive
-// calls, they don't dial. Count all calls per operator from ligacoesdetalhadas
-// (all outcomes, not just ATENDIMENTO) to get a meaningful denominator for taxa_contato.
-function buildTotalLigacoesByOperator(items: ArgusLigacaoItem[]): Map<string, number> {
-  const map = new Map<string, number>()
-  for (const item of items) {
-    const op = (item.usuarioOperador ?? "").toUpperCase().trim()
-    if (!op || op === "DISCADOR") continue
-    map.set(op, (map.get(op) ?? 0) + 1)
-  }
-  return map
-}
 
 function findInOpMap(name: string, map: Map<string, number>): number {
   const upper = name.toUpperCase().trim()
@@ -320,9 +308,6 @@ export async function GET() {
     const hoje: HojeData = { ...hojeBase, ontem, melhor_hora, pior_hora }
     const intraday = buildIntradayFromLigacoes(ligacoesItems)
 
-    // ── Per-operator ligacoes from ligacoesdetalhadas (all outcomes) ─────────
-    const totalLigByOp = buildTotalLigacoesByOperator(ligacoesItems)
-
     // ── Per-operator qualificações from tabulacoesdetalhadas ─────────────────
     const qualifByOp = buildQualifByOperator(tabulacaoItems)
 
@@ -355,11 +340,12 @@ export async function GET() {
     }
 
     // ── Operadores ────────────────────────────────────────────────────────────
+    // taxa_contato = atendidas_operador / total_tentativas_campanha
+    // The auto-dialer only routes answered calls to operators, so
+    // ligacoesdetalhadas per operator == atendidas. The correct denominator
+    // is the full campaign attempt count (ligacoesItems.length).
+    const campanhaTotal = ligacoesItems.length || 1
     const operadores: OperatorRow[] = sdrs.map((s) => {
-      // Use ligacoesdetalhadas count (all outcomes) as the denominator for taxa_contato.
-      // desempenhoresumido only exposes qtdeAtendimentoTotal for auto-dialer SDRs —
-      // there is no separate "discadas" field, so ligacoes_realizadas == ligacoes_atendidas there.
-      const totalLig = findInOpMap(s.name, totalLigByOp) || s.ligacoes_realizadas
       const atendidas = s.ligacoes_atendidas
       const qualif = findInOpMap(s.name, qualifByOp)
       const score  = findScore(s.name, scoreByOp)
@@ -367,13 +353,12 @@ export async function GET() {
         id: s.id,
         name: s.name,
         meta_dia: s.meta_dia,
-        ligacoes_realizadas: totalLig,
+        ligacoes_realizadas: campanhaTotal,
         ligacoes_atendidas: atendidas,
         conversoes: qualif,
         tma_segundos: s.tma_segundos,
         score_ia: score,
-        taxa_contato: totalLig > 0
-          ? Math.round((atendidas / totalLig) * 1000) / 10 : 0,
+        taxa_contato: Math.round((atendidas / campanhaTotal) * 1000) / 10,
         taxa_conversao: atendidas > 0
           ? Math.round((qualif / atendidas) * 1000) / 10 : 0,
       }
