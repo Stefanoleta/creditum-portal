@@ -29,16 +29,24 @@ async function fetchTabulacoes(ultimosMinutos: number): Promise<ArgusTabulacaoIt
   return arr as ArgusTabulacaoItem[]
 }
 
+function resolveLeadDesligou(ligRel: ArgusTabulacaoItem["ligacaoRelevante"]): boolean | undefined {
+  if (!ligRel) return undefined
+  // Primary: explicit byeEnviado / byeRecebido fields
+  if (ligRel.byeRecebido !== undefined && ligRel.byeRecebido !== "") return true
+  if (ligRel.byeEnviado  !== undefined && ligRel.byeEnviado  !== "") return false
+  // Fallback: sipText string from some Argus installations
+  const sip = (ligRel.sipText ?? "").toLowerCase()
+  if (sip.includes("bye recebido")) return true
+  if (sip.includes("bye enviado"))  return false
+  return undefined
+}
+
 async function processCallFromTab(tab: ArgusTabulacaoItem, idLigacao: string): Promise<"skip" | "ok" | "pending" | "failed"> {
   if (!supabase) return "skip"
 
-  const call_id = `argus-${idLigacao}`
-  const ligRel      = tab.ligacaoRelevante
-  const leadDesligou = ligRel?.byeRecebido !== undefined && ligRel.byeRecebido !== ""
-    ? true
-    : ligRel?.byeEnviado !== undefined && ligRel.byeEnviado !== ""
-    ? false
-    : undefined
+  const call_id      = `argus-${idLigacao}`
+  const ligRel       = tab.ligacaoRelevante
+  const leadDesligou = resolveLeadDesligou(ligRel)
 
   const sdrName    = tab.usuarioOperador ?? "SDR"
   const phone      = maskPhone(tab.telefone)

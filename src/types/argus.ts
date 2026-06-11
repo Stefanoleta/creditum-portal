@@ -116,6 +116,8 @@ export interface ArgusLigacaoRelevante {
   callID?: string
   byeEnviado?: string           // confirmed: BYE sent flag/text
   byeRecebido?: string          // confirmed: BYE received flag/text
+  sipResponse?: string          // fallback: some Argus versions return sipText instead of byeEnviado/byeRecebido
+  sipText?: string              // fallback: "Atendimento: BYE enviado." → SDR encerrou; "BYE recebido" → lead desligou
 }
 
 export interface ArgusTabulacaoItem {
