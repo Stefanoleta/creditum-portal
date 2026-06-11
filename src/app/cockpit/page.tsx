@@ -8,21 +8,11 @@ import { SDRRanking } from "@/components/dashboard/SDRRanking"
 import { LiveCalls } from "@/components/dashboard/LiveCalls"
 import { ObjectionsBar } from "@/components/dashboard/ObjectionsBar"
 import { OccurrencesBar } from "@/components/dashboard/OccurrencesBar"
-import { HourlyChart } from "@/components/dashboard/HourlyChart"
 import { StatusBar } from "@/components/dashboard/StatusBar"
 import { MockDataBanner } from "@/components/ui-shared/MockDataBanner"
 import { formatSeconds, formatPercent } from "@/lib/utils"
-import {
-  Clock,
-  PhoneCall,
-  Users,
-  TrendingUp,
-  Phone,
-  Target,
-  AlertCircle,
-  BarChart3,
-  Microscope,
-} from "lucide-react"
+import { cn } from "@/lib/utils"
+import { AlertCircle, BarChart3, Microscope } from "lucide-react"
 
 export default function CockpitPage() {
   const { data, isLoading, error, source, tabulacoesSource } = useDashboard()
@@ -49,13 +39,13 @@ export default function CockpitPage() {
     )
   }
 
-  const { metrics, sdrs, live_calls, top_objections, occurrences, hourly_chart, last_updated } = data
+  const { metrics, sdrs, live_calls, top_objections, occurrences, last_updated } = data
+
+  const taxaConvGood = metrics.taxa_conversao >= 10
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-gray-900 flex flex-col select-none">
       <MockDataBanner isDemo={source === "mock"} reason="Argus inacessível" />
-
-      {/* Thin status bar (dark green) */}
       <StatusBar metrics={metrics} lastUpdated={last_updated} source={source} />
 
       {/* Header */}
@@ -69,27 +59,27 @@ export default function CockpitPage() {
             priority
             className="object-contain"
           />
-          <div className="w-px h-5 bg-gray-150" />
-          <span className="text-xs text-gray-400 font-medium tracking-wide">SDR Cockpit</span>
+          <span className="text-gray-200 select-none">|</span>
+          <span className="text-sm font-medium text-gray-500">SDR Cockpit</span>
         </div>
-        <div className="flex items-center gap-4 text-[11px] text-gray-400">
-          <Link href="/relatorios" className="flex items-center gap-1 hover:text-gray-600 transition-colors">
+        <div className="flex items-center gap-4 text-xs text-gray-400">
+          <Link href="/relatorios" className="flex items-center gap-1.5 hover:text-gray-700 transition-colors">
             <BarChart3 className="w-3.5 h-3.5" /> Relatórios
           </Link>
-          <Link href="/analise" className="flex items-center gap-1 hover:text-gray-600 transition-colors">
+          <Link href="/analise" className="flex items-center gap-1.5 hover:text-gray-700 transition-colors">
             <Microscope className="w-3.5 h-3.5" /> Análise
           </Link>
-          <span className="text-gray-300 select-none">·</span>
-          <span className="tabular-nums">
+          <span className="text-gray-300">·</span>
+          <span className="tabular-nums text-[11px]">
             {new Date().toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" })}
           </span>
         </div>
       </div>
 
-      {/* Main Grid */}
-      <div className="flex-1 grid grid-cols-12 grid-rows-[auto_1fr_1fr] gap-3 p-4">
+      {/* Main grid */}
+      <div className="flex-1 grid grid-cols-12 gap-3 p-4 content-start">
 
-        {/* KPI Row — 6 cards */}
+        {/* Row 1: KPI cards */}
         <div className="col-span-12 grid grid-cols-6 gap-3">
           <MetricCard
             label="TME"
@@ -109,19 +99,40 @@ export default function CockpitPage() {
             sublabel="Meta: ≥ 65%"
             variant={metrics.taxa_contato >= 65 ? "success" : "danger"}
           />
-          <MetricCard
-            label="Taxa de Conversão"
-            value={formatPercent(metrics.taxa_conversao)}
-            sublabel="Meta: ≥ 10%"
-            variant={metrics.taxa_conversao >= 10 ? "success" : "warning"}
-          />
-          <MetricCard
-            label="Ligações Hoje"
-            value={metrics.total_ligacoes.toString()}
-            sublabel={`${metrics.total_conversoes} conversões`}
-            variant="info"
-            pulse
-          />
+
+          {/* Taxa de Conversão — destaque emerald */}
+          <div className="relative bg-emerald-50 rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.06)] overflow-hidden flex flex-col">
+            <div className={cn("h-1 w-full shrink-0", taxaConvGood ? "bg-emerald-500" : "bg-amber-400")} />
+            <div className="px-4 pt-3 pb-4 flex flex-col gap-1.5 flex-1">
+              <span className="text-[10px] font-medium text-emerald-700/60 leading-none">Taxa de Conversão</span>
+              <div className={cn(
+                "font-bold tabular-nums leading-none text-[2.8rem] tracking-[-0.03em]",
+                taxaConvGood ? "text-emerald-700" : "text-amber-600"
+              )}>
+                {formatPercent(metrics.taxa_conversao)}
+              </div>
+              <div className="text-[11px] text-emerald-600/50">Meta: ≥ 10%</div>
+            </div>
+          </div>
+
+          {/* Ligações Hoje — destaque slate com pulse */}
+          <div className="relative bg-slate-50 rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.06)] overflow-hidden flex flex-col">
+            <div className="h-1 w-full shrink-0 bg-slate-300" />
+            <div className="px-4 pt-3 pb-4 flex flex-col gap-1.5 flex-1">
+              <span className="flex items-center gap-1.5">
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                </span>
+                <span className="text-[10px] font-medium text-slate-500 leading-none">Ligações Hoje</span>
+              </span>
+              <div className="font-bold tabular-nums leading-none text-[2.8rem] tracking-[-0.03em] text-slate-800">
+                {metrics.total_ligacoes.toString()}
+              </div>
+              <div className="text-[11px] text-slate-400">{metrics.total_conversoes} conversões</div>
+            </div>
+          </div>
+
           <MetricCard
             label="SDRs Ativos"
             value={`${sdrs.filter(s => s.status !== "offline").length}`}
@@ -130,12 +141,10 @@ export default function CockpitPage() {
           />
         </div>
 
-        {/* Row 2: Ranking | Live Calls | Objeções + Ocorrências */}
-        <div className="col-span-4 bg-white border border-gray-200 rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] p-4 flex flex-col gap-3 overflow-hidden">
+        {/* Row 2: Ranking | Ligações do Dia */}
+        <div className="col-span-5 bg-white rounded-lg shadow-sm p-4 flex flex-col gap-3 overflow-hidden min-h-[260px]">
           <div className="flex items-center justify-between shrink-0">
-            <h2 className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">
-              Ranking SDRs
-            </h2>
+            <h2 className="text-sm font-semibold text-gray-600">Ranking SDRs</h2>
             <span className="text-[10px] text-gray-300">{sdrs.length} agentes</span>
           </div>
           <div className="flex-1 overflow-y-auto">
@@ -143,11 +152,9 @@ export default function CockpitPage() {
           </div>
         </div>
 
-        <div className="col-span-4 bg-white border border-gray-200 rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] p-4 flex flex-col gap-3">
+        <div className="col-span-7 bg-white rounded-lg shadow-sm p-4 flex flex-col gap-3 min-h-[260px]">
           <div className="flex items-center justify-between shrink-0">
-            <h2 className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">
-              Ligações do Dia
-            </h2>
+            <h2 className="text-sm font-semibold text-gray-600">Ligações do Dia</h2>
             <span className="text-[10px] text-gray-300">{live_calls.length} registros</span>
           </div>
           <div className="flex-1">
@@ -155,46 +162,31 @@ export default function CockpitPage() {
           </div>
         </div>
 
-        {/* Objeções + Ocorrências side by side */}
-        <div className="col-span-4 grid grid-cols-2 gap-3">
-          <div className="bg-white border border-gray-200 rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] p-4 flex flex-col gap-3">
-            <div className="flex items-center justify-between shrink-0">
-              <h2 className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">
-                Objeções
-              </h2>
-              {tabulacoesSource === "mock" && source !== "mock" && (
-                <span className="text-[9px] text-[#D97706] bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5">demo</span>
-              )}
-            </div>
-            <div className="flex-1 flex flex-col justify-center">
-              <ObjectionsBar objections={top_objections} />
-            </div>
+        {/* Row 3: Objeções | Ocorrências — largura total agora que o gráfico foi removido */}
+        <div className="col-span-6 bg-white rounded-lg shadow-sm p-5 flex flex-col gap-4">
+          <div className="flex items-center justify-between shrink-0">
+            <h2 className="text-sm font-semibold text-gray-600">Objeções</h2>
+            {tabulacoesSource === "mock" && source !== "mock" && (
+              <span className="text-[9px] text-[#D97706] bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5">demo</span>
+            )}
           </div>
-
-          <div className="bg-white border border-gray-200 rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] p-4 flex flex-col gap-3">
-            <div className="flex items-center justify-between shrink-0">
-              <h2 className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">
-                Ocorrências
-              </h2>
-              {tabulacoesSource === "mock" && source !== "mock" && (
-                <span className="text-[9px] text-[#D97706] bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5">demo</span>
-              )}
-            </div>
-            <div className="flex-1 flex flex-col justify-center">
-              <OccurrencesBar occurrences={occurrences} />
-            </div>
+          <div className="flex-1 flex flex-col justify-center">
+            <ObjectionsBar objections={top_objections} />
           </div>
         </div>
 
-        {/* Row 3: Hourly Chart */}
-        <div className="col-span-12 bg-white border border-gray-200 rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05)] p-4 flex flex-col gap-2">
-          <h2 className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest shrink-0">
-            Produção por Hora
-          </h2>
-          <div className="flex-1 min-h-[120px]">
-            <HourlyChart data={hourly_chart} />
+        <div className="col-span-6 bg-white rounded-lg shadow-sm p-5 flex flex-col gap-4">
+          <div className="flex items-center justify-between shrink-0">
+            <h2 className="text-sm font-semibold text-gray-600">Ocorrências</h2>
+            {tabulacoesSource === "mock" && source !== "mock" && (
+              <span className="text-[9px] text-[#D97706] bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5">demo</span>
+            )}
+          </div>
+          <div className="flex-1 flex flex-col justify-center">
+            <OccurrencesBar occurrences={occurrences} />
           </div>
         </div>
+
       </div>
     </div>
   )
