@@ -1,76 +1,155 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase-server"
 
-// GET /api/leads/higienizacao?page=0&limit=50
-// Retorna todos os leads pendentes de higienização, com dados da lista de origem.
+// GET /api/leads/higienizacao?tipo=pendentes|sugestoes&page=1&per_page=20
+// PATCH /api/leads/higienizacao  body: { lead_id, acao, telefone_corrigido? }
 //
-// Gancho futuro: webhook Argus chamará PATCH com motivo='numero_inexistente_discador'
-// quando uma tabulação de "número inexistente" for registrada.
+//  Ações disponíveis:
+//    resolver              — higieniza pendente (telefone_corrigido obrigatório)
+//    confirmar_sugestao    — aceita telefone sugerido como principal do lead antigo
+//    ignorar_sugestao      — descarta sugestão; mantém lead antigo como estava
+
 export async function GET(req: NextRequest) {
   if (!supabase) {
     return NextResponse.json({ leads: [], total: 0, warning: "Supabase não configurado" })
   }
 
   const { searchParams } = new URL(req.url)
-  const page  = Math.max(0, parseInt(searchParams.get("page")  ?? "0",  10))
-  const limit = Math.min(200, Math.max(1, parseInt(searchParams.get("limit") ?? "50", 10)))
-  const from  = page * limit
-  const to    = from + limit - 1
+  const tipo     = searchParams.get("tipo")     ?? "pendentes"
+  const page     = Math.max(1, parseInt(searchParams.get("page")     ?? "1", 10))
+  const per_page = Math.min(100, parseInt(searchParams.get("per_page") ?? "20", 10))
+  const from     = (page - 1) * per_page
+  const to       = from + per_page - 1
 
+  if (tipo === "sugestoes") {
+    // Leads antigos com telefone problemático que receberam sugestão de substituição
+    const { data, error, count } = await supabase
+      .from("leads")
+      .select(
+        "id, nome, telefone_principal, motivo_higienizacao, telefone_sugerido, sugestao_origem_lista_id, listas(nome_arquivo, unidade, data_lista)",
+        { count: "exact" }
+      )
+      .eq("sugestao_substituicao", true)
+      .is("higienizado_em", null)
+      .order("created_at", { ascending: false })
+      .range(from, to)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    return NextResponse.json({
+      tipo:     "sugestoes",
+      leads:    data ?? [],
+      total:    count ?? 0,
+      page,
+      per_page,
+    })
+  }
+
+  // tipo === "pendentes" (default): leads com telefone problemático sem correção ainda
   const { data, error, count } = await supabase
     .from("leads")
     .select(
-      "id, nome, telefone_principal, motivo_higienizacao, lista_id, created_at, listas(id, unidade, tipo_lista, nome_arquivo)",
+      "id, nome, telefone_principal, motivo_higienizacao, listas(nome_arquivo, unidade, data_lista)",
       { count: "exact" }
     )
     .eq("precisa_higienizacao", true)
     .is("higienizado_em", null)
-    .order("created_at", { ascending: true })
+    .eq("sugestao_substituicao", false)
+    .order("created_at", { ascending: false })
     .range(from, to)
 
-  if (error) {
-    console.error("[higienizacao] GET:", error.message)
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json({ leads: data ?? [], total: count ?? 0 })
+  return NextResponse.json({
+    tipo:     "pendentes",
+    leads:    data ?? [],
+    total:    count ?? 0,
+    page,
+    per_page,
+  })
 }
 
-// PATCH /api/leads/higienizacao
-// Body: { lead_id: string; telefone_corrigido: string | null }
-//   - telefone_corrigido = string → resolve com número correto
-//   - telefone_corrigido = null   → "Sem contato possível"
 export async function PATCH(req: NextRequest) {
   if (!supabase) {
     return NextResponse.json({ error: "Supabase não configurado" }, { status: 503 })
   }
 
-  let body: { lead_id: string; telefone_corrigido: string | null }
+  let body: { lead_id: string; acao: string; telefone_corrigido?: string | null }
   try {
     body = await req.json()
   } catch {
     return NextResponse.json({ error: "Body inválido" }, { status: 400 })
   }
 
-  const { lead_id, telefone_corrigido } = body
+  const { lead_id, acao, telefone_corrigido } = body
 
-  if (!lead_id) {
-    return NextResponse.json({ error: "lead_id é obrigatório" }, { status: 400 })
+  if (!lead_id || !acao) {
+    return NextResponse.json({ error: "lead_id e acao são obrigatórios" }, { status: 400 })
   }
 
-  const { error } = await supabase
-    .from("leads")
-    .update({
-      telefone_corrigido:   telefone_corrigido ?? null,
-      higienizado_em:       new Date().toISOString(),
-      precisa_higienizacao: false,
-    })
-    .eq("id", lead_id)
+  // ── Resolver pendente ──────────────────────────────────────────────────────
+  if (acao === "resolver") {
+    if (!telefone_corrigido?.trim()) {
+      return NextResponse.json({ error: "telefone_corrigido é obrigatório para ação 'resolver'" }, { status: 400 })
+    }
+    const { error } = await supabase
+      .from("leads")
+      .update({
+        telefone_corrigido:   telefone_corrigido.trim(),
+        telefone_principal:   telefone_corrigido.trim(),
+        precisa_higienizacao: false,
+        higienizado_em:       new Date().toISOString(),
+      })
+      .eq("id", lead_id)
 
-  if (error) {
-    console.error("[higienizacao] PATCH:", error.message)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ ok: true, acao })
   }
 
-  return NextResponse.json({ ok: true })
+  // ── Confirmar sugestão — atualiza telefone do lead antigo ─────────────────
+  if (acao === "confirmar_sugestao") {
+    const { data: lead, error: fetchErr } = await supabase
+      .from("leads")
+      .select("telefone_sugerido")
+      .eq("id", lead_id)
+      .single()
+
+    if (fetchErr || !lead) {
+      return NextResponse.json({ error: fetchErr?.message ?? "Lead não encontrado" }, { status: 404 })
+    }
+    if (!lead.telefone_sugerido) {
+      return NextResponse.json({ error: "Lead não possui telefone_sugerido" }, { status: 400 })
+    }
+
+    const { error } = await supabase
+      .from("leads")
+      .update({
+        telefone_corrigido:      lead.telefone_sugerido,
+        telefone_principal:      lead.telefone_sugerido,
+        precisa_higienizacao:    false,
+        sugestao_substituicao:   false,
+        higienizado_em:          new Date().toISOString(),
+      })
+      .eq("id", lead_id)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ ok: true, acao })
+  }
+
+  // ── Ignorar sugestão — descarta a sugestão sem alterar telefone ──────────
+  if (acao === "ignorar_sugestao") {
+    const { error } = await supabase
+      .from("leads")
+      .update({
+        sugestao_substituicao:    false,
+        telefone_sugerido:        null,
+        sugestao_origem_lista_id: null,
+      })
+      .eq("id", lead_id)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ ok: true, acao })
+  }
+
+  return NextResponse.json({ error: `Ação desconhecida: ${acao}` }, { status: 400 })
 }

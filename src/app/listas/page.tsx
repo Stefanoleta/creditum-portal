@@ -3,7 +3,7 @@
 import Image from "next/image"
 import Link from "next/link"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { BarChart3, Microscope, List, Upload, X, ChevronRight, AlertTriangle, CheckCircle2, Clock, PhoneOff, Check } from "lucide-react"
+import { BarChart3, Microscope, List, Upload, X, ChevronRight, AlertTriangle, CheckCircle2, Clock, PhoneOff, Check, ArrowRightLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { type ListaMeta, type LeadInput } from "@/lib/lista-parser"
 
@@ -43,23 +43,32 @@ interface LeadHigienizacao {
   nome: string
   telefone_principal: string | null
   motivo_higienizacao: string | null
-  lista_id: string
-  listas: { id: string; unidade: string; tipo_lista: string; nome_arquivo: string } | null
+  listas: { nome_arquivo: string; unidade: string } | null
+}
+
+interface LeadSugestao {
+  id: string
+  nome: string
+  telefone_principal: string | null
+  motivo_higienizacao: string | null
+  telefone_sugerido: string | null
+  listas: { nome_arquivo: string; unidade: string } | null
 }
 
 const MOTIVO_LABEL: Record<string, string> = {
-  telefone_fixo:              "Telefone fixo",
-  sem_ddd:                    "Sem DDD",
-  numero_incompleto:          "Número incompleto",
-  formato_invalido:           "Formato inválido",
-  numero_inexistente_discador:"Inexistente (Argus)",
+  telefone_fixo:               "Telefone fixo",
+  sem_ddd:                     "Sem DDD",
+  numero_incompleto:           "Número incompleto",
+  formato_invalido:            "Formato inválido",
+  numero_inexistente_discador: "Inexistente (Argus)",
 }
 
 interface DuplicataSummary {
-  duplicata_lista:          { lista_id: string; uploaded_at: string } | null
-  duplicatas_mesma_lista:   number
-  duplicatas_outras_listas: Array<{ nome: string; telefone: string; lista_origem: string }>
-  novos_leads:              number
+  novos_leads:             number
+  duplicatas_mesma_lista:  number
+  duplicatas_ignoradas:    number
+  possiveis_higienizacoes: Array<{ nome: string; telefone_novo: string; telefone_antigo: string; lista_origem: string }>
+  leads_higienizacao:      number
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -84,7 +93,6 @@ function recontato7dias(leads: Lead[]) {
   })
 }
 
-// Sugestão de recontato: hoje + (parcelas_totais - 19) * 30 dias
 function suggestRecontato(parcelasStr: string): string {
   const p = parseInt(parcelasStr, 10)
   if (isNaN(p) || p <= 19) return ""
@@ -184,7 +192,6 @@ function LeadRow({
   const [fora, setFora] = useState(lead.fora_politica)
   const [saving, setSaving] = useState(false)
 
-  // Auto-regras quando parcelas_totais muda
   function handleParcelas(val: string) {
     setParcelas(val)
     const p = parseInt(val, 10)
@@ -214,7 +221,6 @@ function LeadRow({
         {lead.telefone_principal ?? "—"}
       </td>
       <td className="px-3 py-2">
-        {/* Parcelas totais */}
         <input
           type="number"
           min={0}
@@ -302,7 +308,6 @@ function LeadsPanel({
 
   return (
     <div className="fixed inset-y-0 right-0 w-full max-w-3xl bg-white shadow-2xl flex flex-col z-50">
-      {/* Header */}
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 shrink-0">
         <div>
           <div className="text-sm font-semibold text-gray-800">{lista.unidade} — {lista.tipo_lista}</div>
@@ -313,7 +318,6 @@ function LeadsPanel({
         </button>
       </div>
 
-      {/* Banner recontato próximo */}
       {proximos.length > 0 && (
         <div className="flex items-center gap-2 px-5 py-2.5 bg-amber-50 border-b border-amber-100 text-amber-700 text-xs shrink-0">
           <Clock className="w-3.5 h-3.5 shrink-0" />
@@ -321,7 +325,6 @@ function LeadsPanel({
         </div>
       )}
 
-      {/* Tabela */}
       <div className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex items-center justify-center h-32">
@@ -349,7 +352,6 @@ function LeadsPanel({
         )}
       </div>
 
-      {/* Paginação */}
       {total > LIMIT && (
         <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 shrink-0">
           <span className="text-xs text-gray-400">
@@ -380,148 +382,316 @@ function LeadsPanel({
 // ─── Higienização tab ─────────────────────────────────────────────────────────
 
 function HigienizacaoTab({ onResolved }: { onResolved: () => void }) {
-  const [leads, setLeads] = useState<LeadHigienizacao[]>([])
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(0)
+  const [subTab, setSubTab] = useState<"pendentes" | "sugestoes">("pendentes")
+
+  // Pendentes
+  const [pendentes, setPendentes] = useState<LeadHigienizacao[]>([])
+  const [totalPendentes, setTotalPendentes] = useState(0)
+  const [pagePendentes, setPagePendentes] = useState(1)
+
+  // Sugestões
+  const [sugestoes, setSugestoes] = useState<LeadSugestao[]>([])
+  const [totalSugestoes, setTotalSugestoes] = useState(0)
+  const [pageSugestoes, setPageSugestoes] = useState(1)
+
   const [loading, setLoading] = useState(true)
   const [corrections, setCorrections] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState<Record<string, boolean>>({})
-  const LIMIT = 50
 
-  const load = useCallback(() => {
+  const PER_PAGE = 20
+
+  const loadPendentes = useCallback(() => {
     setLoading(true)
-    fetch(`/api/leads/higienizacao?page=${page}&limit=${LIMIT}`)
+    fetch(`/api/leads/higienizacao?tipo=pendentes&page=${pagePendentes}&per_page=${PER_PAGE}`)
       .then(r => r.json())
-      .then(d => { setLeads(d.leads ?? []); setTotal(d.total ?? 0) })
+      .then(d => { setPendentes(d.leads ?? []); setTotalPendentes(d.total ?? 0) })
       .finally(() => setLoading(false))
-  }, [page])
+  }, [pagePendentes])
 
-  useEffect(() => { load() }, [load])
+  const loadSugestoes = useCallback(() => {
+    setLoading(true)
+    fetch(`/api/leads/higienizacao?tipo=sugestoes&page=${pageSugestoes}&per_page=${PER_PAGE}`)
+      .then(r => r.json())
+      .then(d => { setSugestoes(d.leads ?? []); setTotalSugestoes(d.total ?? 0) })
+      .finally(() => setLoading(false))
+  }, [pageSugestoes])
+
+  useEffect(() => { if (subTab === "pendentes") loadPendentes() }, [loadPendentes, subTab])
+  useEffect(() => { if (subTab === "sugestoes") loadSugestoes() }, [loadSugestoes, subTab])
 
   async function resolve(lead_id: string, telefone_corrigido: string | null) {
     setSaving(s => ({ ...s, [lead_id]: true }))
     await fetch("/api/leads/higienizacao", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lead_id, telefone_corrigido }),
+      body: JSON.stringify({ lead_id, acao: "resolver", telefone_corrigido }),
     })
-    setLeads(prev => prev.filter(l => l.id !== lead_id))
-    setTotal(t => t - 1)
+    setPendentes(prev => prev.filter(l => l.id !== lead_id))
+    setTotalPendentes(t => t - 1)
+    setSaving(s => ({ ...s, [lead_id]: false }))
+    onResolved()
+  }
+
+  async function handleSugestao(lead_id: string, acao: "confirmar_sugestao" | "ignorar_sugestao") {
+    setSaving(s => ({ ...s, [lead_id]: true }))
+    await fetch("/api/leads/higienizacao", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lead_id, acao }),
+    })
+    setSugestoes(prev => prev.filter(l => l.id !== lead_id))
+    setTotalSugestoes(t => t - 1)
     setSaving(s => ({ ...s, [lead_id]: false }))
     onResolved()
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-5 flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-600">Higienização de Contatos</h2>
-        {total > 0 && (
-          <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-0.5 font-medium">
-            {total} pendente{total > 1 ? "s" : ""}
-          </span>
-        )}
+    <div className="bg-white rounded-lg shadow-sm flex flex-col">
+      {/* Sub-tabs */}
+      <div className="flex items-center gap-0 border-b border-gray-100 px-5 pt-5">
+        <button
+          onClick={() => setSubTab("pendentes")}
+          className={cn(
+            "text-xs font-medium px-3 py-2 border-b-2 transition-colors -mb-px mr-1",
+            subTab === "pendentes"
+              ? "border-amber-500 text-amber-700"
+              : "border-transparent text-gray-400 hover:text-gray-600"
+          )}
+        >
+          Pendentes
+          {totalPendentes > 0 && (
+            <span className="ml-1.5 text-[10px] font-bold bg-amber-100 text-amber-700 rounded-full px-1.5 py-px">
+              {totalPendentes}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setSubTab("sugestoes")}
+          className={cn(
+            "text-xs font-medium px-3 py-2 border-b-2 transition-colors -mb-px",
+            subTab === "sugestoes"
+              ? "border-teal-500 text-teal-700"
+              : "border-transparent text-gray-400 hover:text-gray-600"
+          )}
+        >
+          Sugestões de atualização
+          {totalSugestoes > 0 && (
+            <span className="ml-1.5 text-[10px] font-bold bg-teal-100 text-teal-700 rounded-full px-1.5 py-px">
+              {totalSugestoes}
+            </span>
+          )}
+        </button>
       </div>
 
-      {loading ? (
-        <div className="flex items-center gap-3 py-8 justify-center text-sm text-gray-400">
-          <div className="w-4 h-4 border-2 border-gray-200 border-t-emerald-500 rounded-full animate-spin" />
-          Carregando...
-        </div>
-      ) : leads.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 py-12 text-gray-400">
-          <Check className="w-8 h-8 text-emerald-200" />
-          <p className="text-sm">Todos os contatos estão higienizados</p>
-        </div>
-      ) : (
-        <>
-          <div className="overflow-x-auto rounded-lg border border-gray-100">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-gray-50 text-gray-400 font-medium">
-                  <th className="px-3 py-2.5 text-left">Nome</th>
-                  <th className="px-3 py-2.5 text-left">Telefone original</th>
-                  <th className="px-3 py-2.5 text-left">Motivo</th>
-                  <th className="px-3 py-2.5 text-left">Lista</th>
-                  <th className="px-3 py-2.5 text-left">Unidade</th>
-                  <th className="px-3 py-2.5 text-left">Correção</th>
-                  <th className="px-3 py-2.5" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {leads.map(l => (
-                  <tr key={l.id} className="bg-white hover:bg-gray-50/30">
-                    <td className="px-3 py-2.5 text-gray-800 font-medium max-w-[150px] truncate">{l.nome}</td>
-                    <td className="px-3 py-2.5 text-amber-600 tabular-nums font-mono">
-                      {l.telefone_principal ?? "—"}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <span className="text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-0.5">
-                        {MOTIVO_LABEL[l.motivo_higienizacao ?? ""] ?? l.motivo_higienizacao ?? "—"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-gray-500 max-w-[130px] truncate">
-                      {l.listas?.nome_arquivo ?? "—"}
-                    </td>
-                    <td className="px-3 py-2.5 text-gray-600">{l.listas?.unidade ?? "—"}</td>
-                    <td className="px-3 py-2.5">
-                      <input
-                        type="tel"
-                        placeholder="DDD + número"
-                        value={corrections[l.id] ?? ""}
-                        onChange={e => setCorrections(c => ({ ...c, [l.id]: e.target.value }))}
-                        className="w-32 text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-400 tabular-nums"
-                      />
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          disabled={saving[l.id] || !(corrections[l.id] ?? "").trim()}
-                          onClick={() => resolve(l.id, corrections[l.id].trim())}
-                          className="text-[10px] font-medium px-2.5 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                        >
-                          Resolver
-                        </button>
-                        <button
-                          disabled={saving[l.id]}
-                          onClick={() => resolve(l.id, null)}
-                          className="text-[10px] font-medium px-2 py-1 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 transition-colors"
-                          title="Sem contato possível"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      <div className="p-5">
 
-          {total > LIMIT && (
-            <div className="flex items-center justify-between pt-1">
-              <span className="text-xs text-gray-400">
-                {page * LIMIT + 1}–{Math.min((page + 1) * LIMIT, total)} de {total}
-              </span>
-              <div className="flex gap-2">
-                <button
-                  disabled={page === 0}
-                  onClick={() => setPage(p => p - 1)}
-                  className="text-xs px-3 py-1 rounded border border-gray-200 text-gray-600 disabled:opacity-30 hover:bg-gray-50"
-                >
-                  Anterior
-                </button>
-                <button
-                  disabled={(page + 1) * LIMIT >= total}
-                  onClick={() => setPage(p => p + 1)}
-                  className="text-xs px-3 py-1 rounded border border-gray-200 text-gray-600 disabled:opacity-30 hover:bg-gray-50"
-                >
-                  Próxima
-                </button>
+        {/* ── Sub-tab: Pendentes ──────────────────────────────────────────── */}
+        {subTab === "pendentes" && (
+          <>
+            {loading ? (
+              <div className="flex items-center gap-3 py-8 justify-center text-sm text-gray-400">
+                <div className="w-4 h-4 border-2 border-gray-200 border-t-emerald-500 rounded-full animate-spin" />
+                Carregando...
               </div>
-            </div>
-          )}
-        </>
-      )}
+            ) : pendentes.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-12 text-gray-400">
+                <Check className="w-8 h-8 text-emerald-200" />
+                <p className="text-sm">Nenhum contato pendente de higienização</p>
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto rounded-lg border border-gray-100">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-gray-50 text-gray-400 font-medium">
+                        <th className="px-3 py-2.5 text-left">Nome</th>
+                        <th className="px-3 py-2.5 text-left">Telefone original</th>
+                        <th className="px-3 py-2.5 text-left">Motivo</th>
+                        <th className="px-3 py-2.5 text-left">Lista</th>
+                        <th className="px-3 py-2.5 text-left">Unidade</th>
+                        <th className="px-3 py-2.5 text-left">Correção</th>
+                        <th className="px-3 py-2.5" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {pendentes.map(l => (
+                        <tr key={l.id} className="bg-white hover:bg-gray-50/30">
+                          <td className="px-3 py-2.5 text-gray-800 font-medium max-w-[150px] truncate">{l.nome}</td>
+                          <td className="px-3 py-2.5 text-amber-600 tabular-nums font-mono">
+                            {l.telefone_principal ?? "—"}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <span className="text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-0.5">
+                              {MOTIVO_LABEL[l.motivo_higienizacao ?? ""] ?? l.motivo_higienizacao ?? "—"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-gray-500 max-w-[130px] truncate">
+                            {l.listas?.nome_arquivo ?? "—"}
+                          </td>
+                          <td className="px-3 py-2.5 text-gray-600">{l.listas?.unidade ?? "—"}</td>
+                          <td className="px-3 py-2.5">
+                            <input
+                              type="tel"
+                              placeholder="DDD + número"
+                              value={corrections[l.id] ?? ""}
+                              onChange={e => setCorrections(c => ({ ...c, [l.id]: e.target.value }))}
+                              className="w-32 text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-400 tabular-nums"
+                            />
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                disabled={saving[l.id] || !(corrections[l.id] ?? "").trim()}
+                                onClick={() => resolve(l.id, corrections[l.id].trim())}
+                                className="text-[10px] font-medium px-2.5 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                              >
+                                Resolver
+                              </button>
+                              <button
+                                disabled={saving[l.id]}
+                                onClick={() => resolve(l.id, null)}
+                                className="text-[10px] font-medium px-2 py-1 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 transition-colors"
+                                title="Sem contato possível"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {totalPendentes > PER_PAGE && (
+                  <div className="flex items-center justify-between pt-3">
+                    <span className="text-xs text-gray-400">
+                      {(pagePendentes - 1) * PER_PAGE + 1}–{Math.min(pagePendentes * PER_PAGE, totalPendentes)} de {totalPendentes}
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        disabled={pagePendentes === 1}
+                        onClick={() => setPagePendentes(p => p - 1)}
+                        className="text-xs px-3 py-1 rounded border border-gray-200 text-gray-600 disabled:opacity-30 hover:bg-gray-50"
+                      >
+                        Anterior
+                      </button>
+                      <button
+                        disabled={pagePendentes * PER_PAGE >= totalPendentes}
+                        onClick={() => setPagePendentes(p => p + 1)}
+                        className="text-xs px-3 py-1 rounded border border-gray-200 text-gray-600 disabled:opacity-30 hover:bg-gray-50"
+                      >
+                        Próxima
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        {/* ── Sub-tab: Sugestões ──────────────────────────────────────────── */}
+        {subTab === "sugestoes" && (
+          <>
+            {loading ? (
+              <div className="flex items-center gap-3 py-8 justify-center text-sm text-gray-400">
+                <div className="w-4 h-4 border-2 border-gray-200 border-t-emerald-500 rounded-full animate-spin" />
+                Carregando...
+              </div>
+            ) : sugestoes.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-12 text-gray-400">
+                <ArrowRightLeft className="w-8 h-8 text-teal-100" />
+                <p className="text-sm">Nenhuma sugestão de atualização pendente</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-xs text-gray-400 mb-3">
+                  Estes leads estão na fila de Higienização mas uma importação posterior trouxe um telefone válido para o mesmo nome. Confirme ou ignore a atualização.
+                </p>
+                <div className="overflow-x-auto rounded-lg border border-gray-100">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-gray-50 text-gray-400 font-medium">
+                        <th className="px-3 py-2.5 text-left">Nome</th>
+                        <th className="px-3 py-2.5 text-left">Telefone atual</th>
+                        <th className="px-3 py-2.5 text-left">Motivo</th>
+                        <th className="px-3 py-2.5 text-left">Telefone sugerido</th>
+                        <th className="px-3 py-2.5 text-left">Lista</th>
+                        <th className="px-3 py-2.5" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {sugestoes.map(l => (
+                        <tr key={l.id} className="bg-white hover:bg-gray-50/30">
+                          <td className="px-3 py-2.5 text-gray-800 font-medium max-w-[150px] truncate">{l.nome}</td>
+                          <td className="px-3 py-2.5 text-amber-600 tabular-nums font-mono line-through opacity-60">
+                            {l.telefone_principal ?? "—"}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <span className="text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-0.5">
+                              {MOTIVO_LABEL[l.motivo_higienizacao ?? ""] ?? l.motivo_higienizacao ?? "—"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-teal-700 tabular-nums font-mono font-semibold">
+                            {l.telefone_sugerido ?? "—"}
+                          </td>
+                          <td className="px-3 py-2.5 text-gray-500 max-w-[130px] truncate">
+                            {l.listas?.nome_arquivo ?? "—"}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                disabled={saving[l.id]}
+                                onClick={() => handleSugestao(l.id, "confirmar_sugestao")}
+                                className="text-[10px] font-medium px-2.5 py-1 rounded bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-40 transition-colors"
+                              >
+                                Confirmar
+                              </button>
+                              <button
+                                disabled={saving[l.id]}
+                                onClick={() => handleSugestao(l.id, "ignorar_sugestao")}
+                                className="text-[10px] font-medium px-2 py-1 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 transition-colors"
+                                title="Ignorar sugestão"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {totalSugestoes > PER_PAGE && (
+                  <div className="flex items-center justify-between pt-3">
+                    <span className="text-xs text-gray-400">
+                      {(pageSugestoes - 1) * PER_PAGE + 1}–{Math.min(pageSugestoes * PER_PAGE, totalSugestoes)} de {totalSugestoes}
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        disabled={pageSugestoes === 1}
+                        onClick={() => setPageSugestoes(p => p - 1)}
+                        className="text-xs px-3 py-1 rounded border border-gray-200 text-gray-600 disabled:opacity-30 hover:bg-gray-50"
+                      >
+                        Anterior
+                      </button>
+                      <button
+                        disabled={pageSugestoes * PER_PAGE >= totalSugestoes}
+                        onClick={() => setPageSugestoes(p => p + 1)}
+                        className="text-xs px-3 py-1 rounded border border-gray-200 text-gray-600 disabled:opacity-30 hover:bg-gray-50"
+                      >
+                        Próxima
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }
@@ -537,13 +707,12 @@ export default function ListasPage() {
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [parsing, setParsing] = useState(false)
   const [parseResult, setParseResult] = useState<{ meta: ListaMeta; leads: LeadInput[] } | null>(null)
-  const [totalHigienizacao, setTotalHigienizacao] = useState(0)
   const [metaOverride, setMetaOverride] = useState({ unidade: "", tipo_lista: "", data_lista: "" })
   const [importing, setImporting] = useState(false)
   const [importOk, setImportOk] = useState<{ lista_id: string; total: number } | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [duplicataSummary, setDuplicataSummary] = useState<DuplicataSummary | null>(null)
-  const [outrasListasExpanded, setOutrasListasExpanded] = useState(false)
+  const [sugestoesExpanded, setSugestoesExpanded] = useState(false)
 
   // ── Listas state
   const [listas, setListas] = useState<Lista[]>([])
@@ -561,9 +730,9 @@ export default function ListasPage() {
 
   useEffect(() => { loadListas() }, [loadListas])
 
-  // ── Carregar contagem global de higienização
+  // ── Carregar contagem global de higienização (pendentes)
   const loadHigienizacaoCount = useCallback(() => {
-    fetch("/api/leads/higienizacao?limit=1")
+    fetch("/api/leads/higienizacao?tipo=pendentes&per_page=1")
       .then(r => r.json())
       .then(d => setHigienizacaoCount(d.total ?? 0))
       .catch(() => {})
@@ -578,32 +747,29 @@ export default function ListasPage() {
     setUploadError(null)
     setParseResult(null)
     setDuplicataSummary(null)
-    setTotalHigienizacao(0)
-    setOutrasListasExpanded(false)
+    setSugestoesExpanded(false)
     setParsing(true)
 
     const form = new FormData()
     form.append("arquivo", f)
-    // Sem confirmar=true → API retorna preview, nunca salva
 
     try {
       const res = await fetch("/api/listas/upload", { method: "POST", body: form })
       const json = await res.json()
 
-      // Qualquer resposta com preview+meta → mostra confirmação
       if (json.preview && json.meta) {
         setParseResult({ meta: json.meta, leads: json.preview })
-        setTotalHigienizacao(json.total_higienizacao ?? 0)
         setMetaOverride({
           unidade:    json.meta.unidade    ?? "",
           tipo_lista: json.meta.tipo_lista ?? "",
           data_lista: json.meta.data_lista ?? "",
         })
         setDuplicataSummary({
-          duplicata_lista:          json.duplicata_lista          ?? null,
-          duplicatas_mesma_lista:   json.duplicatas_mesma_lista   ?? 0,
-          duplicatas_outras_listas: json.duplicatas_outras_listas ?? [],
-          novos_leads:              json.novos_leads              ?? json.total_leads ?? 0,
+          novos_leads:             json.novos_leads             ?? 0,
+          duplicatas_mesma_lista:  json.duplicatas_mesma_lista  ?? 0,
+          duplicatas_ignoradas:    json.duplicatas_ignoradas    ?? 0,
+          possiveis_higienizacoes: json.possiveis_higienizacoes ?? [],
+          leads_higienizacao:      json.leads_higienizacao      ?? 0,
         })
         if (json.warning) setUploadError(json.warning)
       } else {
@@ -616,8 +782,8 @@ export default function ListasPage() {
     }
   }
 
-  // ── Confirmar importação — fase de save (sempre com confirmar=true)
-  async function handleConfirmar(substituir = false) {
+  // ── Confirmar importação
+  async function handleConfirmar() {
     if (!uploadFile || !parseResult) return
     setImporting(true)
     setUploadError(null)
@@ -628,7 +794,6 @@ export default function ListasPage() {
     form.append("tipo_lista", metaOverride.tipo_lista)
     form.append("data_lista", metaOverride.data_lista)
     form.append("confirmar",  "true")
-    if (substituir) form.append("substituir", "true")
 
     try {
       const res = await fetch("/api/listas/upload", { method: "POST", body: form })
@@ -654,7 +819,6 @@ export default function ListasPage() {
 
   const metaNeedsInput = parseResult && (!parseResult.meta.unidade || !parseResult.meta.tipo_lista || !parseResult.meta.data_lista)
 
-  // Campos faltando — checa metaOverride atual, independente do nome do arquivo
   const missingFields: string[] = [
     metaOverride.unidade.trim()    === "" && "Unidade",
     metaOverride.tipo_lista.trim() === "" && "Tipo de Lista",
@@ -662,6 +826,15 @@ export default function ListasPage() {
   ].filter((f): f is string => typeof f === "string")
 
   const canConfirm = missingFields.length === 0
+
+  function resetUpload() {
+    setParseResult(null)
+    setUploadFile(null)
+    setUploadError(null)
+    setMetaOverride({ unidade: "", tipo_lista: "", data_lista: "" })
+    setDuplicataSummary(null)
+    setSugestoesExpanded(false)
+  }
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-gray-900 flex flex-col select-none">
@@ -758,7 +931,7 @@ export default function ListasPage() {
             <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 rounded-lg px-4 py-3">
               <CheckCircle2 className="w-4 h-4 shrink-0" />
               {importOk.total} leads importados com sucesso
-              <button className="ml-auto text-xs underline" onClick={() => { setImportOk(null); setUploadFile(null); setParseResult(null); setMetaOverride({ unidade: "", tipo_lista: "", data_lista: "" }); setDuplicataSummary(null) }}>
+              <button className="ml-auto text-xs underline" onClick={() => { setImportOk(null); resetUpload() }}>
                 Importar outra
               </button>
             </div>
@@ -819,67 +992,76 @@ export default function ListasPage() {
                 </div>
               )}
 
-              {totalHigienizacao > 0 && (
-                <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-                  <PhoneOff className="w-3.5 h-3.5 shrink-0" />
-                  <strong>{totalHigienizacao} contato{totalHigienizacao > 1 ? "s" : ""}</strong>&nbsp;precisam de higienização (telefone fixo, sem DDD ou formato inválido).
-                </div>
-              )}
-
               {/* Preview */}
               <div>
                 <p className="text-xs text-gray-400 mb-2">Preview — primeiros {parseResult.leads.length} leads</p>
                 <PreviewTable leads={parseResult.leads} />
               </div>
 
-              {/* ── Resumo de duplicatas ── */}
+              {/* ── Resumo de importação ── */}
               {duplicataSummary && (
                 <div className="flex flex-col gap-2">
+
                   {/* Leads novos */}
                   <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
                     <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                     <strong>{duplicataSummary.novos_leads} lead{duplicataSummary.novos_leads !== 1 ? "s" : ""} novo{duplicataSummary.novos_leads !== 1 ? "s" : ""}</strong>
+                    &nbsp;serão importados
                   </div>
 
+                  {/* Duplicatas mesma planilha */}
                   {duplicataSummary.duplicatas_mesma_lista > 0 && (
                     <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
                       <span className="shrink-0 font-mono text-gray-300">↩</span>
-                      {duplicataSummary.duplicatas_mesma_lista} duplicata{duplicataSummary.duplicatas_mesma_lista !== 1 ? "s" : ""} ignorada{duplicataSummary.duplicatas_mesma_lista !== 1 ? "s" : ""} (mesmo arquivo)
+                      {duplicataSummary.duplicatas_mesma_lista} duplicata{duplicataSummary.duplicatas_mesma_lista !== 1 ? "s" : ""} no mesmo arquivo — ignorada{duplicataSummary.duplicatas_mesma_lista !== 1 ? "s" : ""}
                     </div>
                   )}
 
-                  {duplicataSummary.duplicatas_outras_listas.length > 0 && (
+                  {/* Já existem no banco */}
+                  {duplicataSummary.duplicatas_ignoradas > 0 && (
+                    <div className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                      <span className="shrink-0 font-mono text-gray-400">🚫</span>
+                      <strong>{duplicataSummary.duplicatas_ignoradas} lead{duplicataSummary.duplicatas_ignoradas !== 1 ? "s" : ""}</strong>
+                      &nbsp;já exist{duplicataSummary.duplicatas_ignoradas !== 1 ? "em" : "e"} no banco — não serão importados
+                    </div>
+                  )}
+
+                  {/* Sugestões de atualização (Caso 3) */}
+                  {duplicataSummary.possiveis_higienizacoes.length > 0 && (
                     <div className="flex flex-col gap-1">
                       <button
-                        onClick={() => setOutrasListasExpanded(e => !e)}
-                        className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 hover:bg-amber-100 transition-colors"
+                        onClick={() => setSugestoesExpanded(e => !e)}
+                        className="flex items-center gap-2 text-xs text-teal-700 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2 hover:bg-teal-100 transition-colors"
                       >
-                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                        <strong>{duplicataSummary.duplicatas_outras_listas.length} lead{duplicataSummary.duplicatas_outras_listas.length !== 1 ? "s" : ""}</strong>&nbsp;já existe{duplicataSummary.duplicatas_outras_listas.length !== 1 ? "m" : ""} em outras listas — serão importados com observação
-                        <ChevronRight className={cn("w-3 h-3 ml-auto transition-transform shrink-0", outrasListasExpanded && "rotate-90")} />
+                        <ArrowRightLeft className="w-3.5 h-3.5 shrink-0" />
+                        <strong>{duplicataSummary.possiveis_higienizacoes.length} lead{duplicataSummary.possiveis_higienizacoes.length !== 1 ? "s" : ""}</strong>
+                        &nbsp;criarão sugestão de atualização de telefone
+                        <ChevronRight className={cn("w-3 h-3 ml-auto transition-transform shrink-0", sugestoesExpanded && "rotate-90")} />
                       </button>
-                      {outrasListasExpanded && (
-                        <div className="overflow-x-auto rounded-lg border border-amber-100 ml-1 max-h-48 overflow-y-auto">
+                      {sugestoesExpanded && (
+                        <div className="overflow-x-auto rounded-lg border border-teal-100 ml-1 max-h-48 overflow-y-auto">
                           <table className="w-full text-[11px]">
-                            <thead className="sticky top-0 bg-amber-50">
-                              <tr className="text-amber-600">
+                            <thead className="sticky top-0 bg-teal-50">
+                              <tr className="text-teal-600">
                                 <th className="px-3 py-1.5 text-left">Nome</th>
-                                <th className="px-3 py-1.5 text-left">Telefone</th>
+                                <th className="px-3 py-1.5 text-left">Telefone antigo</th>
+                                <th className="px-3 py-1.5 text-left">Telefone novo</th>
                                 <th className="px-3 py-1.5 text-left">Lista de origem</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-amber-50">
-                              {duplicataSummary.duplicatas_outras_listas.slice(0, 30).map((d, i) => (
+                            <tbody className="divide-y divide-teal-50">
+                              {duplicataSummary.possiveis_higienizacoes.slice(0, 30).map((d, i) => (
                                 <tr key={i} className="bg-white">
                                   <td className="px-3 py-1.5 text-gray-700">{d.nome}</td>
-                                  <td className="px-3 py-1.5 text-gray-500 tabular-nums font-mono">{d.telefone}</td>
+                                  <td className="px-3 py-1.5 text-gray-400 tabular-nums font-mono line-through">{d.telefone_antigo || "—"}</td>
+                                  <td className="px-3 py-1.5 text-teal-700 tabular-nums font-mono font-semibold">{d.telefone_novo}</td>
                                   <td className="px-3 py-1.5 text-gray-400 max-w-[160px] truncate">{d.lista_origem}</td>
                                 </tr>
                               ))}
-                              {duplicataSummary.duplicatas_outras_listas.length > 30 && (
+                              {duplicataSummary.possiveis_higienizacoes.length > 30 && (
                                 <tr className="bg-white">
-                                  <td colSpan={3} className="px-3 py-1.5 text-gray-400 text-center">
-                                    +{duplicataSummary.duplicatas_outras_listas.length - 30} mais...
+                                  <td colSpan={4} className="px-3 py-1.5 text-gray-400 text-center">
+                                    +{duplicataSummary.possiveis_higienizacoes.length - 30} mais...
                                   </td>
                                 </tr>
                               )}
@@ -890,10 +1072,12 @@ export default function ListasPage() {
                     </div>
                   )}
 
-                  {duplicataSummary.duplicata_lista && (
-                    <div className="flex items-center gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                      Esta lista já foi importada. Use "Substituir" para atualizar.
+                  {/* Higienização */}
+                  {duplicataSummary.leads_higienizacao > 0 && (
+                    <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                      <PhoneOff className="w-3.5 h-3.5 shrink-0" />
+                      <strong>{duplicataSummary.leads_higienizacao} contato{duplicataSummary.leads_higienizacao !== 1 ? "s" : ""}</strong>
+                      &nbsp;vão para a fila de Higienização (fixo, sem DDD ou inválido)
                     </div>
                   )}
                 </div>
@@ -902,35 +1086,20 @@ export default function ListasPage() {
               {/* ── Botões ── */}
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-3">
-                  {duplicataSummary?.duplicata_lista ? (
-                    <button
-                      disabled={!canConfirm || importing}
-                      onClick={() => handleConfirmar(true)}
-                      className={cn(
-                        "text-sm font-medium px-4 py-2 rounded-lg transition-colors",
-                        canConfirm
-                          ? "bg-amber-600 text-white hover:bg-amber-700"
-                          : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                      )}
-                    >
-                      {importing ? "Substituindo..." : "Substituir lista existente"}
-                    </button>
-                  ) : (
-                    <button
-                      disabled={!canConfirm || importing}
-                      onClick={() => handleConfirmar()}
-                      className={cn(
-                        "text-sm font-medium px-4 py-2 rounded-lg transition-colors",
-                        canConfirm
-                          ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                          : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                      )}
-                    >
-                      {importing ? "Importando..." : "Confirmar e importar"}
-                    </button>
-                  )}
                   <button
-                    onClick={() => { setParseResult(null); setUploadFile(null); setUploadError(null); setMetaOverride({ unidade: "", tipo_lista: "", data_lista: "" }); setDuplicataSummary(null); setOutrasListasExpanded(false) }}
+                    disabled={!canConfirm || importing}
+                    onClick={() => handleConfirmar()}
+                    className={cn(
+                      "text-sm font-medium px-4 py-2 rounded-lg transition-colors",
+                      canConfirm
+                        ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                        : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    )}
+                  >
+                    {importing ? "Importando..." : "Confirmar e importar"}
+                  </button>
+                  <button
+                    onClick={resetUpload}
                     className="text-xs text-gray-400 hover:text-gray-600"
                   >
                     Cancelar
@@ -946,7 +1115,7 @@ export default function ListasPage() {
           )}
         </div>
 
-        {/* ── Seção 2: Listas importadas (aba Listas) ──────────────────────── */}
+        {/* ── Seção 2: Listas importadas ───────────────────────────────────── */}
         <div className="bg-white rounded-lg shadow-sm p-5 flex flex-col gap-4">
           <h2 className="text-sm font-semibold text-gray-600">Listas Importadas</h2>
 

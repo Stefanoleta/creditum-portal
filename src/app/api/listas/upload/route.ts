@@ -2,11 +2,27 @@ import { NextRequest, NextResponse } from "next/server"
 import { parseLista, type LeadInput } from "@/lib/lista-parser"
 import { supabase } from "@/lib/supabase-server"
 
-// Supabase retorna o lado "um" de FK como array no PostgREST
-type PhoneRow = {
+// ─── Classificação de leads ────────────────────────────────────────────────────
+//
+//  Caso 1 — Telefone já existe no banco                  → NÃO importar (duplicata_ignorada)
+//  Caso 2 — Lead novo (telefone não existe no banco)     → Importar normalmente
+//  Caso 3 — Nome na fila de Higienização + telefone novo → Importar; sugerir substituição no lead antigo
+//  Caso 4 — Telefone problemático (fixo, sem DDD, etc.)  → Importar com precisa_higienizacao=true
+//
+//  A duplicata_lista (por nome_arquivo+unidade+data) foi removida — o que importa é o telefone.
+
+type HygieneLeadRow = {
+  id: string
+  nome: string
   telefone_principal: string | null
   listas: Array<{ nome_arquivo: string }> | { nome_arquivo: string } | null
 }
+
+type ClassifiedLead =
+  | { caso: 1 }
+  | { caso: 2; lead: LeadInput }
+  | { caso: 3; lead: LeadInput; hygieneId: string; telefoneAntigo: string | null; listaOrigem: string }
+  | { caso: 4; lead: LeadInput }
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,55 +43,39 @@ export async function POST(req: NextRequest) {
     const unidade    = (form.get("unidade")    as string | null)?.trim() || meta.unidade    || null
     const tipo_lista = (form.get("tipo_lista") as string | null)?.trim() || meta.tipo_lista || null
     const data_lista = (form.get("data_lista") as string | null)?.trim() || meta.data_lista || null
+    const confirmar  = form.get("confirmar") === "true"
 
-    // Fases: sem confirmar → preview (nunca salva); confirmar=true → salva
-    const confirmar  = form.get("confirmar")  === "true"
-    const substituir = form.get("substituir") === "true"
-
-    const totalHigienizacao = leads.filter(l => l.precisa_higienizacao).length
-
-    // Sem Supabase: retorna apenas preview, nunca salva
+    // Sem Supabase: preview sem salvar
     if (!supabase) {
       return NextResponse.json({
-        total_leads:              meta.total,
-        total_higienizacao:       totalHigienizacao,
-        duplicata_lista:          null,
-        duplicatas_mesma_lista:   0,
-        duplicatas_outras_listas: [],
-        novos_leads:              meta.total,
-        meta:                     { ...meta, unidade, tipo_lista, data_lista },
-        preview:                  leads.slice(0, 5),
-        warning:                  "Supabase não configurado — dados não foram salvos",
+        total_arquivo:           meta.total,
+        novos_leads:             meta.total,
+        duplicatas_mesma_lista:  0,
+        duplicatas_ignoradas:    0,
+        possiveis_higienizacoes: [],
+        leads_higienizacao:      0,
+        meta:                    { ...meta, unidade, tipo_lista, data_lista },
+        preview:                 leads.slice(0, 5),
+        warning:                 "Supabase não configurado — dados não foram salvos",
       })
     }
 
-    // Meta obrigatória para qualquer operação real
+    // Meta obrigatória
     if (!unidade || !tipo_lista || !data_lista) {
       return NextResponse.json({
-        error:                    "Não foi possível detectar unidade, tipo_lista ou data_lista. Envie esses campos no form.",
+        error:                   "Não foi possível detectar unidade, tipo_lista ou data_lista.",
         meta,
-        preview:                  leads.slice(0, 10),
-        total_higienizacao:       totalHigienizacao,
-        duplicata_lista:          null,
-        duplicatas_mesma_lista:   0,
-        duplicatas_outras_listas: [],
-        novos_leads:              meta.total,
+        preview:                 leads.slice(0, 10),
+        total_arquivo:           meta.total,
+        novos_leads:             0,
+        duplicatas_mesma_lista:  0,
+        duplicatas_ignoradas:    0,
+        possiveis_higienizacoes: [],
+        leads_higienizacao:      leads.filter(l => l.precisa_higienizacao).length,
       }, { status: 422 })
     }
 
-    // ── Camada 1: verifica lista duplicada ─────────────────────────────────────
-
-    const { data: existingLista, error: listCheckErr } = await supabase
-      .from("listas")
-      .select("id, uploaded_at")
-      .eq("nome_arquivo", filename)
-      .eq("unidade", unidade)
-      .eq("data_lista", data_lista)
-      .maybeSingle()
-
-    if (listCheckErr) console.error("[upload] lista check:", listCheckErr.message)
-
-    // ── Camada 2a: dedup dentro do próprio arquivo ─────────────────────────────
+    // ── Dedup dentro do arquivo (mesmo telefone repetido) ─────────────────────
 
     const seenPhones = new Set<string>()
     let duplicatasMesmaLista = 0
@@ -90,95 +90,123 @@ export async function POST(req: NextRequest) {
       dedupedLeads.push(lead)
     }
 
-    // ── Camada 2b: verifica telefones contra leads já no banco ─────────────────
+    // ── Consultas ao banco em batch ───────────────────────────────────────────
 
-    const phones = [...seenPhones]
-    const existingPhoneMap = new Map<string, string>()  // telefone → nome_arquivo da lista origem
+    // Telefones válidos (não problemáticos) para verificar no banco
+    const validPhones = dedupedLeads
+      .filter(l => !l.precisa_higienizacao && l.telefone_principal)
+      .map(l => l.telefone_principal as string)
 
-    if (phones.length > 0) {
-      // Ao substituir lista existente, excluí-la da verificação cross-lista
-      let query = supabase
+    // Nomes dos leads com telefone válido (candidatos a Caso 3)
+    const candidateNames = dedupedLeads
+      .filter(l => !l.precisa_higienizacao && l.nome !== "(sem nome)")
+      .map(l => l.nome)
+
+    // Consulta 1: telefones já existentes no banco
+    const existingPhoneSet = new Set<string>()
+    if (validPhones.length > 0) {
+      const { data: phonesInDB } = await supabase
         .from("leads")
-        .select("telefone_principal, listas(nome_arquivo)")
-        .in("telefone_principal", phones)
+        .select("telefone_principal")
+        .in("telefone_principal", validPhones)
 
-      if (existingLista && substituir) {
-        query = query.neq("lista_id", existingLista.id)
+      for (const row of phonesInDB ?? []) {
+        if (row.telefone_principal) existingPhoneSet.add(row.telefone_principal)
       }
+    }
 
-      const { data: rawPhones, error: phoneErr } = await query
+    // Consulta 2: leads na fila de Higienização com nome igual (Caso 3)
+    const hygieneLeadByName = new Map<string, { id: string; telefoneAntigo: string | null; listaOrigem: string }>()
+    if (candidateNames.length > 0) {
+      const { data: hygieneRows } = await supabase
+        .from("leads")
+        .select("id, nome, telefone_principal, listas(nome_arquivo)")
+        .in("nome", candidateNames)
+        .eq("precisa_higienizacao", true)
+        .is("higienizado_em", null)
 
-      if (phoneErr) {
-        console.error("[upload] phone check:", phoneErr.message)
-      } else {
-        for (const row of (rawPhones ?? []) as PhoneRow[]) {
-          const p = row.telefone_principal
+      for (const row of (hygieneRows ?? []) as HygieneLeadRow[]) {
+        if (!hygieneLeadByName.has(row.nome)) {
           const listaData = row.listas
-          const nome = Array.isArray(listaData)
+          const listaOrigem = Array.isArray(listaData)
             ? (listaData[0]?.nome_arquivo ?? "lista anterior")
             : (listaData?.nome_arquivo ?? "lista anterior")
-          if (p && !existingPhoneMap.has(p)) existingPhoneMap.set(p, nome)
+          hygieneLeadByName.set(row.nome, {
+            id:           row.id,
+            telefoneAntigo: row.telefone_principal,
+            listaOrigem,
+          })
         }
       }
     }
 
-    // Anota leads com info de duplicata cross-lista
-    const duplicatasOutrasListas: Array<{ nome: string; telefone: string; lista_origem: string }> = []
-    const annotatedLeads: LeadInput[] = dedupedLeads.map(lead => {
+    // ── Classificação ─────────────────────────────────────────────────────────
+
+    const classified: ClassifiedLead[] = []
+
+    for (const lead of dedupedLeads) {
       const phone = lead.telefone_principal
-      if (phone && existingPhoneMap.has(phone)) {
-        const listaOrigem = existingPhoneMap.get(phone)!
-        duplicatasOutrasListas.push({ nome: lead.nome, telefone: phone, lista_origem: listaOrigem })
-        return { ...lead, observacao: `Lead já presente em ${listaOrigem}` }
+
+      // Caso 4: telefone problemático
+      if (lead.precisa_higienizacao) {
+        classified.push({ caso: 4, lead })
+        continue
       }
-      return lead
-    })
+      // Caso 1: telefone já existe no banco
+      if (phone && existingPhoneSet.has(phone)) {
+        classified.push({ caso: 1 })
+        continue
+      }
+      // Caso 3: nome na fila de Higienização + telefone novo
+      if (lead.nome !== "(sem nome)" && hygieneLeadByName.has(lead.nome)) {
+        const hy = hygieneLeadByName.get(lead.nome)!
+        classified.push({ caso: 3, lead, hygieneId: hy.id, telefoneAntigo: hy.telefoneAntigo, listaOrigem: hy.listaOrigem })
+        continue
+      }
+      // Caso 2: lead novo
+      classified.push({ caso: 2, lead })
+    }
 
-    const novosLeads       = annotatedLeads.length - duplicatasOutrasListas.length
-    const resolvedMeta     = { ...meta, unidade, tipo_lista, data_lista }
-    const duplicataListaInfo = existingLista
-      ? { lista_id: existingLista.id, uploaded_at: existingLista.uploaded_at as string }
-      : null
+    // Contagens para o resumo
+    const caso2 = classified.filter(c => c.caso === 2) as Extract<ClassifiedLead, { caso: 2 }>[]
+    const caso3 = classified.filter(c => c.caso === 3) as Extract<ClassifiedLead, { caso: 3 }>[]
+    const caso4 = classified.filter(c => c.caso === 4) as Extract<ClassifiedLead, { caso: 4 }>[]
 
-    // ── Fase de preview (sem confirmar) — nunca salva ──────────────────────────
+    const novosLeads      = caso2.length
+    const duplicatasIgn   = classified.filter(c => c.caso === 1).length
+    const leadsHigienizacao = caso4.length
+    const totalArquivo    = novosLeads + duplicatasMesmaLista + duplicatasIgn + caso3.length + leadsHigienizacao
+
+    const possiveisHigienizacoes = caso3.map(c => ({
+      nome:           c.lead.nome,
+      telefone_novo:  c.lead.telefone_principal ?? "",
+      telefone_antigo: c.telefoneAntigo ?? "",
+      lista_origem:   c.listaOrigem,
+    }))
+
+    const resolvedMeta = { ...meta, unidade, tipo_lista, data_lista }
+    const allToInsert  = [...caso2.map(c => c.lead), ...caso3.map(c => c.lead), ...caso4.map(c => c.lead)]
+    const preview      = allToInsert.slice(0, 5)
+
+    // ── Fase de preview — nunca salva ─────────────────────────────────────────
 
     if (!confirmar) {
       return NextResponse.json({
-        meta:                     resolvedMeta,
-        preview:                  annotatedLeads.slice(0, 5),
-        total_leads:              annotatedLeads.length,
-        total_higienizacao:       totalHigienizacao,
-        duplicata_lista:          duplicataListaInfo,
-        duplicatas_mesma_lista:   duplicatasMesmaLista,
-        duplicatas_outras_listas: duplicatasOutrasListas,
-        novos_leads:              novosLeads,
+        meta:                    resolvedMeta,
+        preview,
+        total_arquivo:           totalArquivo,
+        total_leads:             novosLeads + caso3.length,
+        leads_higienizacao:      leadsHigienizacao,
+        novos_leads:             novosLeads,
+        duplicatas_mesma_lista:  duplicatasMesmaLista,
+        duplicatas_ignoradas:    duplicatasIgn,
+        possiveis_higienizacoes: possiveisHigienizacoes,
       })
     }
 
-    // ── Fase de confirmação (salva) ────────────────────────────────────────────
+    // ── Fase de confirmação — salva ───────────────────────────────────────────
 
-    if (existingLista) {
-      if (substituir) {
-        const { error: deleteErr } = await supabase
-          .from("listas")
-          .delete()
-          .eq("id", existingLista.id)
-
-        if (deleteErr) {
-          console.error("[upload] delete lista:", deleteErr.message)
-          return NextResponse.json({ error: "Erro ao substituir lista", detail: deleteErr.message }, { status: 500 })
-        }
-      } else {
-        // Lista duplicada sem substituição — retorna 409
-        return NextResponse.json({
-          error:              "duplicata_lista",
-          mensagem:           `Esta lista já foi importada em ${new Date(existingLista.uploaded_at as string).toLocaleDateString("pt-BR")}`,
-          lista_id_existente: existingLista.id,
-        }, { status: 409 })
-      }
-    }
-
-    // Insere lista
+    // Insere lista (total_leads conta apenas válidos, excluindo Caso 4)
     const { data: listaRow, error: listaErr } = await supabase
       .from("listas")
       .insert({
@@ -186,7 +214,7 @@ export async function POST(req: NextRequest) {
         unidade,
         tipo_lista,
         data_lista,
-        total_leads:  annotatedLeads.length,
+        total_leads:  novosLeads + caso3.length,
         formato:      meta.formato,
       })
       .select("id")
@@ -199,10 +227,10 @@ export async function POST(req: NextRequest) {
 
     const lista_id = listaRow.id
 
-    // Insere leads em lotes de 200 para evitar timeout
+    // Insere leads em lotes de 200 (Caso 2 + Caso 3 + Caso 4)
     const BATCH = 200
-    for (let i = 0; i < annotatedLeads.length; i += BATCH) {
-      const batch = annotatedLeads.slice(i, i + BATCH).map(l => ({ ...l, lista_id }))
+    for (let i = 0; i < allToInsert.length; i += BATCH) {
+      const batch = allToInsert.slice(i, i + BATCH).map(l => ({ ...l, lista_id }))
       const { error: leadsErr } = await supabase.from("leads").insert(batch)
       if (leadsErr) {
         console.error("[upload] insert leads batch:", leadsErr.message)
@@ -210,14 +238,30 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Atualiza leads antigos da Higienização com sugestão de substituição (Caso 3)
+    for (const c of caso3) {
+      const { error: sugErr } = await supabase
+        .from("leads")
+        .update({
+          sugestao_substituicao:    true,
+          telefone_sugerido:        c.lead.telefone_principal,
+          sugestao_origem_lista_id: lista_id,
+        })
+        .eq("id", c.hygieneId)
+
+      if (sugErr) console.error("[upload] sugestao update:", sugErr.message)
+    }
+
     return NextResponse.json({
       lista_id,
-      total_leads:              annotatedLeads.length,
-      total_higienizacao:       totalHigienizacao,
-      duplicatas_mesma_lista:   duplicatasMesmaLista,
-      duplicatas_outras_listas: duplicatasOutrasListas,
-      novos_leads:              novosLeads,
-      preview:                  annotatedLeads.slice(0, 5),
+      total_leads:             novosLeads + caso3.length,
+      leads_higienizacao:      leadsHigienizacao,
+      novos_leads:             novosLeads,
+      duplicatas_mesma_lista:  duplicatasMesmaLista,
+      duplicatas_ignoradas:    duplicatasIgn,
+      possiveis_higienizacoes: possiveisHigienizacoes,
+      total_arquivo:           totalArquivo,
+      preview,
     })
 
   } catch (err) {
