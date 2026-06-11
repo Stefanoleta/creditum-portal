@@ -29,6 +29,7 @@ export interface LeadInput {
   precisa_higienizacao: boolean
   motivo_higienizacao: string | null
   // 'telefone_fixo' | 'sem_ddd' | 'numero_incompleto' | 'formato_invalido'
+  observacao?: string | null    // nota automática de duplicata cross-lista (preenchida pelo upload API)
 }
 
 export interface ParseResult {

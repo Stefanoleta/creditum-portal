@@ -55,6 +55,13 @@ const MOTIVO_LABEL: Record<string, string> = {
   numero_inexistente_discador:"Inexistente (Argus)",
 }
 
+interface DuplicataSummary {
+  duplicata_lista:          { lista_id: string; uploaded_at: string } | null
+  duplicatas_mesma_lista:   number
+  duplicatas_outras_listas: Array<{ nome: string; telefone: string; lista_origem: string }>
+  novos_leads:              number
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtDate(iso: string | null) {
@@ -535,6 +542,8 @@ export default function ListasPage() {
   const [importing, setImporting] = useState(false)
   const [importOk, setImportOk] = useState<{ lista_id: string; total: number } | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [duplicataSummary, setDuplicataSummary] = useState<DuplicataSummary | null>(null)
+  const [outrasListasExpanded, setOutrasListasExpanded] = useState(false)
 
   // ── Listas state
   const [listas, setListas] = useState<Lista[]>([])
@@ -562,40 +571,27 @@ export default function ListasPage() {
 
   useEffect(() => { loadHigienizacaoCount() }, [loadHigienizacaoCount])
 
-  // ── Parsear arquivo no cliente via API de parse-only (sem salvar)
+  // ── Parsear arquivo — fase de preview (nunca salva automaticamente)
   async function handleFile(f: File) {
     setUploadFile(f)
     setImportOk(null)
     setUploadError(null)
     setParseResult(null)
+    setDuplicataSummary(null)
     setTotalHigienizacao(0)
+    setOutrasListasExpanded(false)
     setParsing(true)
 
     const form = new FormData()
     form.append("arquivo", f)
+    // Sem confirmar=true → API retorna preview, nunca salva
 
     try {
       const res = await fetch("/api/listas/upload", { method: "POST", body: form })
       const json = await res.json()
 
-      if (!res.ok) {
-        // 422 = meta incompleta mas com preview
-        if (res.status === 422 && json.preview) {
-          setParseResult({ meta: json.meta, leads: json.preview })
-          setTotalHigienizacao(json.total_higienizacao ?? 0)
-          setMetaOverride({
-            unidade:    json.meta.unidade    ?? "",
-            tipo_lista: json.meta.tipo_lista ?? "",
-            data_lista: json.meta.data_lista ?? "",
-          })
-        } else {
-          setUploadError(json.error ?? "Erro ao processar arquivo")
-        }
-        return
-      }
-
-      // warning = supabase não configurado, mas temos preview
-      if (json.warning) {
+      // Qualquer resposta com preview+meta → mostra confirmação
+      if (json.preview && json.meta) {
         setParseResult({ meta: json.meta, leads: json.preview })
         setTotalHigienizacao(json.total_higienizacao ?? 0)
         setMetaOverride({
@@ -603,25 +599,16 @@ export default function ListasPage() {
           tipo_lista: json.meta.tipo_lista ?? "",
           data_lista: json.meta.data_lista ?? "",
         })
-        if (json.lista_id) {
-          setImportOk({ lista_id: json.lista_id, total: json.total_leads })
-          loadListas()
-          loadHigienizacaoCount()
-        }
-        return
+        setDuplicataSummary({
+          duplicata_lista:          json.duplicata_lista          ?? null,
+          duplicatas_mesma_lista:   json.duplicatas_mesma_lista   ?? 0,
+          duplicatas_outras_listas: json.duplicatas_outras_listas ?? [],
+          novos_leads:              json.novos_leads              ?? json.total_leads ?? 0,
+        })
+        if (json.warning) setUploadError(json.warning)
+      } else {
+        setUploadError(json.error ?? "Erro ao processar arquivo")
       }
-
-      // Sucesso completo
-      setParseResult({ meta: json.meta, leads: json.preview })
-      setTotalHigienizacao(json.total_higienizacao ?? 0)
-      setMetaOverride({
-        unidade:    json.meta.unidade    ?? "",
-        tipo_lista: json.meta.tipo_lista ?? "",
-        data_lista: json.meta.data_lista ?? "",
-      })
-      setImportOk({ lista_id: json.lista_id, total: json.total_leads })
-      loadListas()
-      loadHigienizacaoCount()
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Erro desconhecido")
     } finally {
@@ -629,24 +616,26 @@ export default function ListasPage() {
     }
   }
 
-  // ── Confirmar importação quando meta estava incompleta
-  async function handleConfirmar() {
+  // ── Confirmar importação — fase de save (sempre com confirmar=true)
+  async function handleConfirmar(substituir = false) {
     if (!uploadFile || !parseResult) return
     setImporting(true)
     setUploadError(null)
 
     const form = new FormData()
-    form.append("arquivo", uploadFile)
+    form.append("arquivo",    uploadFile)
     form.append("unidade",    metaOverride.unidade)
     form.append("tipo_lista", metaOverride.tipo_lista)
     form.append("data_lista", metaOverride.data_lista)
+    form.append("confirmar",  "true")
+    if (substituir) form.append("substituir", "true")
 
     try {
       const res = await fetch("/api/listas/upload", { method: "POST", body: form })
       const json = await res.json()
 
       if (!res.ok) {
-        setUploadError(json.error ?? "Erro ao importar")
+        setUploadError(json.mensagem ?? json.error ?? "Erro ao importar")
         return
       }
 
@@ -655,6 +644,7 @@ export default function ListasPage() {
       loadHigienizacaoCount()
       setParseResult(null)
       setUploadFile(null)
+      setDuplicataSummary(null)
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Erro desconhecido")
     } finally {
@@ -768,7 +758,7 @@ export default function ListasPage() {
             <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 rounded-lg px-4 py-3">
               <CheckCircle2 className="w-4 h-4 shrink-0" />
               {importOk.total} leads importados com sucesso
-              <button className="ml-auto text-xs underline" onClick={() => { setImportOk(null); setUploadFile(null); setParseResult(null); setMetaOverride({ unidade: "", tipo_lista: "", data_lista: "" }) }}>
+              <button className="ml-auto text-xs underline" onClick={() => { setImportOk(null); setUploadFile(null); setParseResult(null); setMetaOverride({ unidade: "", tipo_lista: "", data_lista: "" }); setDuplicataSummary(null) }}>
                 Importar outra
               </button>
             </div>
@@ -842,22 +832,105 @@ export default function ListasPage() {
                 <PreviewTable leads={parseResult.leads} />
               </div>
 
+              {/* ── Resumo de duplicatas ── */}
+              {duplicataSummary && (
+                <div className="flex flex-col gap-2">
+                  {/* Leads novos */}
+                  <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                    <strong>{duplicataSummary.novos_leads} lead{duplicataSummary.novos_leads !== 1 ? "s" : ""} novo{duplicataSummary.novos_leads !== 1 ? "s" : ""}</strong>
+                  </div>
+
+                  {duplicataSummary.duplicatas_mesma_lista > 0 && (
+                    <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                      <span className="shrink-0 font-mono text-gray-300">↩</span>
+                      {duplicataSummary.duplicatas_mesma_lista} duplicata{duplicataSummary.duplicatas_mesma_lista !== 1 ? "s" : ""} ignorada{duplicataSummary.duplicatas_mesma_lista !== 1 ? "s" : ""} (mesmo arquivo)
+                    </div>
+                  )}
+
+                  {duplicataSummary.duplicatas_outras_listas.length > 0 && (
+                    <div className="flex flex-col gap-1">
+                      <button
+                        onClick={() => setOutrasListasExpanded(e => !e)}
+                        className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 hover:bg-amber-100 transition-colors"
+                      >
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                        <strong>{duplicataSummary.duplicatas_outras_listas.length} lead{duplicataSummary.duplicatas_outras_listas.length !== 1 ? "s" : ""}</strong>&nbsp;já existe{duplicataSummary.duplicatas_outras_listas.length !== 1 ? "m" : ""} em outras listas — serão importados com observação
+                        <ChevronRight className={cn("w-3 h-3 ml-auto transition-transform shrink-0", outrasListasExpanded && "rotate-90")} />
+                      </button>
+                      {outrasListasExpanded && (
+                        <div className="overflow-x-auto rounded-lg border border-amber-100 ml-1 max-h-48 overflow-y-auto">
+                          <table className="w-full text-[11px]">
+                            <thead className="sticky top-0 bg-amber-50">
+                              <tr className="text-amber-600">
+                                <th className="px-3 py-1.5 text-left">Nome</th>
+                                <th className="px-3 py-1.5 text-left">Telefone</th>
+                                <th className="px-3 py-1.5 text-left">Lista de origem</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-amber-50">
+                              {duplicataSummary.duplicatas_outras_listas.slice(0, 30).map((d, i) => (
+                                <tr key={i} className="bg-white">
+                                  <td className="px-3 py-1.5 text-gray-700">{d.nome}</td>
+                                  <td className="px-3 py-1.5 text-gray-500 tabular-nums font-mono">{d.telefone}</td>
+                                  <td className="px-3 py-1.5 text-gray-400 max-w-[160px] truncate">{d.lista_origem}</td>
+                                </tr>
+                              ))}
+                              {duplicataSummary.duplicatas_outras_listas.length > 30 && (
+                                <tr className="bg-white">
+                                  <td colSpan={3} className="px-3 py-1.5 text-gray-400 text-center">
+                                    +{duplicataSummary.duplicatas_outras_listas.length - 30} mais...
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {duplicataSummary.duplicata_lista && (
+                    <div className="flex items-center gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                      Esta lista já foi importada. Use "Substituir" para atualizar.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Botões ── */}
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-3">
+                  {duplicataSummary?.duplicata_lista ? (
+                    <button
+                      disabled={!canConfirm || importing}
+                      onClick={() => handleConfirmar(true)}
+                      className={cn(
+                        "text-sm font-medium px-4 py-2 rounded-lg transition-colors",
+                        canConfirm
+                          ? "bg-amber-600 text-white hover:bg-amber-700"
+                          : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                      )}
+                    >
+                      {importing ? "Substituindo..." : "Substituir lista existente"}
+                    </button>
+                  ) : (
+                    <button
+                      disabled={!canConfirm || importing}
+                      onClick={() => handleConfirmar()}
+                      className={cn(
+                        "text-sm font-medium px-4 py-2 rounded-lg transition-colors",
+                        canConfirm
+                          ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                          : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                      )}
+                    >
+                      {importing ? "Importando..." : "Confirmar e importar"}
+                    </button>
+                  )}
                   <button
-                    disabled={!canConfirm || importing}
-                    onClick={handleConfirmar}
-                    className={cn(
-                      "text-sm font-medium px-4 py-2 rounded-lg transition-colors",
-                      canConfirm
-                        ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                        : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                    )}
-                  >
-                    {importing ? "Importando..." : "Confirmar e importar"}
-                  </button>
-                  <button
-                    onClick={() => { setParseResult(null); setUploadFile(null); setUploadError(null); setMetaOverride({ unidade: "", tipo_lista: "", data_lista: "" }) }}
+                    onClick={() => { setParseResult(null); setUploadFile(null); setUploadError(null); setMetaOverride({ unidade: "", tipo_lista: "", data_lista: "" }); setDuplicataSummary(null); setOutrasListasExpanded(false) }}
                     className="text-xs text-gray-400 hover:text-gray-600"
                   >
                     Cancelar
