@@ -65,12 +65,10 @@ export interface OperatorRow {
   id: string
   name: string
   meta_dia: number
-  ligacoes_realizadas: number
   ligacoes_atendidas: number
   conversoes: number
   tma_segundos: number
   score_ia: number | null
-  taxa_contato: number
   taxa_conversao: number
 }
 
@@ -186,12 +184,10 @@ export const RAF_BASE: OperatorRow = {
   id: "raf-001",
   name: "Rafael Costa",
   meta_dia: 50,
-  ligacoes_realizadas: 58,
   ligacoes_atendidas: 41,
   conversoes: 9,
   tma_segundos: 198,
   score_ia: 91,
-  taxa_contato: 70.7,
   taxa_conversao: 22.0,
 }
 
@@ -199,12 +195,10 @@ export const MARC_BASE: OperatorRow = {
   id: "marc-001",
   name: "Marcos Pinto",
   meta_dia: 50,
-  ligacoes_realizadas: 42,
   ligacoes_atendidas: 27,
   conversoes: 4,
   tma_segundos: 284,
   score_ia: 71,
-  taxa_contato: 64.3,
   taxa_conversao: 14.8,
 }
 
@@ -238,14 +232,14 @@ export function generateMockReports(): ReportsPayload {
   }
 
   const allOperators: OperatorRow[] = [
-    { id: "ana-001",   name: "Ana Beatriz",   meta_dia: 50, ligacoes_realizadas: 52, ligacoes_atendidas: 36, conversoes: 8, tma_segundos: 210, score_ia: 91, taxa_contato: 69.2, taxa_conversao: 22.2 },
+    { id: "ana-001",   name: "Ana Beatriz",   meta_dia: 50, ligacoes_atendidas: 36, conversoes: 8, tma_segundos: 210, score_ia: 91,  taxa_conversao: 22.2 },
     RAF_BASE,
-    { id: "jul-001",   name: "Julia Souza",   meta_dia: 50, ligacoes_realizadas: 44, ligacoes_atendidas: 30, conversoes: 6, tma_segundos: 230, score_ia: 82, taxa_contato: 68.2, taxa_conversao: 20.0 },
-    { id: "lar-001",   name: "Larissa Neves", meta_dia: 50, ligacoes_realizadas: 50, ligacoes_atendidas: 34, conversoes: 5, tma_segundos: 220, score_ia: 86, taxa_contato: 68.0, taxa_conversao: 14.7 },
-    { id: "car-001",   name: "Carlos Mendes", meta_dia: 50, ligacoes_realizadas: 48, ligacoes_atendidas: 31, conversoes: 6, tma_segundos: 255, score_ia: 84, taxa_contato: 64.6, taxa_conversao: 19.4 },
-    { id: "fer-001",   name: "Fernanda Lima", meta_dia: 50, ligacoes_realizadas: 41, ligacoes_atendidas: 28, conversoes: 5, tma_segundos: 198, score_ia: 78, taxa_contato: 68.3, taxa_conversao: 17.9 },
+    { id: "jul-001",   name: "Julia Souza",   meta_dia: 50, ligacoes_atendidas: 30, conversoes: 6, tma_segundos: 230, score_ia: 82,  taxa_conversao: 20.0 },
+    { id: "lar-001",   name: "Larissa Neves", meta_dia: 50, ligacoes_atendidas: 34, conversoes: 5, tma_segundos: 220, score_ia: 86,  taxa_conversao: 14.7 },
+    { id: "car-001",   name: "Carlos Mendes", meta_dia: 50, ligacoes_atendidas: 31, conversoes: 6, tma_segundos: 255, score_ia: 84,  taxa_conversao: 19.4 },
+    { id: "fer-001",   name: "Fernanda Lima", meta_dia: 50, ligacoes_atendidas: 28, conversoes: 5, tma_segundos: 198, score_ia: 78,  taxa_conversao: 17.9 },
     MARC_BASE,
-    { id: "die-001",   name: "Diego Rocha",   meta_dia: 50, ligacoes_realizadas: 38, ligacoes_atendidas: 24, conversoes: 2, tma_segundos: 312, score_ia: 75, taxa_contato: 63.2, taxa_conversao:  8.3 },
+    { id: "die-001",   name: "Diego Rocha",   meta_dia: 50, ligacoes_atendidas: 24, conversoes: 2, tma_segundos: 312, score_ia: 75,  taxa_conversao:  8.3 },
   ].sort((a, b) => b.conversoes - a.conversoes)
 
   return {

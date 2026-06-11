@@ -586,7 +586,7 @@ function TabOperadores({ rows }: { rows: OperatorRow[] }) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-100">
-            {["#", "Operador", "Ligações", "Atendidas", "Qualif", "Taxa Cont", "Taxa Qualif", "TMA", "Score IA"].map((h) => (
+            {["#", "Operador", "Atendidas", "Qualif", "Taxa Qualif", "TMA", "Score IA"].map((h) => (
               <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide first:px-5">
                 {h}
               </th>
@@ -603,10 +603,8 @@ function TabOperadores({ rows }: { rows: OperatorRow[] }) {
                   <span className="font-medium text-slate-800">{r.name}</span>
                 </div>
               </td>
-              <td className="px-4 py-3 tabular-nums text-gray-700">{r.ligacoes_realizadas}</td>
               <td className="px-4 py-3 tabular-nums text-gray-700">{r.ligacoes_atendidas}</td>
               <td className="px-4 py-3 tabular-nums font-semibold text-emerald-700">{r.conversoes}</td>
-              <td className="px-4 py-3 tabular-nums text-gray-600">{pct(r.taxa_contato)}</td>
               <td className={cn("px-4 py-3 tabular-nums", convText(r.taxa_conversao))}>
                 {pct(r.taxa_conversao)}
               </td>
@@ -622,19 +620,14 @@ function TabOperadores({ rows }: { rows: OperatorRow[] }) {
         <tfoot>
           <tr className="border-t border-gray-200 bg-gray-50 font-semibold">
             <td className="pl-5 pr-4 py-2.5 text-gray-400 text-xs">Total</td>
-            <td className="px-4 py-2.5 text-gray-400 text-xs">
-              {rows.length} operadores
-            </td>
-            <td className="px-4 py-2.5 tabular-nums text-gray-700">
-              {rows.reduce((s, r) => s + r.ligacoes_realizadas, 0)}
-            </td>
+            <td className="px-4 py-2.5 text-gray-400 text-xs">{rows.length} operadores</td>
             <td className="px-4 py-2.5 tabular-nums text-gray-700">
               {rows.reduce((s, r) => s + r.ligacoes_atendidas, 0)}
             </td>
             <td className="px-4 py-2.5 tabular-nums text-emerald-700">
               {rows.reduce((s, r) => s + r.conversoes, 0)}
             </td>
-            <td className="px-4 py-2.5" colSpan={4} />
+            <td className="px-4 py-2.5" colSpan={3} />
           </tr>
         </tfoot>
       </table>

@@ -340,11 +340,6 @@ export async function GET() {
     }
 
     // ── Operadores ────────────────────────────────────────────────────────────
-    // taxa_contato = atendidas_operador / total_tentativas_campanha
-    // The auto-dialer only routes answered calls to operators, so
-    // ligacoesdetalhadas per operator == atendidas. The correct denominator
-    // is the full campaign attempt count (ligacoesItems.length).
-    const campanhaTotal = ligacoesItems.length || 1
     const operadores: OperatorRow[] = sdrs.map((s) => {
       const atendidas = s.ligacoes_atendidas
       const qualif = findInOpMap(s.name, qualifByOp)
@@ -353,12 +348,10 @@ export async function GET() {
         id: s.id,
         name: s.name,
         meta_dia: s.meta_dia,
-        ligacoes_realizadas: campanhaTotal,
         ligacoes_atendidas: atendidas,
         conversoes: qualif,
         tma_segundos: s.tma_segundos,
         score_ia: score,
-        taxa_contato: Math.round((atendidas / campanhaTotal) * 1000) / 10,
         taxa_conversao: atendidas > 0
           ? Math.round((qualif / atendidas) * 1000) / 10 : 0,
       }
