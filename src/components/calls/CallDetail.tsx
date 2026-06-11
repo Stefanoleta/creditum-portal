@@ -127,14 +127,23 @@ const BREAKDOWN_LABELS: Record<string, string> = {
   engajamento_lead:   "Engajamento",
   tratamento_objecao: "Objeções",
   proposta_beneficio: "Proposta",
+  tempo_resposta:     "Tempo resp.",
 }
 
+const BREAKDOWN_KEYS = [
+  "abertura",
+  "engajamento_lead",
+  "tratamento_objecao",
+  "proposta_beneficio",
+  "tempo_resposta",
+] as const
+
 function ScoreBreakdownBars({ breakdown }: { breakdown: NonNullable<CallAnalysis["score_breakdown"]> }) {
-  const keys = ["abertura", "engajamento_lead", "tratamento_objecao", "proposta_beneficio"] as const
   return (
     <div className="flex flex-col gap-2">
-      {keys.map((k) => {
+      {BREAKDOWN_KEYS.map((k) => {
         const val = breakdown[k]
+        if (val === undefined) return null
         const pct = (val / 25) * 100
         const bar = pct >= 80 ? "bg-emerald-500" : pct >= 60 ? "bg-yellow-400" : "bg-red-400"
         return (
