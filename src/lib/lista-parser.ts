@@ -66,23 +66,40 @@ export function parseFilename(filename: string): {
 }
 
 // ─── Phone normalizer ─────────────────────────────────────────────────────────
+//
+// Algoritmo:
+//   1. Remove zeros à esquerda (strip leading zeros) — "0021..." → "21..."
+//   2. Se sobrar 12-13 dígitos começando com "55" → DDI Brasil → remove "55"
+//      12 = DDI(2) + DDD(2) + fixo(8) | 13 = DDI(2) + DDD(2) + celular(9)
+//   3. 10-11 dígitos → válido (DDD + número)
+//      8-9 dígitos   → sem DDD, mantém como está para revisão manual
+//      outro         → mantém como está (malformado)
+//
+// Casos validados:
+//   "0021993758014"  → strip zeros → "21993758014"  (11d) → válido      ✓
+//   "021997224128"   → strip zeros → "21997224128"  (11d) → válido      ✓
+//   "0055219963355"  → strip zeros → "55219963355"  (11d) → válido      ✓
+//   "005521996335500"→ strip zeros → "5521996335500"(13d) → strip 55
+//                                 → "21996335500"   (11d) → válido      ✓
+//   "993758014"      → sem zeros   → "993758014"    (9d)  → sem DDD     ⚠️
+//   "21993758014"    → sem zeros   → "21993758014"  (11d) → válido      ✓
 
-// Remove prefixos internacionais e caracteres não numéricos
-// Mantém DDD + número (10 ou 11 dígitos)
 function normalizePhone(raw: string | number | null | undefined): string | null {
   if (raw == null) return null
   let digits = String(raw).replace(/\D/g, "")
   if (!digits) return null
 
-  // Remove 0021 / 0055 (discagem internacional) ou 00 + 55
-  if (digits.startsWith("0021")) digits = digits.slice(4)
-  else if (digits.startsWith("0055")) digits = digits.slice(4)
-  else if (digits.startsWith("55") && digits.length > 12) digits = digits.slice(2)
-  else if (digits.startsWith("0")) digits = digits.slice(1)
+  // 1. Zeros à esquerda
+  digits = digits.replace(/^0+/, "")
+  if (!digits) return null
 
-  // Aceita 10 ou 11 dígitos (DDD 2 + número 8 ou 9)
-  if (digits.length < 10 || digits.length > 11) return digits || null
-  return digits
+  // 2. DDI Brasil: "55" + DDD(2) + número(8 ou 9) = 12 ou 13 dígitos
+  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
+    digits = digits.slice(2)
+  }
+
+  // 3. Retorna como está — 10-11 válido, 8-9 sem DDD (para revisão), resto malformado
+  return digits || null
 }
 
 // ─── Cell helpers ─────────────────────────────────────────────────────────────
