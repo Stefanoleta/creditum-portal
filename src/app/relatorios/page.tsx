@@ -426,7 +426,17 @@ function TabHoje({ hoje, isDemo }: { hoje: HojeData; isDemo: boolean }) {
 
 // ─── Tab: Intraday ────────────────────────────────────────────────────────────
 
+function UnavailableState() {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide">Dados indisponíveis</p>
+      <p className="text-xs text-gray-300 mt-1">Argus não respondeu. Tente novamente em instantes.</p>
+    </div>
+  )
+}
+
 function TabIntraday({ rows }: { rows: HourlyRow[] }) {
+  if (rows.length === 0) return <UnavailableState />
   const maxLig = Math.max(...rows.map((r) => r.ligacoes), 1)
   const totalLig = rows.reduce((s, r) => s + r.ligacoes, 0)
   const totalConv = rows.reduce((s, r) => s + r.conversoes, 0)
@@ -505,6 +515,7 @@ function TabIntraday({ rows }: { rows: HourlyRow[] }) {
 // ─── Tab: Por Hora ────────────────────────────────────────────────────────────
 
 function TabPorHora({ rows }: { rows: HourlyRow[] }) {
+  if (rows.length === 0) return <UnavailableState />
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
