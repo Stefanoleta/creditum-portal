@@ -6,6 +6,7 @@ import {
   buildMetrics,
   extractArray,
   getVendasAllowlist,
+  matchesAllowlist,
 } from "@/lib/argus-adapter"
 import { generateMockDashboard } from "@/lib/mock-data"
 import { supabase, saveAnalysis } from "@/lib/supabase-server"
@@ -191,7 +192,10 @@ async function createPendingRecords(
     const call_id = `argus-${idLigacao}`
     if (existingSet.has(call_id)) continue
 
-    const sdrKey = (tab.usuarioOperador ?? "SDR").toUpperCase().trim()
+    const sdrName = tab.usuarioOperador ?? "SDR"
+    if (!matchesAllowlist(sdrName, VENDAS_LIST)) continue
+
+    const sdrKey = sdrName.toUpperCase().trim()
     if (!bySdr.has(sdrKey)) bySdr.set(sdrKey, { qualifica: [], curta: [], other: [] })
     const bucket = bySdr.get(sdrKey)!
 

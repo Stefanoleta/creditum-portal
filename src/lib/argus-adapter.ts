@@ -51,7 +51,7 @@ export function getVendasAllowlist(envOverride?: string): string[] {
 
 // Partial first-name match: "RAFAELLA GOMES" → looks for "RAFAELLA" anywhere in name.
 // Robust against Argus returning truncated, suffixed, or differently-cased names.
-function matchesAllowlist(name: string, allowlist: string[]): boolean {
+export function matchesAllowlist(name: string, allowlist: string[]): boolean {
   if (allowlist.length === 0) return true
   const upper = name.toUpperCase().trim()
   if (!upper) return false
