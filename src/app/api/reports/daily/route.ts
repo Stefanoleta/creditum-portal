@@ -189,14 +189,11 @@ function buildHojeFromItems(
   const ligacoes_curtas_pct = atendidas > 0
     ? Math.round((ligacoes_curtas / atendidas) * 1000) / 10 : 0
 
-  const { total_conversoes: qualificacoes, occurrences } = adaptTabulacoes(tabulacaoItems)
-  const totalTab = occurrences.reduce((s, o) => s + o.count, 0)
-  const naoTabuladoItem = occurrences.find(o => {
-    const u = o.label.toUpperCase()
-    return u.includes("NÃO TABULADO") || u.includes("NAO TABULADO")
-  })
-  const pct_nao_tabulado = naoTabuladoItem && totalTab > 0
-    ? Math.round((naoTabuladoItem.count / totalTab) * 1000) / 10 : 0
+  const { total_conversoes: qualificacoes } = adaptTabulacoes(tabulacaoItems)
+  const total_tabulacoes = tabulacaoItems.length
+  const nao_tabuladas = Math.max(0, atendidas - total_tabulacoes)
+  const pct_nao_tabulado = atendidas > 0
+    ? Math.round((nao_tabuladas / atendidas) * 1000) / 10 : 0
 
   const taxa_aproveitamento = tentativas > 0
     ? Math.round((atendidas / tentativas) * 1000) / 10 : 0
