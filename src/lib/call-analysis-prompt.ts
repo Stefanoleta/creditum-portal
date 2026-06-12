@@ -48,8 +48,29 @@ Analise a ligação e retorne um JSON com exatamente esta estrutura:
     "melhor_horario": "<sugestão de horário baseada no perfil do lead>",
     "abertura_sugerida": "<como iniciar o recontato>"
   },
-  "insight_gestor": "<1 parágrafo para o gestor sobre padrões ou oportunidades identificados nessa ligação>"
+  "insight_gestor": "<1 parágrafo para o gestor sobre padrões ou oportunidades identificados nessa ligação>",
+  "tabulacao_ia": {
+    "categoria": "qualificado" | "ocupado_recontatar" | "interessado_sem_fechar" | "mae_familiar_atendeu" | "nao_reconhece_aguardar" | "objecao_financeira" | "objecao_prazo" | "nao_gostou_proposta" | "ja_resolveu" | "fora_politica" | "numero_invalido" | "recusa_definitiva" | "nao_atendeu_multiplas",
+    "confianca": "alta" | "media" | "baixa",
+    "recontato_em_dias": <número | null>,
+    "justificativa": "<uma linha explicando por que essa categoria>"
+  }
 }
+
+REGRAS DE TABULACAO_IA:
+- qualificado → recontato_em_dias: null (passa para closer)
+- ocupado_recontatar → recontato_em_dias: 2
+- interessado_sem_fechar → recontato_em_dias: 3
+- mae_familiar_atendeu → recontato_em_dias: 7
+- nao_reconhece_aguardar → recontato_em_dias: 15
+- objecao_financeira → recontato_em_dias: 20
+- objecao_prazo → recontato_em_dias: 15
+- nao_gostou_proposta → recontato_em_dias: 30
+- ja_resolveu → recontato_em_dias: 45
+- fora_politica → recontato_em_dias: null (lógica do gestor)
+- numero_invalido → recontato_em_dias: null (encaminhar para higienização)
+- recusa_definitiva → recontato_em_dias: null (descartar)
+- nao_atendeu_multiplas → recontato_em_dias: 7
 
 REGRAS:
 - Sempre comece pelo benefício para o aluno, nunca pelo nome da empresa

@@ -74,6 +74,11 @@ interface DuplicataSummary {
 type RecontatoCategoria =
   | "nao_atendeu" | "mae_atendeu" | "nao_podia_falar" | "nao_gostou"
   | "terceiro_nao_conhece" | "fora_politica" | "qualificado" | "convertido" | "outros"
+  // Categorias IA (tabulacao_ia automática)
+  | "ocupado_recontatar" | "interessado_sem_fechar" | "mae_familiar_atendeu"
+  | "nao_reconhece_aguardar" | "objecao_financeira" | "objecao_prazo"
+  | "nao_gostou_proposta" | "ja_resolveu" | "numero_invalido"
+  | "recusa_definitiva" | "nao_atendeu_multiplas"
 
 interface RecontatoGrupo {
   categoria:  RecontatoCategoria
@@ -750,6 +755,7 @@ function HigienizacaoTab({ onResolved }: { onResolved: () => void }) {
 // ─── Recontatos ───────────────────────────────────────────────────────────────
 
 const CAT_COLOR: Record<RecontatoCategoria, { dot: string; badge: string; ring: string }> = {
+  // Originais
   nao_atendeu:           { dot: "bg-gray-400",    badge: "bg-gray-50 text-gray-500 border-gray-200",         ring: "ring-gray-100"   },
   nao_podia_falar:       { dot: "bg-amber-400",   badge: "bg-amber-50 text-amber-700 border-amber-200",      ring: "ring-amber-100"  },
   mae_atendeu:           { dot: "bg-blue-400",    badge: "bg-blue-50 text-blue-700 border-blue-200",         ring: "ring-blue-100"   },
@@ -759,6 +765,18 @@ const CAT_COLOR: Record<RecontatoCategoria, { dot: string; badge: string; ring: 
   qualificado:           { dot: "bg-emerald-400", badge: "bg-emerald-50 text-emerald-700 border-emerald-200", ring: "ring-emerald-100"},
   convertido:            { dot: "bg-emerald-600", badge: "bg-emerald-100 text-emerald-800 border-emerald-300", ring: "ring-emerald-200"},
   outros:                { dot: "bg-gray-300",    badge: "bg-gray-50 text-gray-400 border-gray-200",         ring: "ring-gray-100"   },
+  // IA
+  ocupado_recontatar:    { dot: "bg-amber-300",   badge: "bg-amber-50 text-amber-600 border-amber-200",      ring: "ring-amber-100"  },
+  interessado_sem_fechar:{ dot: "bg-emerald-300", badge: "bg-emerald-50 text-emerald-600 border-emerald-200", ring: "ring-emerald-100"},
+  mae_familiar_atendeu:  { dot: "bg-blue-300",    badge: "bg-blue-50 text-blue-600 border-blue-200",         ring: "ring-blue-100"   },
+  nao_reconhece_aguardar:{ dot: "bg-purple-300",  badge: "bg-purple-50 text-purple-600 border-purple-200",   ring: "ring-purple-100" },
+  objecao_financeira:    { dot: "bg-orange-400",  badge: "bg-orange-50 text-orange-700 border-orange-200",   ring: "ring-orange-100" },
+  objecao_prazo:         { dot: "bg-orange-300",  badge: "bg-orange-50 text-orange-600 border-orange-200",   ring: "ring-orange-100" },
+  nao_gostou_proposta:   { dot: "bg-red-400",     badge: "bg-red-50 text-red-600 border-red-200",            ring: "ring-red-100"    },
+  ja_resolveu:           { dot: "bg-gray-400",    badge: "bg-gray-50 text-gray-500 border-gray-200",         ring: "ring-gray-100"   },
+  numero_invalido:       { dot: "bg-gray-300",    badge: "bg-gray-50 text-gray-400 border-gray-200",         ring: "ring-gray-100"   },
+  recusa_definitiva:     { dot: "bg-red-600",     badge: "bg-red-100 text-red-700 border-red-300",           ring: "ring-red-200"    },
+  nao_atendeu_multiplas: { dot: "bg-gray-500",    badge: "bg-gray-50 text-gray-600 border-gray-200",         ring: "ring-gray-100"   },
 }
 
 function RecontatosTab() {

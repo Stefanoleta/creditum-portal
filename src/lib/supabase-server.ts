@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js"
-import type { CallAnalysis, DataSource, AnalysisStatus } from "@/types/calls"
+import type { CallAnalysis, DataSource, AnalysisStatus, TabulacaoIa } from "@/types/calls"
+import { normalizePhone } from "@/lib/lista-parser"
 
 const url  = process.env.NEXT_PUBLIC_SUPABASE_URL
 const key  = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -91,6 +92,48 @@ export async function fetchRecentAnalyses(date?: string): Promise<DbAnalysis[]> 
     return []
   }
   return ((data ?? []) as Record<string, unknown>[]).map(fromDbRow)
+}
+
+// ─── Apply tabulacao_ia to the corresponding lead ────────────────────────────
+// Called after a successful analysis to keep the leads table in sync.
+// rawPhone: the original (unmasked) phone number from the Argus payload.
+
+export async function applyTabulacaoIaToLead(
+  rawPhone: string | null | undefined,
+  tabulacao: TabulacaoIa
+): Promise<void> {
+  if (!supabase || !rawPhone) return
+  const phone = normalizePhone(rawPhone)
+  if (!phone) return
+
+  const { data: found } = await supabase
+    .from("leads")
+    .select("id")
+    .or(`telefone_principal.eq.${phone},telefone_secundario.eq.${phone}`)
+    .limit(1)
+
+  const lead = found?.[0] as { id: string } | undefined
+  if (!lead) return
+
+  const updates: Record<string, unknown> = {}
+
+  if (tabulacao.categoria === "numero_invalido") {
+    updates.precisa_higienizacao = true
+    updates.motivo_higienizacao  = "numero_invalido_discador"
+  } else if (tabulacao.categoria === "qualificado") {
+    updates.observacao = "qualificado"
+  } else if (tabulacao.recontato_em_dias !== null) {
+    const d = new Date()
+    d.setDate(d.getDate() + tabulacao.recontato_em_dias)
+    updates.recontato_em = d.toISOString().split("T")[0]
+    updates.observacao   = `recontato:${tabulacao.categoria}`
+  }
+
+  if (Object.keys(updates).length === 0) return
+
+  const { error } = await supabase.from("leads").update(updates).eq("id", lead.id)
+  if (error) console.error("[supabase] applyTabulacaoIaToLead error:", error.message)
+  else console.log(`[supabase] lead ${lead.id} atualizado via tabulacao_ia:`, tabulacao.categoria)
 }
 
 // ─── Fetch pending analyses (audio download failed, awaiting retry) ───────────

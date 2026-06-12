@@ -8,6 +8,7 @@ import {
 import {
   fetchPendingAnalyses,
   updateAnalysis,
+  applyTabulacaoIaToLead,
   supabase,
 } from "@/lib/supabase-server"
 
@@ -94,8 +95,19 @@ export async function GET(req: NextRequest) {
         pending_payload: undefined,
       })
 
+      // Sync tabulacao_ia to the leads table (fire-and-forget; silent failure)
+      if (aiResult.tabulacao_ia) {
+        try {
+          const payload = p.pending_payload ? JSON.parse(p.pending_payload as string) : null
+          const rawPhone = payload?.telefone ?? payload?.ligacaoRelevante?.telefone ?? null
+          await applyTabulacaoIaToLead(rawPhone, aiResult.tabulacao_ia)
+        } catch (e) {
+          console.warn("[cron/analyze] applyTabulacaoIaToLead falhou:", e instanceof Error ? e.message : e)
+        }
+      }
+
       processed++
-      console.log(`[cron/analyze] ✓ ${label} — score=${aiResult.score}`)
+      console.log(`[cron/analyze] ✓ ${label} — score=${aiResult.score} tab=${aiResult.tabulacao_ia?.categoria ?? "—"}`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       console.warn(`[cron/analyze] ✗ ${label} — ${msg}`)

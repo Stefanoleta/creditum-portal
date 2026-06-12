@@ -2,6 +2,7 @@
 // Alimentado pelo cruzamento resultados_discador × leads.
 
 export type RecontatoCategoria =
+  // Categorias originais (cruzamento Argus × tabulação manual)
   | "nao_atendeu"
   | "mae_atendeu"
   | "nao_podia_falar"
@@ -11,8 +12,21 @@ export type RecontatoCategoria =
   | "qualificado"
   | "convertido"
   | "outros"
+  // Categorias IA (tabulacao_ia — análise automática de ligação)
+  | "ocupado_recontatar"
+  | "interessado_sem_fechar"
+  | "mae_familiar_atendeu"
+  | "nao_reconhece_aguardar"
+  | "objecao_financeira"
+  | "objecao_prazo"
+  | "nao_gostou_proposta"
+  | "ja_resolveu"
+  | "numero_invalido"
+  | "recusa_definitiva"
+  | "nao_atendeu_multiplas"
 
 export const CATEGORIA_LABEL: Record<RecontatoCategoria, string> = {
+  // Originais
   nao_atendeu:           "Não Atendeu",
   mae_atendeu:           "Mãe / Responsável Atendeu",
   nao_podia_falar:       "Não Podia Falar",
@@ -22,10 +36,23 @@ export const CATEGORIA_LABEL: Record<RecontatoCategoria, string> = {
   qualificado:           "Qualificado",
   convertido:            "Convertido",
   outros:                "Outros",
+  // IA
+  ocupado_recontatar:    "Ocupado / Recontatar",
+  interessado_sem_fechar:"Interessado sem Fechar",
+  mae_familiar_atendeu:  "Mãe / Familiar Atendeu (IA)",
+  nao_reconhece_aguardar:"Não Reconhece / Aguardar",
+  objecao_financeira:    "Objeção Financeira",
+  objecao_prazo:         "Objeção de Prazo",
+  nao_gostou_proposta:   "Não Gostou da Proposta (IA)",
+  ja_resolveu:           "Já Resolveu",
+  numero_invalido:       "Número Inválido",
+  recusa_definitiva:     "Recusa Definitiva",
+  nao_atendeu_multiplas: "Não Atendeu (Múltiplas)",
 }
 
-// Dias para recontato por categoria (null = não recontatar)
+// Dias para recontato por categoria (null = não recontatar automaticamente)
 const DIAS_RECONTATO: Record<RecontatoCategoria, number | null> = {
+  // Originais
   nao_atendeu:           2,
   mae_atendeu:           7,
   nao_podia_falar:       2,
@@ -35,6 +62,18 @@ const DIAS_RECONTATO: Record<RecontatoCategoria, number | null> = {
   qualificado:           null,
   convertido:            null,
   outros:                5,
+  // IA
+  ocupado_recontatar:    2,
+  interessado_sem_fechar:3,
+  mae_familiar_atendeu:  7,
+  nao_reconhece_aguardar:15,
+  objecao_financeira:    20,
+  objecao_prazo:         15,
+  nao_gostou_proposta:   30,
+  ja_resolveu:           45,
+  numero_invalido:       null,
+  recusa_definitiva:     null,
+  nao_atendeu_multiplas: 7,
 }
 
 function upper(s: string | null | undefined): string {

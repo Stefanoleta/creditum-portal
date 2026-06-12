@@ -50,6 +50,7 @@ export async function GET(req: NextRequest) {
 
   // ── Retorna agrupamento por categoria ──────────────────────────────────────
   const CATEGORIAS: RecontatoCategoria[] = [
+    // Originais (cruzamento Argus × tabulação manual)
     "nao_atendeu",
     "nao_podia_falar",
     "mae_atendeu",
@@ -59,6 +60,16 @@ export async function GET(req: NextRequest) {
     "qualificado",
     "convertido",
     "outros",
+    // IA (tabulacao_ia automática)
+    "ocupado_recontatar",
+    "interessado_sem_fechar",
+    "mae_familiar_atendeu",
+    "nao_reconhece_aguardar",
+    "objecao_financeira",
+    "objecao_prazo",
+    "nao_gostou_proposta",
+    "ja_resolveu",
+    "nao_atendeu_multiplas",
   ]
 
   const grupos: RecontatoGrupo[] = []

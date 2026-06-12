@@ -110,6 +110,31 @@ export interface CallAnalysis {
   pontos_melhoria?: string[]
   sugestao_recontato?: SugestaoRecontato | null
   insight_gestor?: string
+  tabulacao_ia?: TabulacaoIa | null
+}
+
+// ─── Tabulação IA ─────────────────────────────────────────────────────────────
+
+export type TabulacaoIaCategoria =
+  | "qualificado"
+  | "ocupado_recontatar"
+  | "interessado_sem_fechar"
+  | "mae_familiar_atendeu"
+  | "nao_reconhece_aguardar"
+  | "objecao_financeira"
+  | "objecao_prazo"
+  | "nao_gostou_proposta"
+  | "ja_resolveu"
+  | "fora_politica"
+  | "numero_invalido"
+  | "recusa_definitiva"
+  | "nao_atendeu_multiplas"
+
+export interface TabulacaoIa {
+  categoria:          TabulacaoIaCategoria
+  confianca:          "alta" | "media" | "baixa"
+  recontato_em_dias:  number | null
+  justificativa:      string
 }
 
 export interface SdrRanking {

@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils"
 import { ScoreBadge } from "./ScoreBadge"
 import { Loader2, Sparkles, Clock, Building2, ShieldCheck, ShieldX, ShieldAlert } from "lucide-react"
-import type { CallRecording, CallAnalysis, CallResultado, DataSource } from "@/types/calls"
+import type { CallRecording, CallAnalysis, CallResultado, DataSource, TabulacaoIaCategoria } from "@/types/calls"
 
 const RESULTADO_LABELS: Record<CallResultado, string> = {
   conversao:    "Conversão",
@@ -33,6 +33,55 @@ function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60)
   const s = seconds % 60
   return `${m}m${String(s).padStart(2, "0")}s`
+}
+
+const TAB_IA_LABEL: Partial<Record<TabulacaoIaCategoria, string>> = {
+  qualificado:           "Qualificado",
+  interessado_sem_fechar:"Interessado",
+  ocupado_recontatar:    "Ocupado",
+  mae_familiar_atendeu:  "Mãe/Familiar",
+  nao_reconhece_aguardar:"Não Reconhece",
+  objecao_financeira:    "Obj. Financeira",
+  objecao_prazo:         "Obj. Prazo",
+  nao_atendeu_multiplas: "N. Atendeu",
+  nao_gostou_proposta:   "Não Gostou",
+  recusa_definitiva:     "Recusa",
+  fora_politica:         "Fora Política",
+  ja_resolveu:           "Já Resolveu",
+  numero_invalido:       "Nº Inválido",
+}
+
+const TAB_IA_COLOR: Partial<Record<TabulacaoIaCategoria, string>> = {
+  qualificado:           "bg-emerald-100 text-emerald-700 border-emerald-200",
+  interessado_sem_fechar:"bg-emerald-100 text-emerald-700 border-emerald-200",
+  ocupado_recontatar:    "bg-amber-100 text-amber-700 border-amber-200",
+  mae_familiar_atendeu:  "bg-amber-100 text-amber-700 border-amber-200",
+  nao_reconhece_aguardar:"bg-amber-100 text-amber-700 border-amber-200",
+  objecao_financeira:    "bg-amber-100 text-amber-700 border-amber-200",
+  objecao_prazo:         "bg-amber-100 text-amber-700 border-amber-200",
+  nao_atendeu_multiplas: "bg-amber-100 text-amber-700 border-amber-200",
+  nao_gostou_proposta:   "bg-red-100 text-red-700 border-red-200",
+  recusa_definitiva:     "bg-red-100 text-red-700 border-red-200",
+  fora_politica:         "bg-red-100 text-red-700 border-red-200",
+  ja_resolveu:           "bg-gray-100 text-gray-500 border-gray-200",
+  numero_invalido:       "bg-gray-100 text-gray-500 border-gray-200",
+}
+
+function TabulacaoIaBadge({ analysis }: { analysis: CallAnalysis }) {
+  const tab = analysis.tabulacao_ia
+  if (!tab) return null
+  const label = TAB_IA_LABEL[tab.categoria] ?? tab.categoria
+  const color = TAB_IA_COLOR[tab.categoria] ?? "bg-gray-100 text-gray-500 border-gray-200"
+  return (
+    <div className="flex flex-col items-end gap-0.5 mt-0.5">
+      <span className={cn("text-[9px] font-medium rounded-full border px-1.5 py-0.5 leading-tight", color)}>
+        IA: {label}
+      </span>
+      {tab.recontato_em_dias !== null && (
+        <span className="text-[9px] text-gray-400">Rec. em {tab.recontato_em_dias}d</span>
+      )}
+    </div>
+  )
 }
 
 function SourceMicro({ ds }: { ds: DataSource | undefined }) {
@@ -131,6 +180,7 @@ export function CallCard({
                 <span className={cn("text-xs rounded-full px-2 py-0.5", RESULTADO_COLORS[analysis.resultado])}>
                   {RESULTADO_LABELS[analysis.resultado]}
                 </span>
+                <TabulacaoIaBadge analysis={analysis} />
               </>
             )
           ) : (
