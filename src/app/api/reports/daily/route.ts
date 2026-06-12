@@ -106,7 +106,7 @@ async function fetchDayMetrics(day: Date): Promise<DailyRow> {
       (t.categoriaTabulacao ?? "").toUpperCase() === "SUCESSO"
     ).length
 
-    return {
+    const row: DailyRow = {
       date: dateStr,
       dia,
       ligacoes,
@@ -116,7 +116,10 @@ async function fetchDayMetrics(day: Date): Promise<DailyRow> {
       taxa_contato:   ligacoes  > 0 ? Math.round((atendidas  / ligacoes)  * 1000) / 10 : 0,
       taxa_conversao: atendidas > 0 ? Math.round((conversoes / atendidas) * 1000) / 10 : 0,
     }
-  } catch {
+    console.log("[historico] fonte:", dia, "ligacoes:", ligacoes, "atendidas:", atendidas, "qualificacoes:", conversoes)
+    return row
+  } catch (err) {
+    console.warn("[historico] erro no dia", dia, err instanceof Error ? err.message : String(err))
     return zero
   }
 }
