@@ -10,6 +10,8 @@ import {
 import { generateMockDashboard } from "@/lib/mock-data"
 import { supabase, saveAnalysis } from "@/lib/supabase-server"
 import { maskPhone } from "@/lib/call-analyzer"
+import { normalizePhone } from "@/lib/lista-parser"
+import { classifyRecontato, calcRecontatoEm } from "@/lib/recontato-classifier"
 import type {
   ArgusDesempenhoItem,
   ArgusLigacaoItem,
@@ -192,6 +194,105 @@ async function createPendingRecords(
   }
 }
 
+// ── Salva ligacoesdetalhadas em resultados_discador (fire-and-forget) ──────────
+// Chamado via after() para não bloquear a resposta ao cliente.
+// Idempotente: ligações já salvas são ignoradas por ON CONFLICT.
+async function saveResultadosDiscador(ligacoesItems: ArgusLigacaoItem[]) {
+  if (!supabase || ligacoesItems.length === 0) return
+
+  try {
+    // Coleta telefones para buscar leads em batch
+    const telefonesSet = new Set<string>()
+    for (const item of ligacoesItems) {
+      const tel = normalizePhone(item.telefone ?? item.numero ?? item.numeroDiscado)
+      if (tel) telefonesSet.add(tel)
+    }
+
+    const leadByTelefone = new Map<string, string>()
+    if (telefonesSet.size > 0) {
+      const { data: leadsRows } = await supabase
+        .from("leads")
+        .select("id, telefone_principal")
+        .in("telefone_principal", Array.from(telefonesSet))
+      for (const row of leadsRows ?? []) {
+        if (row.telefone_principal && !leadByTelefone.has(row.telefone_principal)) {
+          leadByTelefone.set(row.telefone_principal, row.id)
+        }
+      }
+    }
+
+    // Monta os registros — usa upsert com ignoreSomethingConflict não disponível nesta versão,
+    // então insere individualmente ignorando erros de duplicata por id_ligacao_argus.
+    const rows = ligacoesItems
+      .filter(item => item.idLigacao || item.nrLead)  // só processa itens com ID identificável
+      .map((item, i) => {
+        const idLig     = item.idLigacao ? String(item.idLigacao) : `nrlead-${item.nrLead}`
+        const telefone  = normalizePhone(item.telefone ?? item.numero ?? item.numeroDiscado)
+        const lead_id   = telefone ? (leadByTelefone.get(telefone) ?? null) : null
+        return {
+          id_ligacao_argus:  idLig,
+          lead_id,
+          campanha_argus:    item.lote ?? item.campanha ?? null,
+          data_ligacao:      item.dataHoraLigacao ?? item.dataHora ?? null,
+          hora_ligacao:      item.dataHoraLigacao ? new Date(item.dataHoraLigacao).getHours() : null,
+          duracao_segundos:  item.tempoSegundos ?? item.duracao ?? null,
+          tabulacao:         item.tabulacao ?? null,
+          sdr_nome:          item.usuarioOperador ?? item.nomeAgente ?? null,
+          converteu:         false,
+          nome_cliente:      item.nomeCliente ?? null,
+          nr_lead_argus:     item.nrLead ?? null,
+          lote_argus:        item.lote ?? null,
+          resultado_ligacao: item.resultadoLigacao ?? null,
+          telefone_discado:  telefone,
+          usuario_operador:  item.usuarioOperador ?? null,
+          _i: i, // descartado abaixo
+        }
+      })
+      .map(({ _i: _, ...r }) => r)
+
+    if (rows.length === 0) return
+
+    // Insert com ON CONFLICT ignorado via ignoreSomethingConflict emulado:
+    // Tenta inserir em lotes; duplicatas retornam erro 23505 que o Supabase converte em erro não-fatal.
+    const BATCH = 50
+    const novosPorId = new Map<string, typeof rows[0]>()
+    for (const r of rows) novosPorId.set(r.id_ligacao_argus, r)
+
+    // Verifica existentes para só inserir novos
+    const { data: existentes } = await supabase
+      .from("resultados_discador")
+      .select("id_ligacao_argus")
+      .in("id_ligacao_argus", rows.map(r => r.id_ligacao_argus))
+
+    const existentesSet = new Set((existentes ?? []).map(e => e.id_ligacao_argus))
+    const novos = rows.filter(r => !existentesSet.has(r.id_ligacao_argus))
+
+    for (let i = 0; i < novos.length; i += BATCH) {
+      const { error } = await supabase
+        .from("resultados_discador")
+        .insert(novos.slice(i, i + BATCH))
+      if (error) console.error("[metrics/saveResultados] insert:", error.message)
+    }
+
+    // Atualiza recontato nos leads cruzados com base na tabulação mais recente
+    const comLead = novos.filter(r => r.lead_id)
+    for (const r of comLead) {
+      const categoria    = classifyRecontato(r.tabulacao, r.resultado_ligacao)
+      const recontato_em = calcRecontatoEm(categoria)
+      await supabase
+        .from("leads")
+        .update({ recontato_em, observacao: `recontato:${categoria}` })
+        .eq("id", r.lead_id!)
+    }
+
+    if (novos.length > 0) {
+      console.log(`[metrics/saveResultados] ${novos.length} novos registros — ${comLead.length} leads cruzados`)
+    }
+  } catch (err) {
+    console.error("[metrics/saveResultados] erro:", err instanceof Error ? err.message : err)
+  }
+}
+
 export async function GET() {
   if (!BASE_URL || !TOKEN) {
     return NextResponse.json(
@@ -244,6 +345,7 @@ export async function GET() {
     // Fire-and-forget: create pending records for calls seen in tabulacoesdetalhadas
     // that don't yet have an analysis in Supabase.
     after(() => createPendingRecords(tabulacaoItems, CAMPAIGN_ID))
+    after(() => saveResultadosDiscador(ligacoesItems))
 
     return NextResponse.json({
       metrics,

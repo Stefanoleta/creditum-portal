@@ -71,6 +71,26 @@ interface DuplicataSummary {
   leads_higienizacao:      number
 }
 
+type RecontatoCategoria =
+  | "nao_atendeu" | "mae_atendeu" | "nao_podia_falar" | "nao_gostou"
+  | "terceiro_nao_conhece" | "fora_politica" | "qualificado" | "convertido" | "outros"
+
+interface RecontatoGrupo {
+  categoria:  RecontatoCategoria
+  label:      string
+  count:      number
+  proxima_em: string | null
+}
+
+interface RecontatoLead {
+  id:                 string
+  nome:               string
+  telefone_principal: string | null
+  recontato_em:       string | null
+  observacao:         string | null
+  listas:             { nome_arquivo: string; unidade: string } | null
+}
+
 interface UnidadeMetrica {
   unidade:             string
   score:               number | null
@@ -727,6 +747,244 @@ function HigienizacaoTab({ onResolved }: { onResolved: () => void }) {
   )
 }
 
+// ─── Recontatos ───────────────────────────────────────────────────────────────
+
+const CAT_COLOR: Record<RecontatoCategoria, { dot: string; badge: string; ring: string }> = {
+  nao_atendeu:           { dot: "bg-gray-400",    badge: "bg-gray-50 text-gray-500 border-gray-200",         ring: "ring-gray-100"   },
+  nao_podia_falar:       { dot: "bg-amber-400",   badge: "bg-amber-50 text-amber-700 border-amber-200",      ring: "ring-amber-100"  },
+  mae_atendeu:           { dot: "bg-blue-400",    badge: "bg-blue-50 text-blue-700 border-blue-200",         ring: "ring-blue-100"   },
+  nao_gostou:            { dot: "bg-red-400",     badge: "bg-red-50 text-red-600 border-red-200",            ring: "ring-red-100"    },
+  terceiro_nao_conhece:  { dot: "bg-purple-400",  badge: "bg-purple-50 text-purple-700 border-purple-200",   ring: "ring-purple-100" },
+  fora_politica:         { dot: "bg-red-600",     badge: "bg-red-100 text-red-700 border-red-300",           ring: "ring-red-200"    },
+  qualificado:           { dot: "bg-emerald-400", badge: "bg-emerald-50 text-emerald-700 border-emerald-200", ring: "ring-emerald-100"},
+  convertido:            { dot: "bg-emerald-600", badge: "bg-emerald-100 text-emerald-800 border-emerald-300", ring: "ring-emerald-200"},
+  outros:                { dot: "bg-gray-300",    badge: "bg-gray-50 text-gray-400 border-gray-200",         ring: "ring-gray-100"   },
+}
+
+function RecontatosTab() {
+  const [grupos, setGrupos]                 = useState<RecontatoGrupo[]>([])
+  const [loading, setLoading]               = useState(true)
+  const [error, setError]                   = useState<string | null>(null)
+  const [expanded, setExpanded]             = useState<RecontatoCategoria | null>(null)
+  const [leads, setLeads]                   = useState<RecontatoLead[]>([])
+  const [leadsTotal, setLeadsTotal]         = useState(0)
+  const [leadsPage, setLeadsPage]           = useState(1)
+  const [leadsLoading, setLeadsLoading]     = useState(false)
+  const [gerandoLista, setGerandoLista]     = useState<RecontatoCategoria | null>(null)
+  const [listaGerada, setListaGerada]       = useState<string | null>(null)
+  const PER_PAGE = 50
+
+  const loadGrupos = useCallback(() => {
+    setLoading(true)
+    setError(null)
+    fetch("/api/leads/recontatos")
+      .then(async r => {
+        const d = await r.json()
+        if (!r.ok) { setError(d.error ?? `Erro ${r.status}`); return }
+        setGrupos(d.grupos ?? [])
+      })
+      .catch(e => setError(e instanceof Error ? e.message : "Erro de rede"))
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { loadGrupos() }, [loadGrupos])
+
+  const loadLeads = useCallback((cat: RecontatoCategoria, page: number) => {
+    setLeadsLoading(true)
+    fetch(`/api/leads/recontatos?categoria=${cat}&page=${page}&per_page=${PER_PAGE}`)
+      .then(async r => {
+        const d = await r.json()
+        if (!r.ok) return
+        setLeads(d.leads ?? [])
+        setLeadsTotal(d.total ?? 0)
+      })
+      .finally(() => setLeadsLoading(false))
+  }, [])
+
+  function toggleExpand(cat: RecontatoCategoria) {
+    if (expanded === cat) { setExpanded(null); setLeads([]); return }
+    setExpanded(cat)
+    setLeadsPage(1)
+    loadLeads(cat, 1)
+  }
+
+  useEffect(() => {
+    if (expanded) loadLeads(expanded, leadsPage)
+  }, [expanded, leadsPage, loadLeads])
+
+  function gerarLista(cat: RecontatoCategoria, count: number) {
+    setGerandoLista(cat)
+    // Busca todos os leads da categoria para montar CSV
+    fetch(`/api/leads/recontatos?categoria=${cat}&page=1&per_page=200`)
+      .then(r => r.json())
+      .then(d => {
+        const rows: RecontatoLead[] = d.leads ?? []
+        const linhas = ["Nome,Telefone,Unidade,Recontato Em"]
+        for (const l of rows) {
+          const unidade = (l.listas as { unidade?: string } | null)?.unidade ?? ""
+          linhas.push(`"${l.nome}","${l.telefone_principal ?? ""}","${unidade}","${l.recontato_em ?? ""}"`)
+        }
+        const csv  = linhas.join("\n")
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement("a")
+        a.href     = url
+        a.download = `recontatos-${cat}-${new Date().toISOString().split("T")[0]}.csv`
+        a.click()
+        URL.revokeObjectURL(url)
+        setListaGerada(`${count} leads exportados`)
+        setTimeout(() => setListaGerada(null), 4000)
+      })
+      .finally(() => setGerandoLista(null))
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16 gap-3 text-sm text-gray-400">
+        <div className="w-4 h-4 border-2 border-gray-200 border-t-emerald-500 rounded-full animate-spin" />
+        Carregando recontatos...
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-lg px-4 py-3">
+        <AlertTriangle className="w-4 h-4 shrink-0" />
+        Erro ao carregar: {error}
+        <button className="ml-auto text-xs underline" onClick={loadGrupos}>Tentar novamente</button>
+      </div>
+    )
+  }
+
+  if (grupos.length === 0) {
+    return (
+      <div className="bg-white rounded-lg shadow-sm p-5">
+        <div className="flex flex-col items-center gap-2 py-12 text-gray-400">
+          <Clock className="w-8 h-8 text-gray-200" />
+          <p className="text-sm">Nenhum lead com recontato agendado.</p>
+          <p className="text-xs text-gray-300">Execute o backfill para cruzar ligações do Argus com as listas.</p>
+        </div>
+      </div>
+    )
+  }
+
+  const totalLeads = grupos.reduce((s, g) => s + g.count, 0)
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm p-5 flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-700">Recontatos por Categoria</h2>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {totalLeads} lead{totalLeads !== 1 ? "s" : ""} com recontato agendado
+          </p>
+        </div>
+        <button onClick={loadGrupos} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+          <RefreshCw className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {listaGerada && (
+        <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 rounded-lg px-4 py-2">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          {listaGerada}
+        </div>
+      )}
+
+      <div className="flex flex-col divide-y divide-gray-50">
+        {grupos.map(grupo => {
+          const cfg   = CAT_COLOR[grupo.categoria]
+          const isExp = expanded === grupo.categoria
+          return (
+            <div key={grupo.categoria} className="py-1">
+              <button
+                onClick={() => toggleExpand(grupo.categoria)}
+                className={cn(
+                  "w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left",
+                  isExp ? "bg-gray-50" : "hover:bg-gray-50/70"
+                )}
+              >
+                <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", cfg.dot)} />
+                <span className="text-sm font-medium text-gray-800 flex-1">{grupo.label}</span>
+                <span className={cn("text-[11px] font-bold border rounded-full px-2 py-0.5 tabular-nums", cfg.badge)}>
+                  {grupo.count}
+                </span>
+                {grupo.proxima_em && (
+                  <span className="text-[11px] text-gray-400 tabular-nums hidden sm:inline">
+                    próx. {fmtDate(grupo.proxima_em)}
+                  </span>
+                )}
+                <button
+                  onClick={e => { e.stopPropagation(); gerarLista(grupo.categoria, grupo.count) }}
+                  disabled={gerandoLista === grupo.categoria}
+                  className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-2 py-1 hover:bg-emerald-100 transition-colors disabled:opacity-50 hidden sm:block"
+                >
+                  {gerandoLista === grupo.categoria ? "..." : "Gerar Lista"}
+                </button>
+                <ChevronRight className={cn("w-3.5 h-3.5 text-gray-300 shrink-0 transition-transform", isExp && "rotate-90")} />
+              </button>
+
+              {isExp && (
+                <div className="ml-5 mt-1 mb-2">
+                  {leadsLoading ? (
+                    <div className="flex items-center gap-2 py-4 text-xs text-gray-400">
+                      <div className="w-3 h-3 border-2 border-gray-200 border-t-emerald-500 rounded-full animate-spin" />
+                      Carregando...
+                    </div>
+                  ) : (
+                    <>
+                      <div className="overflow-x-auto rounded-lg border border-gray-100">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-gray-50 text-gray-400 font-medium">
+                              <th className="px-3 py-2 text-left">Nome</th>
+                              <th className="px-3 py-2 text-left">Telefone</th>
+                              <th className="px-3 py-2 text-left">Unidade</th>
+                              <th className="px-3 py-2 text-left">Recontato em</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-50">
+                            {leads.map(l => (
+                              <tr key={l.id} className="bg-white hover:bg-gray-50/50">
+                                <td className="px-3 py-2 font-medium text-gray-800">{l.nome}</td>
+                                <td className="px-3 py-2 text-gray-500 tabular-nums">{l.telefone_principal ?? "—"}</td>
+                                <td className="px-3 py-2 text-gray-500">
+                                  {(l.listas as { unidade?: string } | null)?.unidade ?? "—"}
+                                </td>
+                                <td className="px-3 py-2 text-gray-500 tabular-nums">{fmtDate(l.recontato_em)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {leadsTotal > PER_PAGE && (
+                        <div className="flex items-center justify-end gap-2 mt-2">
+                          <span className="text-[11px] text-gray-400">{leadsTotal} total</span>
+                          <button
+                            disabled={leadsPage === 1}
+                            onClick={() => setLeadsPage(p => p - 1)}
+                            className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-600 disabled:opacity-30"
+                          >Anterior</button>
+                          <button
+                            disabled={(leadsPage - 1) * PER_PAGE + leads.length >= leadsTotal}
+                            onClick={() => setLeadsPage(p => p + 1)}
+                            className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-600 disabled:opacity-30"
+                          >Próxima</button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ─── Termômetro de Unidades ───────────────────────────────────────────────────
 
 const STATUS_CONFIG = {
@@ -880,7 +1138,7 @@ function TermometroTab() {
 
 export default function ListasPage() {
   // ── Tab
-  const [activeTab, setActiveTab] = useState<"listas" | "higienizacao" | "termometro">("listas")
+  const [activeTab, setActiveTab] = useState<"listas" | "higienizacao" | "termometro" | "recontatos">("listas")
   const [higienizacaoCount, setHigienizacaoCount] = useState(0)
 
   // ── Upload state
@@ -1086,6 +1344,18 @@ export default function ListasPage() {
             <Thermometer className="w-3.5 h-3.5" />
             Termômetro
           </button>
+          <button
+            onClick={() => setActiveTab("recontatos")}
+            className={cn(
+              "flex items-center gap-1.5 text-xs font-medium px-4 py-2 border-b-2 transition-colors -mb-px",
+              activeTab === "recontatos"
+                ? "border-blue-500 text-blue-700"
+                : "border-transparent text-gray-400 hover:text-gray-600"
+            )}
+          >
+            <Clock className="w-3.5 h-3.5" />
+            Recontatos
+          </button>
         </div>
 
         {activeTab === "higienizacao" && (
@@ -1093,6 +1363,8 @@ export default function ListasPage() {
         )}
 
         {activeTab === "termometro" && <TermometroTab />}
+
+        {activeTab === "recontatos" && <RecontatosTab />}
 
         {activeTab === "listas" && <>
 

@@ -89,7 +89,7 @@ export function parseFilename(filename: string): {
 //   "993758014"      → sem zeros   → "993758014"    (9d)  → sem DDD     ⚠️
 //   "21993758014"    → sem zeros   → "21993758014"  (11d) → válido      ✓
 
-function normalizePhone(raw: string | number | null | undefined): string | null {
+export function normalizePhone(raw: string | number | null | undefined): string | null {
   if (raw == null) return null
   let digits = String(raw).replace(/\D/g, "")
   if (!digits) return null

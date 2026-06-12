@@ -67,6 +67,8 @@ export interface ArgusLigacaoItem {
 
   // Lead / contact
   nomeCliente?: string          // confirmed: lead name
+  nrLead?: number               // confirmed: Argus internal lead ID
+  idLigacao?: string | number   // confirmed: call ID (top-level for ligacoesdetalhadas)
   telefone?: string             // confirmed
   numero?: string
   numeroDiscado?: string
