@@ -139,33 +139,112 @@ function buildHourlyChartFromCalls(
   }
 }
 
+const MAX_ANALYSES_PER_SDR = 10
+const MAX_QUALIFICA        = 3
+const MAX_CURTAS           = 4
+const MAX_OTHER            = 3
+
+type PendingEntry = { idLigacao: string; tab: ArgusTabulacaoItem }
+
 async function createPendingRecords(
   tabulacaoItems: ArgusTabulacaoItem[],
   campaignId: number
 ): Promise<void> {
   if (!supabase) return
 
-  // Deduplicate by idLigacao — keep last tabulação per call
+  // Deduplicate by idLigacao — keep last tabulação per call.
+  // Only operator tabulações (not DISCADOR) carry a meaningful SDR name.
   const byLigacao = new Map<string, ArgusTabulacaoItem>()
   for (const tab of tabulacaoItems) {
+    if ((tab.origemTabulacao ?? "").toUpperCase().includes("DISCADOR")) continue
     const id = String(tab.ligacaoRelevante?.idLigacao ?? "")
     if (id) byLigacao.set(id, tab)
   }
   if (byLigacao.size === 0) return
 
   const callIds = Array.from(byLigacao.keys()).map((id) => `argus-${id}`)
+  const todayStr = new Date().toISOString().split("T")[0]
 
-  // Batch-check which already exist in Supabase
-  const { data: existing } = await supabase
-    .from("call_analyses")
-    .select("call_id")
-    .in("call_id", callIds)
-  const existingSet = new Set((existing ?? []).map((r) => r.call_id as string))
+  // Parallel: which call_ids already exist + today's count per SDR (all statuses)
+  const [existingRes, todayRes] = await Promise.all([
+    supabase.from("call_analyses").select("call_id").in("call_id", callIds),
+    supabase
+      .from("call_analyses")
+      .select("sdr_name")
+      .gte("started_at", `${todayStr}T00:00:00`)
+      .lte("started_at", `${todayStr}T23:59:59`),
+  ])
+
+  const existingSet = new Set((existingRes.data ?? []).map((r) => r.call_id as string))
+
+  // Count today's analyses per SDR (uppercase key for case-insensitive matching)
+  const todayCountBySdr = new Map<string, number>()
+  for (const row of (todayRes.data ?? [])) {
+    const name = ((row as { sdr_name?: string }).sdr_name ?? "").toUpperCase().trim()
+    if (name) todayCountBySdr.set(name, (todayCountBySdr.get(name) ?? 0) + 1)
+  }
+
+  // Group new calls (not yet in DB) into per-SDR priority buckets
+  const bySdr = new Map<string, { qualifica: PendingEntry[]; curta: PendingEntry[]; other: PendingEntry[] }>()
 
   for (const [idLigacao, tab] of byLigacao) {
     const call_id = `argus-${idLigacao}`
     if (existingSet.has(call_id)) continue
 
+    const sdrKey = (tab.usuarioOperador ?? "SDR").toUpperCase().trim()
+    if (!bySdr.has(sdrKey)) bySdr.set(sdrKey, { qualifica: [], curta: [], other: [] })
+    const bucket = bySdr.get(sdrKey)!
+
+    const label    = (tab.tabulado ?? tab.tabulacao ?? "").toUpperCase()
+    const duration = tab.ligacaoRelevante?.tempoSegundos ?? 0
+
+    if (label.includes("QUALIFICA")) {
+      bucket.qualifica.push({ idLigacao, tab })
+    } else if (duration < 30) {
+      bucket.curta.push({ idLigacao, tab })
+    } else {
+      bucket.other.push({ idLigacao, tab })
+    }
+  }
+
+  // Select calls per SDR respecting daily limit and priority order
+  const selected: PendingEntry[] = []
+
+  for (const [sdrKey, buckets] of bySdr) {
+    const todayCount = todayCountBySdr.get(sdrKey) ?? 0
+    let slots = MAX_ANALYSES_PER_SDR - todayCount
+    if (slots <= 0) {
+      console.log(`[metrics] SDR ${sdrKey} já tem ${todayCount} análises hoje — pulando`)
+      continue
+    }
+
+    const pick: PendingEntry[] = []
+
+    // P1: QUALIFICA
+    const p1 = buckets.qualifica.slice(0, Math.min(MAX_QUALIFICA, slots))
+    pick.push(...p1)
+    slots -= p1.length
+
+    // P2: curtas < 30s
+    if (slots > 0) {
+      const p2 = buckets.curta.slice(0, Math.min(MAX_CURTAS, slots))
+      pick.push(...p2)
+      slots -= p2.length
+    }
+
+    // P3: demais (aleatório)
+    if (slots > 0) {
+      const shuffled = buckets.other.slice().sort(() => Math.random() - 0.5)
+      pick.push(...shuffled.slice(0, Math.min(MAX_OTHER, slots)))
+    }
+
+    console.log(`[metrics] SDR ${sdrKey}: hoje=${todayCount} selecionadas=${pick.length} (P1=${Math.min(p1.length, MAX_QUALIFICA)} P2=${Math.min(buckets.curta.length, MAX_CURTAS)} P3=até${MAX_OTHER})`)
+    selected.push(...pick)
+  }
+
+  // Create pending records for selected calls
+  for (const { idLigacao, tab } of selected) {
+    const call_id = `argus-${idLigacao}`
     const pending: CallAnalysis = {
       call_id,
       sdr_name:         tab.usuarioOperador ?? "SDR",
@@ -190,7 +269,7 @@ async function createPendingRecords(
     }
 
     await saveAnalysis(pending)
-    console.log(`[metrics] pending criado: ${call_id}`)
+    console.log(`[metrics] pending criado: ${call_id} (${tab.usuarioOperador ?? "SDR"})`)
   }
 }
 
