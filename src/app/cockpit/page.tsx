@@ -5,7 +5,6 @@ import Link from "next/link"
 import { useDashboard } from "@/hooks/useDashboard"
 import { MetricCard } from "@/components/dashboard/MetricCard"
 import { SDRRanking } from "@/components/dashboard/SDRRanking"
-import { LiveCalls } from "@/components/dashboard/LiveCalls"
 import { OccurrencesBar } from "@/components/dashboard/OccurrencesBar"
 import { StatusBar } from "@/components/dashboard/StatusBar"
 import { MockDataBanner } from "@/components/ui-shared/MockDataBanner"
@@ -84,7 +83,7 @@ export default function CockpitPage() {
     )
   }
 
-  const { metrics, sdrs, live_calls, top_objections, occurrences, last_updated } = data
+  const { metrics, sdrs, top_objections, occurrences, last_updated } = data
 
   const taxaConvGood   = metrics.taxa_conversao >= 10
   const taxaContatoGood = metrics.taxa_contato >= 65
@@ -226,12 +225,6 @@ export default function CockpitPage() {
               : sdrs.map(sdr => <SdrQualidadeCard key={sdr.id} sdr={sdr} />)
             }
           </div>
-          {live_calls.length > 0 && (
-            <div className="border-t border-gray-100 pt-3 shrink-0">
-              <p className="text-[10px] text-gray-400 mb-2">Ligações em andamento</p>
-              <LiveCalls calls={live_calls} />
-            </div>
-          )}
         </div>
 
         {/* Row 3: Ocorrências — valores exatos do Argus, largura total */}

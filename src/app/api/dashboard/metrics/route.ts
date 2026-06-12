@@ -296,19 +296,16 @@ async function saveResultadosDiscador(ligacoesItems: ArgusLigacaoItem[]) {
 // ── Per-SDR quality metrics from tabulacoesdetalhadas ────────────────────────
 
 function buildSdrQuality(items: ArgusTabulacaoItem[]) {
-  type Entry = { nao_tabulou: number; tabulou: number; cliente_desligou: number }
+  type Entry = { tabulou: number; cliente_desligou: number }
   const map = new Map<string, Entry>()
   for (const item of items) {
+    if (item.origemTabulacao !== "OPERADOR") continue
     const op = (item.usuarioOperador ?? "").toUpperCase().trim()
     if (!op || op === "DISCADOR") continue
-    if (!map.has(op)) map.set(op, { nao_tabulou: 0, tabulou: 0, cliente_desligou: 0 })
+    if (!map.has(op)) map.set(op, { tabulou: 0, cliente_desligou: 0 })
     const e = map.get(op)!
-    if (item.origemTabulacao === "DISCADOR") {
-      e.nao_tabulou++
-    } else {
-      e.tabulou++
-      if ((item.tabulado ?? "").toUpperCase() === "CLIENTE DESLIGOU") e.cliente_desligou++
-    }
+    e.tabulou++
+    if ((item.tabulado ?? "").toUpperCase() === "CLIENTE DESLIGOU") e.cliente_desligou++
   }
   return map
 }
@@ -322,7 +319,7 @@ function lookupSdrQuality(name: string, map: ReturnType<typeof buildSdrQuality>)
       if (key.includes(firstName)) return val
     }
   }
-  return { nao_tabulou: 0, tabulou: 0, cliente_desligou: 0 }
+  return { tabulou: 0, cliente_desligou: 0 }
 }
 
 export async function GET() {
@@ -369,14 +366,18 @@ export async function GET() {
     const metrics = buildMetrics(sdrs, liveCalls, total_conversoes, totalDiscadas, totalAtendidas)
 
     // Enrich SDRs with per-operator quality metrics from tabulacoesdetalhadas
+    // nao_tabulou = ligacoes_atendidas (desempenho) - tabulacoes do operador (tabulacoesdetalhadas)
+    // origemTabulacao=DISCADOR registros não têm SDR identificável, por isso usamos a diferença
     const sdrQualityMap = buildSdrQuality(tabulacaoItems)
     const enrichedSdrs = sdrs.map(sdr => {
-      const q = lookupSdrQuality(sdr.name, sdrQualityMap)
-      const total = q.nao_tabulou + q.tabulou
+      const q          = lookupSdrQuality(sdr.name, sdrQualityMap)
+      const atendidas  = sdr.ligacoes_atendidas
+      const nao_tabulou = Math.max(0, atendidas - q.tabulou)
+      const total       = nao_tabulou + q.tabulou
       return {
         ...sdr,
-        pct_nao_tabulou:      total      > 0 ? Math.round((q.nao_tabulou      / total)      * 1000) / 10 : 0,
-        pct_cliente_desligou: q.tabulou  > 0 ? Math.round((q.cliente_desligou / q.tabulou)  * 1000) / 10 : 0,
+        pct_nao_tabulou:      total     > 0 ? Math.round((nao_tabulou        / total)     * 1000) / 10 : 0,
+        pct_cliente_desligou: q.tabulou > 0 ? Math.round((q.cliente_desligou / q.tabulou) * 1000) / 10 : 0,
       }
     })
 
