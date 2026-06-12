@@ -197,7 +197,7 @@ export function adaptTabulacoes(items: ArgusTabulacaoItem[]): {
   const textCount = new Map<string, number>()
 
   // Exclude auto-registered non-tabulations — those inflate occurrences with noise
-  const operatorItems = items.filter(t => t.origemTabulacao !== "DISCADOR")
+  const operatorItems = items.filter(t => !(t.origemTabulacao ?? "").toUpperCase().includes("DISCADOR"))
 
   for (const item of operatorItems) {
     // Exact text from Argus — tabulacaoDesc first (confirmed field), then tabulado

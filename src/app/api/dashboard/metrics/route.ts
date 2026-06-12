@@ -285,7 +285,7 @@ function buildSdrQuality(items: ArgusTabulacaoItem[]) {
   type Entry = { tabulou: number; cliente_desligou: number }
   const map = new Map<string, Entry>()
   for (const item of items) {
-    if ((item.origemTabulacao ?? "").toUpperCase() !== "OPERADOR") continue
+    if (!(item.origemTabulacao ?? "").toUpperCase().includes("OPERADOR")) continue
     const op = (item.usuarioOperador ?? "").toUpperCase().trim()
     if (!op || op === "DISCADOR") continue
     if (!map.has(op)) map.set(op, { tabulou: 0, cliente_desligou: 0 })
