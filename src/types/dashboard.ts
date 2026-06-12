@@ -18,6 +18,8 @@ export interface SDR {
   pos_chamada_segundos?: number          // tempoPosChamadaSegundos
   pausa_segundos?: number                // tempoPausaSegundos
   taxa_ocupacao?: number                 // (atendimento + pos_chamada) / logado * 100
+  pct_nao_tabulou?: number               // % ligações atendidas sem tabulação pelo operador
+  pct_cliente_desligou?: number          // % tabulações operador onde cliente desligou
 }
 
 export interface LiveCall {

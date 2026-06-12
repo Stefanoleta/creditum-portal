@@ -12,6 +12,52 @@ import { MockDataBanner } from "@/components/ui-shared/MockDataBanner"
 import { formatSeconds, formatPercent } from "@/lib/utils"
 import { cn } from "@/lib/utils"
 import { AlertCircle, BarChart3, Microscope, List } from "lucide-react"
+import type { SDR } from "@/types/dashboard"
+
+function QualidadeBar({ label, value, amberAbove, redAbove }: {
+  label: string; value: number; amberAbove: number; redAbove: number
+}) {
+  const isRed   = value > redAbove
+  const isAmber = !isRed && value > amberAbove
+  const barColor  = isRed ? "bg-red-500"   : isAmber ? "bg-amber-400"   : "bg-emerald-500"
+  const textColor = isRed ? "text-red-600" : isAmber ? "text-amber-600" : "text-emerald-600"
+  return (
+    <div className="flex flex-col gap-0.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] text-gray-400">{label}</span>
+        <span className={cn("text-[11px] font-semibold tabular-nums", textColor)}>
+          {value.toFixed(1)}%
+        </span>
+      </div>
+      <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+        <div className={cn("h-full rounded-full transition-all", barColor)}
+             style={{ width: `${Math.min(100, value)}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function SdrQualidadeCard({ sdr }: { sdr: SDR }) {
+  const isOnline = sdr.status !== "offline"
+  return (
+    <div className={cn("flex flex-col gap-2.5 p-3 rounded-lg", isOnline ? "bg-gray-50" : "bg-gray-50/50 opacity-60")}>
+      <div className="flex items-center gap-2 min-w-0">
+        <span className={cn("h-2 w-2 rounded-full shrink-0",
+          sdr.status === "em_ligacao" ? "bg-emerald-500 animate-pulse"
+          : sdr.status === "disponivel" ? "bg-blue-400"
+          : "bg-gray-300")} />
+        <span className="text-xs font-semibold text-gray-700 truncate">{sdr.name}</span>
+        <span className="text-[9px] text-gray-400 shrink-0 ml-auto">
+          {sdr.status === "em_ligacao" ? "em ligação"
+           : sdr.status === "disponivel" ? "disponível"
+           : "offline"}
+        </span>
+      </div>
+      <QualidadeBar label="Não tabulou"       value={sdr.pct_nao_tabulou      ?? 0} amberAbove={10} redAbove={20} />
+      <QualidadeBar label="Cliente desligou"  value={sdr.pct_cliente_desligou ?? 0} amberAbove={40} redAbove={60} />
+    </div>
+  )
+}
 
 export default function CockpitPage() {
   const { data, isLoading, error, source, tabulacoesSource } = useDashboard()
@@ -171,12 +217,21 @@ export default function CockpitPage() {
 
         <div className="col-span-7 bg-white rounded-lg shadow-sm p-4 flex flex-col gap-3 min-h-[260px]">
           <div className="flex items-center justify-between shrink-0">
-            <h2 className="text-sm font-semibold text-gray-600">Ligações do Dia</h2>
-            <span className="text-[10px] text-gray-300">{live_calls.length} registros</span>
+            <h2 className="text-sm font-semibold text-gray-600">Qualidade por SDR</h2>
+            <span className="text-[10px] text-gray-300">hoje</span>
           </div>
-          <div className="flex-1">
-            <LiveCalls calls={live_calls} />
+          <div className="flex-1 grid grid-cols-2 gap-3 content-start overflow-y-auto">
+            {sdrs.length === 0
+              ? <p className="col-span-2 text-xs text-gray-400 self-center text-center">Sem agentes</p>
+              : sdrs.map(sdr => <SdrQualidadeCard key={sdr.id} sdr={sdr} />)
+            }
           </div>
+          {live_calls.length > 0 && (
+            <div className="border-t border-gray-100 pt-3 shrink-0">
+              <p className="text-[10px] text-gray-400 mb-2">Ligações em andamento</p>
+              <LiveCalls calls={live_calls} />
+            </div>
+          )}
         </div>
 
         {/* Row 3: Ocorrências — valores exatos do Argus, largura total */}
