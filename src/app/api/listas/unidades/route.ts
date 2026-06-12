@@ -1,26 +1,27 @@
 import { NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase-server"
+import { normalizePhone } from "@/lib/lista-parser"
 
 // GET /api/listas/unidades
 // Retorna métricas por unidade para o Termômetro de Unidades.
-// Score 0-100: quanto maior, mais pronta a unidade está para nova abordagem.
+// Score = 100 - (contatos_definitivos / total_leads * 100)
+// Score 100 = nenhuma ligação definitiva; decresce à medida que contatos definitivos se acumulam.
 
 export interface UnidadeMetrica {
-  unidade: string
-  score: number | null       // null = dados insuficientes (< 2 listas)
-  status: "pronta" | "em_andamento" | "descanso" | "insuficiente"
-  total_leads: number
-  ultima_lista_em: string    // ISO date da lista mais recente
-  dias_sem_nova_lista: number
-  taxa_conversao: number | null  // qualificacoes / leads_abordados últimos 90d, ou null
-  qtd_listas: number
+  unidade:              string
+  score:                number          // 0-100
+  status:               "pronta" | "em_andamento" | "descanso"
+  total_leads:          number
+  contatos_definitivos: number
+  qtd_listas:           number
+  ultima_lista_em:      string
 }
 
-const TODAY_MS = Date.now()
-
-function daysSince(isoDate: string): number {
-  return Math.floor((TODAY_MS - new Date(isoDate + "T00:00:00").getTime()) / 86_400_000)
-}
+// Categorias de tabulacao_ia que encerram definitivamente o potencial do lead
+// "não gostou" → nao_gostou_proposta
+// "não tem interesse" → recusa_definitiva
+// "já é aluno" → ja_resolveu
+const DEFINITIVE_CATS = new Set(["nao_gostou_proposta", "recusa_definitiva", "ja_resolveu"])
 
 function scoreStatus(score: number): "pronta" | "em_andamento" | "descanso" {
   if (score >= 70) return "pronta"
@@ -33,7 +34,7 @@ export async function GET() {
     return NextResponse.json({ unidades: [], warning: "Supabase não configurado" })
   }
 
-  // Busca todas as listas agrupando por unidade
+  // Busca todas as listas ordenadas por data (desc)
   const { data: listas, error: listasErr } = await supabase
     .from("listas")
     .select("id, unidade, data_lista, total_leads, uploaded_at")
@@ -47,109 +48,103 @@ export async function GET() {
     return NextResponse.json({ unidades: [] })
   }
 
-  // Agrupa por unidade
-  const porUnidade = new Map<string, typeof listas>()
+  // Constrói índices por unidade
+  const listasById          = new Map<string, string>()   // lista_id → unidade
+  const totalLeadsByUnidade = new Map<string, number>()
+  const qtdListasByUnidade  = new Map<string, number>()
+  const ultimaListaByUnidade = new Map<string, string>()
+
   for (const lista of listas) {
     const u = lista.unidade ?? "(sem unidade)"
-    if (!porUnidade.has(u)) porUnidade.set(u, [])
-    porUnidade.get(u)!.push(lista)
+    listasById.set(lista.id, u)
+    totalLeadsByUnidade.set(u, (totalLeadsByUnidade.get(u) ?? 0) + (lista.total_leads ?? 0))
+    qtdListasByUnidade.set(u, (qtdListasByUnidade.get(u) ?? 0) + 1)
+    if (!ultimaListaByUnidade.has(u)) {
+      ultimaListaByUnidade.set(u, lista.data_lista ?? lista.uploaded_at?.split("T")[0] ?? "")
+    }
   }
 
-  // Total de leads por unidade nos últimos 30 dias (para velocidade de esgotamento)
-  const hoje = new Date()
-  const limite30 = new Date(hoje); limite30.setDate(hoje.getDate() - 30)
-  const limite90 = new Date(hoje); limite90.setDate(hoje.getDate() - 90)
+  // Busca análises com coaching_data (onde tabulacao_ia é armazenada)
+  const { data: analyses } = await supabase
+    .from("call_analyses")
+    .select("coaching_data, pending_payload")
+    .not("coaching_data", "is", null)
 
-  // Busca leads abordados e qualificados (quando resultados_discador estiver populado)
-  // Por ora, resultados_discador está vazio — taxa_conversao = null enquanto não há dados.
-  // Usa total_leads das listas como proxy de "leads disponíveis".
+  // Extrai phones normalizados de análises definitivas (1 phone por Set = sem duplicatas por chamada)
+  const definitivePhones = new Set<string>()
 
+  for (const a of analyses ?? []) {
+    const cd    = a.coaching_data as Record<string, unknown> | null
+    const tabIa = cd?.tabulacao_ia as { categoria?: string } | null
+    if (!tabIa?.categoria || !DEFINITIVE_CATS.has(tabIa.categoria)) continue
+
+    let payload: Record<string, unknown> | null = null
+    try { payload = a.pending_payload ? JSON.parse(a.pending_payload as string) : null } catch { continue }
+
+    const rawPhone = (
+      payload?.telefone ??
+      (payload?.ligacaoRelevante as Record<string, unknown> | null)?.telefone ??
+      null
+    ) as string | null | undefined
+
+    const normalized = normalizePhone(rawPhone)
+    if (normalized) definitivePhones.add(normalized)
+  }
+
+  // Mapeia phones → unidade via leads table (deduplicado por lead_id)
+  const definitivesByUnidade = new Map<string, number>()
+
+  if (definitivePhones.size > 0) {
+    const phonesArray = [...definitivePhones]
+    const seenLeadIds = new Set<string>()
+    const BATCH = 500
+
+    for (let i = 0; i < phonesArray.length; i += BATCH) {
+      const batch = phonesArray.slice(i, i + BATCH)
+
+      const [{ data: byPrimary }, { data: bySecondary }] = await Promise.all([
+        supabase
+          .from("leads")
+          .select("id, lista_id")
+          .in("telefone_principal", batch),
+        supabase
+          .from("leads")
+          .select("id, lista_id")
+          .in("telefone_secundario", batch),
+      ])
+
+      for (const lead of [...(byPrimary ?? []), ...(bySecondary ?? [])]) {
+        if (seenLeadIds.has(lead.id)) continue
+        seenLeadIds.add(lead.id)
+        const u = listasById.get(lead.lista_id)
+        if (!u) continue
+        definitivesByUnidade.set(u, (definitivesByUnidade.get(u) ?? 0) + 1)
+      }
+    }
+  }
+
+  // Compõe métricas por unidade
   const unidades: UnidadeMetrica[] = []
 
-  for (const [unidade, listasDaUnidade] of porUnidade.entries()) {
-    const qtd_listas = listasDaUnidade.length
-    const total_leads = listasDaUnidade.reduce((s, l) => s + (l.total_leads ?? 0), 0)
-
-    // Data mais recente (listas já vêm ordenadas desc, primeira da unidade = mais recente)
-    const ultima_lista_em = listasDaUnidade[0].data_lista ?? listasDaUnidade[0].uploaded_at?.split("T")[0] ?? ""
-    const dias_sem_nova_lista = ultima_lista_em ? daysSince(ultima_lista_em) : 0
-
-    // Dados insuficientes: menos de 2 listas da mesma unidade
-    if (qtd_listas < 2) {
-      unidades.push({
-        unidade,
-        score: null,
-        status: "insuficiente",
-        total_leads,
-        ultima_lista_em,
-        dias_sem_nova_lista,
-        taxa_conversao: null,
-        qtd_listas,
-      })
-      continue
-    }
-
-    // Velocidade de esgotamento = leads nos últimos 30 dias / total geral
-    const leadsUlt30 = listasDaUnidade
-      .filter(l => {
-        const d = l.data_lista ?? l.uploaded_at?.split("T")[0] ?? ""
-        return d >= limite30.toISOString().split("T")[0]
-      })
-      .reduce((s, l) => s + (l.total_leads ?? 0), 0)
-    const velocidade_esgotamento = total_leads > 0 ? Math.min(1, leadsUlt30 / total_leads) : 0
-
-    // Normaliza dias_descanso: 0 = ontem, 90+ = máximo
-    const dias_norm = Math.min(1, dias_sem_nova_lista / 90)
-
-    // Taxa de conversão: ainda sem dados reais → null
-    const taxa_conversao: number | null = null
-    const taxa_norm = taxa_conversao ?? 0
-
-    // Leads disponíveis norm: total_leads normalizado contra max global (calculado abaixo)
-    // Passamos o valor bruto; normalização global acontece após o loop.
-    const score_raw = (dias_norm * 0.4) + (taxa_norm * 0.3) + (velocidade_esgotamento > 0 ? (1 - velocidade_esgotamento) : 0.5) * 0.1
+  for (const [unidade, totalLeads] of totalLeadsByUnidade.entries()) {
+    const definitivos = definitivesByUnidade.get(unidade) ?? 0
+    const score = totalLeads > 0
+      ? Math.max(0, Math.round(100 - (definitivos / totalLeads * 100)))
+      : 100
 
     unidades.push({
       unidade,
-      score: score_raw,   // temporário; normalizado abaixo
-      status: "pronta",   // temporário
-      total_leads,
-      ultima_lista_em,
-      dias_sem_nova_lista,
-      taxa_conversao,
-      qtd_listas,
+      score,
+      status: scoreStatus(score),
+      total_leads: totalLeads,
+      contatos_definitivos: definitivos,
+      qtd_listas: qtdListasByUnidade.get(unidade) ?? 0,
+      ultima_lista_em: ultimaListaByUnidade.get(unidade) ?? "",
     })
   }
 
-  // Normaliza scores 0-100 entre as unidades com dados suficientes
-  const comScore = unidades.filter(u => u.score !== null)
-  if (comScore.length > 0) {
-    const maxRaw = Math.max(...comScore.map(u => u.score as number))
-    const minRaw = Math.min(...comScore.map(u => u.score as number))
-    const range = maxRaw - minRaw || 1
-
-    for (const u of comScore) {
-      const s = u.score as number
-      // leads_disponiveis_norm relativo ao máximo da unidade
-      const leadsNorm = u.total_leads > 0
-        ? (u.total_leads - Math.min(...comScore.map(x => x.total_leads))) /
-          (Math.max(...comScore.map(x => x.total_leads)) - Math.min(...comScore.map(x => x.total_leads)) || 1)
-        : 0
-
-      const scoreComLeads = s + leadsNorm * 0.2
-      const scoreNorm = Math.round(((scoreComLeads - minRaw) / (range + 0.2)) * 100)
-      u.score = Math.max(0, Math.min(100, scoreNorm))
-      u.status = scoreStatus(u.score)
-    }
-  }
-
-  // Ordena: primeiro por score desc (insuficientes no final), depois por unidade
-  unidades.sort((a, b) => {
-    if (a.score === null && b.score === null) return a.unidade.localeCompare(b.unidade)
-    if (a.score === null) return 1
-    if (b.score === null) return -1
-    return b.score - a.score
-  })
+  // Ordena por score desc, desempate por nome
+  unidades.sort((a, b) => b.score - a.score || a.unidade.localeCompare(b.unidade))
 
   return NextResponse.json({ unidades })
 }

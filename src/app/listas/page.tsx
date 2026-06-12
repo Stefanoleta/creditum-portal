@@ -97,14 +97,13 @@ interface RecontatoLead {
 }
 
 interface UnidadeMetrica {
-  unidade:             string
-  score:               number | null
-  status:              "pronta" | "em_andamento" | "descanso" | "insuficiente"
-  total_leads:         number
-  ultima_lista_em:     string
-  dias_sem_nova_lista: number
-  taxa_conversao:      number | null
-  qtd_listas:          number
+  unidade:              string
+  score:                number
+  status:               "pronta" | "em_andamento" | "descanso"
+  total_leads:          number
+  contatos_definitivos: number
+  qtd_listas:           number
+  ultima_lista_em:      string
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -1006,10 +1005,9 @@ function RecontatosTab() {
 // ─── Termômetro de Unidades ───────────────────────────────────────────────────
 
 const STATUS_CONFIG = {
-  pronta:       { label: "Pronta para abordagem", dot: "bg-emerald-400",  ring: "ring-emerald-200",  badge: "bg-emerald-50 text-emerald-700 border-emerald-200",  score: "text-emerald-700" },
-  em_andamento: { label: "Em andamento",           dot: "bg-amber-400",   ring: "ring-amber-200",    badge: "bg-amber-50 text-amber-700 border-amber-200",         score: "text-amber-700"   },
-  descanso:     { label: "Em descanso",            dot: "bg-red-300",     ring: "ring-red-100",      badge: "bg-red-50 text-red-500 border-red-200",               score: "text-red-400"     },
-  insuficiente: { label: "Dados insuficientes",    dot: "bg-gray-300",    ring: "ring-gray-100",     badge: "bg-gray-50 text-gray-400 border-gray-200",            score: "text-gray-400"    },
+  pronta:       { label: "Pronta para abordagem", dot: "bg-emerald-400", ring: "ring-emerald-200", badge: "bg-emerald-50 text-emerald-700 border-emerald-200", score: "text-emerald-700" },
+  em_andamento: { label: "Em andamento",           dot: "bg-amber-400",  ring: "ring-amber-200",   badge: "bg-amber-50 text-amber-700 border-amber-200",        score: "text-amber-700"   },
+  descanso:     { label: "Em descanso",            dot: "bg-red-300",    ring: "ring-red-100",     badge: "bg-red-50 text-red-500 border-red-200",              score: "text-red-400"     },
 }
 
 function UnidadeCard({ u }: { u: UnidadeMetrica }) {
@@ -1024,11 +1022,7 @@ function UnidadeCard({ u }: { u: UnidadeMetrica }) {
           <span className={cn("w-2 h-2 rounded-full shrink-0 mt-0.5", cfg.dot)} />
           <span className="text-sm font-semibold text-gray-800 truncate">{u.unidade}</span>
         </div>
-        {u.score !== null ? (
-          <span className={cn("text-2xl font-bold tabular-nums shrink-0", cfg.score)}>{u.score}</span>
-        ) : (
-          <span className="text-xs text-gray-300 shrink-0 pt-1">—</span>
-        )}
+        <span className={cn("text-2xl font-bold tabular-nums shrink-0", cfg.score)}>{u.score}</span>
       </div>
 
       <span className={cn("self-start text-[10px] font-medium border rounded-full px-2 py-0.5", cfg.badge)}>
@@ -1047,13 +1041,20 @@ function UnidadeCard({ u }: { u: UnidadeMetrica }) {
         <div className="col-span-2">
           <span className="text-gray-400">Última lista: </span>
           <span className="font-medium text-gray-700">{u.ultima_lista_em ? fmtDate(u.ultima_lista_em) : "—"}</span>
-          {u.dias_sem_nova_lista > 0 && (
-            <span className="ml-1 text-gray-400">({u.dias_sem_nova_lista}d atrás)</span>
-          )}
         </div>
         <div className="col-span-2">
-          <span className="text-gray-400">Conversão 90d: </span>
-          <span className="font-medium text-gray-500">{u.taxa_conversao !== null ? `${(u.taxa_conversao * 100).toFixed(1)}%` : "sem dados"}</span>
+          <span className="text-gray-400">Definitivos: </span>
+          <span className={cn(
+            "font-medium tabular-nums",
+            u.contatos_definitivos > 0 ? "text-red-500" : "text-gray-400"
+          )}>
+            {u.contatos_definitivos}
+          </span>
+          {u.total_leads > 0 && (
+            <span className="ml-1 text-gray-400">
+              ({Math.round(u.contatos_definitivos / u.total_leads * 100)}%)
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -1108,16 +1109,14 @@ function TermometroTab() {
     )
   }
 
-  // Separa unidades com e sem score para a pirâmide invertida
-  const comScore    = unidades.filter(u => u.score !== null)
-  const semScore    = unidades.filter(u => u.score === null)
-
   return (
     <div className="bg-white rounded-lg shadow-sm p-5 flex flex-col gap-5">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-semibold text-gray-700">Termômetro de Unidades</h2>
-          <p className="text-xs text-gray-400 mt-0.5">Prioridade de abordagem — quanto maior o score, mais pronta a unidade está para contato</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Score = 100 − (contatos definitivos / total leads × 100) — quanto maior, mais pronta para abordagem
+          </p>
         </div>
         <button onClick={load} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
           <RefreshCw className="w-3.5 h-3.5" />
@@ -1132,22 +1131,14 @@ function TermometroTab() {
             {STATUS_CONFIG[s].label}
           </div>
         ))}
+        <span className="text-gray-300">·</span>
+        <span className="text-gray-400">≥70 pronta · 40–69 andamento · &lt;40 descanso</span>
       </div>
 
-      {/* Pirâmide invertida: cards por score desc */}
+      {/* Cards por score desc */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {comScore.map(u => <UnidadeCard key={u.unidade} u={u} />)}
+        {unidades.map(u => <UnidadeCard key={u.unidade} u={u} />)}
       </div>
-
-      {/* Unidades com dados insuficientes */}
-      {semScore.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">Dados insuficientes (menos de 2 listas)</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {semScore.map(u => <UnidadeCard key={u.unidade} u={u} />)}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
