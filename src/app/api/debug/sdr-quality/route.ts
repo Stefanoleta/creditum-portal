@@ -108,12 +108,22 @@ export async function GET() {
       }
     }
 
-    // Amostra das primeiras 10 tabulações com origemTabulacao e usuarioOperador para inspeção
-    const sample = tabulacaoItems.slice(0, 10).map(t => ({
-      usuarioOperador: t.usuarioOperador,
-      origemTabulacao: t.origemTabulacao,
-      tabulado:        t.tabulado,
-    }))
+    const tabulacoesOperador = tabulacaoItems.filter(t =>
+      (t.origemTabulacao ?? "").toUpperCase().includes("OPERADOR")
+    ).length
+    const tabulacoesDiscador = tabulacaoItems.filter(t =>
+      (t.origemTabulacao ?? "").toUpperCase().includes("DISCADOR")
+    ).length
+
+    // Amostra de até 10 tabulações do operador (exclui registros automáticos do discador)
+    const sample = tabulacaoItems
+      .filter(t => !(t.origemTabulacao ?? "").toUpperCase().includes("DISCADOR"))
+      .slice(0, 10)
+      .map(t => ({
+        usuarioOperador: t.usuarioOperador,
+        origemTabulacao: t.origemTabulacao,
+        tabulado:        t.tabulado,
+      }))
 
     return NextResponse.json({
       usuarioOperadores,
@@ -122,6 +132,8 @@ export async function GET() {
       sdrQualityMap,
       qualityMapKeys: [...qualityMap.keys()],
       tabulacaoItemsTotal: tabulacaoItems.length,
+      tabulacoesOperador,
+      tabulacoesDiscador,
       sample,
     })
   } catch (err) {
