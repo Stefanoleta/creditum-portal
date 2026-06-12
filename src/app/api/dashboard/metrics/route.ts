@@ -375,6 +375,12 @@ export async function GET() {
       }
     })
 
+    console.log("[metrics] enrichedSdrs:", JSON.stringify(enrichedSdrs.map(s => ({
+      name: s.name,
+      pct_nao_tabulou: s.pct_nao_tabulou,
+      pct_cliente_desligou: s.pct_cliente_desligou,
+    }))))
+
     // Build hourly chart from real call timestamps — no fake uniform distribution
     const { chart: hourlyChart, source: hourlySource } = buildHourlyChartFromCalls(
       ligacoesItems,
