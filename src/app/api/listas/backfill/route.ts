@@ -51,14 +51,25 @@ export async function POST(req: NextRequest) {
     if (body.dias && typeof body.dias === "number") dias = Math.min(90, Math.max(1, body.dias))
   } catch { /* usa default */ }
 
-  const ultimosMinutos = dias * 24 * 60
+  // Monta período sem timezone (Argus rejeita "Z" no final)
+  // Formato esperado: "YYYY-MM-DDTHH:mm:ss"
+  function toArgusDate(d: Date): string {
+    const pad = (n: number) => String(n).padStart(2, "0")
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  }
+
+  const fim    = new Date()
+  const inicio = new Date(fim)
+  inicio.setDate(inicio.getDate() - dias)
+  inicio.setHours(0, 0, 0, 0)
 
   let ligacoesItems: ArgusLigacaoItem[] = []
 
   try {
     const raw = await argusPost("report/ligacoesdetalhadas", {
-      ultimosMinutos,
-      idCampanha: CAMPAIGN_ID,
+      IdCampanha:     CAMPAIGN_ID,
+      periodoInicial: toArgusDate(inicio),
+      periodoFinal:   toArgusDate(fim),
     })
     ligacoesItems = extractArray<ArgusLigacaoItem>(raw as Record<string, unknown>, [
       "ligacoesDetalhadas", "itens", "data", "ligacoes", "chamadas",
