@@ -191,9 +191,9 @@ function buildHojeFromItems(
 
   const { total_conversoes: qualificacoes } = adaptTabulacoes(tabulacaoItems)
   const total_tabulacoes = tabulacaoItems.length
-  const nao_tabuladas = Math.max(0, atendidas - total_tabulacoes)
-  const pct_nao_tabulado = atendidas > 0
-    ? Math.round((nao_tabuladas / atendidas) * 1000) / 10 : 0
+  const nao_tabulado_count = tabulacaoItems.filter(t => t.origemTabulacao === "DISCADOR").length
+  const pct_nao_tabulado = total_tabulacoes > 0
+    ? Math.round((nao_tabulado_count / total_tabulacoes) * 1000) / 10 : 0
 
   const taxa_aproveitamento = tentativas > 0
     ? Math.round((atendidas / tentativas) * 1000) / 10 : 0

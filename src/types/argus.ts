@@ -126,6 +126,7 @@ export interface ArgusTabulacaoItem {
   // Confirmed Argus field names from tabulacoesdetalhadas
   tabulado?: string             // confirmed: tabulação text ("CLIENTE DESLIGOU", etc.)
   categoriaTabulacao?: string   // confirmed: high-level category ("SUCESSO", "AGENDAMENTO GRUPO", "RECUSA", "NÃO TABULADO")
+  origemTabulacao?: string      // "DISCADOR" = auto-registered by Argus (SDR didn't tabulate in time); "OPERADOR" = manual
   usuarioOperador?: string      // confirmed: agent name
   idUsuario?: number            // confirmed: agent user ID
   nomeCliente?: string          // confirmed: lead name

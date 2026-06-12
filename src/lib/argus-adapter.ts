@@ -198,13 +198,19 @@ export function adaptTabulacoes(items: ArgusTabulacaoItem[]): {
 
   for (const item of items) {
     // Exact text from Argus — tabulacaoDesc first (confirmed field), then tabulado
-    const label = pickStr(
+    let label = pickStr(
       (item as Record<string, unknown>).tabulacaoDesc as string | undefined,
       item.tabulado,
       item.tabulacao,
       item.descricao,
       "Sem tabulação"
     )
+    // Separate auto-registered non-tabulation (Argus) from operator non-tabulation
+    if (item.origemTabulacao === "DISCADOR") {
+      label = "NÃO TABULADO — Discador"
+    } else if (label.toUpperCase().includes("NÃO TABULADO")) {
+      label = "NÃO TABULADO — Operador"
+    }
     const count = pickNum(item.quantidade, item.qtd, item.total) || 1
 
     textCount.set(label, (textCount.get(label) ?? 0) + count)
