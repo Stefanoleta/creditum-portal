@@ -190,10 +190,10 @@ function buildHojeFromItems(
     ? Math.round((ligacoes_curtas / atendidas) * 1000) / 10 : 0
 
   const { total_conversoes: qualificacoes } = adaptTabulacoes(tabulacaoItems)
-  const total_tabulacoes = tabulacaoItems.length
-  const nao_tabulado_count = tabulacaoItems.filter(t => t.origemTabulacao === "DISCADOR").length
-  const pct_nao_tabulado = total_tabulacoes > 0
-    ? Math.round((nao_tabulado_count / total_tabulacoes) * 1000) / 10 : 0
+  const tabuladas_pelo_operador = tabulacaoItems.filter(t => t.origemTabulacao === "OPERADOR").length
+  const nao_tabulado_count = Math.max(0, atendidas - tabuladas_pelo_operador)
+  const pct_nao_tabulado = atendidas > 0
+    ? Math.round((nao_tabulado_count / atendidas) * 1000) / 10 : 0
 
   const taxa_aproveitamento = tentativas > 0
     ? Math.round((atendidas / tentativas) * 1000) / 10 : 0
