@@ -299,13 +299,13 @@ function buildSdrQuality(items: ArgusTabulacaoItem[]) {
   type Entry = { tabulou: number; cliente_desligou: number }
   const map = new Map<string, Entry>()
   for (const item of items) {
-    if (item.origemTabulacao !== "OPERADOR") continue
+    if ((item.origemTabulacao ?? "").toUpperCase() !== "OPERADOR") continue
     const op = (item.usuarioOperador ?? "").toUpperCase().trim()
     if (!op || op === "DISCADOR") continue
     if (!map.has(op)) map.set(op, { tabulou: 0, cliente_desligou: 0 })
     const e = map.get(op)!
     e.tabulou++
-    if ((item.tabulado ?? "").toUpperCase() === "CLIENTE DESLIGOU") e.cliente_desligou++
+    if ((item.tabulado ?? "").toUpperCase().includes("CLIENTE DESLIGOU")) e.cliente_desligou++
   }
   return map
 }
@@ -369,6 +369,14 @@ export async function GET() {
     // nao_tabulou = ligacoes_atendidas (desempenho) - tabulacoes do operador (tabulacoesdetalhadas)
     // origemTabulacao=DISCADOR registros não têm SDR identificável, por isso usamos a diferença
     const sdrQualityMap = buildSdrQuality(tabulacaoItems)
+
+    // [DEBUG] log temporário — remover após confirmar match de nomes
+    const tabOps = [...new Set(tabulacaoItems.map(t => (t.usuarioOperador ?? "").trim()).filter(Boolean))]
+    console.log("[metrics/debug] usuarioOperador em tabulacoes:", tabOps)
+    console.log("[metrics/debug] origemTabulacao valores:", [...new Set(tabulacaoItems.map(t => t.origemTabulacao ?? "(undefined)"))])
+    console.log("[metrics/debug] SDRs do desempenho:", sdrs.map(s => s.name))
+    console.log("[metrics/debug] sdrQualityMap:", Object.fromEntries(sdrQualityMap))
+
     const enrichedSdrs = sdrs.map(sdr => {
       const q          = lookupSdrQuality(sdr.name, sdrQualityMap)
       const atendidas  = sdr.ligacoes_atendidas
