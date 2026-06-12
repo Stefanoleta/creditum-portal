@@ -7,11 +7,12 @@ export type Formato = "A" | "B" | "C"
 
 export interface ListaMeta {
   nome_arquivo: string
-  unidade: string | null       // null quando não detectado no nome do arquivo
-  tipo_lista: string | null    // null quando não detectado no nome do arquivo
-  data_lista: string | null    // ISO date string, null quando não detectado
-  formato: Formato
-  total: number
+  unidade:    string | null
+  tipo_lista: string | null
+  segmento:   string | null   // "T" | "P" | null
+  data_lista: string | null
+  formato:    Formato
+  total:      number
 }
 
 export interface LeadInput {
@@ -37,12 +38,48 @@ export interface ParseResult {
   leads: LeadInput[]
 }
 
+// ─── Unit name normalization ──────────────────────────────────────────────────
+
+const LOWER_WORDS = new Set(["de", "do", "da", "dos", "das", "e", "em", "a", "o", "para", "com", "por"])
+
+function toTitleCase(str: string): string {
+  return str
+    .toLowerCase()
+    .split(" ")
+    .map((word, i) =>
+      i === 0 || !LOWER_WORDS.has(word)
+        ? word.charAt(0).toUpperCase() + word.slice(1)
+        : word
+    )
+    .join(" ")
+}
+
+// Mapa de apelidos → nome canônico (chave em minúsculas, valor em title case)
+const UNIDADE_ALIASES: Record<string, string> = {
+  "meriti":             "São João de Meriti",
+  "sao joao de meriti": "São João de Meriti",
+  "são joao de meriti": "São João de Meriti",
+}
+
+// Normaliza nome de unidade: trim, colapsa espaços, title case, aplica aliases.
+// Exportada para reutilização no upload route e Termômetro API.
+export function normalizeUnidade(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  const trimmed = raw.trim().replace(/\s+/g, " ")
+  if (!trimmed) return null
+  const lower = trimmed.toLowerCase()
+  if (lower in UNIDADE_ALIASES) return UNIDADE_ALIASES[lower]
+  return toTitleCase(trimmed)
+}
+
 // ─── Filename parser ──────────────────────────────────────────────────────────
 //
-// Convenção: Unidade-Tipo-DD-MM.xlsx  (separador: hífen; ano = corrente)
-// Ex: Maracanau-NF-14-05.xlsx        → { unidade: "Maracanau", tipo: "NF", data: "2026-05-14" }
-// Ex: Jardim Angela-INADIMPLENTE-01-06.xlsx → { unidade: "Jardim Angela", tipo: "INADIMPLENTE", data: "2026-06-01" }
-// Tipos inválidos ou padrão não reconhecido → todos os campos null.
+// Convenção: Unidade-[Segmento]-Tipo-DD-MM.xlsx  (segmento opcional)
+// Ex: Alecrim-NF-01-06.xlsx             → segment: null, type: NF
+// Ex: Alecrim-T-NF-01-06.xlsx           → segment: T (Técnico), type: NF
+// Ex: Carpina-P-LFI-14-05.xlsx          → segment: P (Profissionalizante), type: LFI
+// Ex: Jardim Angela-INADIMPLENTE-01-06   → unit: "Jardim Angela", type: INADIMPLENTE
+// Tipo ou padrão inválido → todos os campos null.
 
 export const VALID_TIPOS: Record<string, string> = {
   NF:           "Não Formado",
@@ -52,43 +89,57 @@ export const VALID_TIPOS: Record<string, string> = {
   LFI:          "Limpeza Financeira",
 }
 
+export const VALID_SEGMENTOS: Record<string, string> = {
+  T: "Técnico",
+  P: "Profissionalizante",
+}
+
 export function parseFilename(filename: string): {
-  unidade: string | null
+  unidade:    string | null
   tipo_lista: string | null
+  segmento:   string | null
   data_lista: string | null
 } {
-  const base = filename.replace(/\.[^.]+$/, "")  // remove extensão
+  const NONE = { unidade: null, tipo_lista: null, segmento: null, data_lista: null }
+  const base  = filename.replace(/\.[^.]+$/, "")
   const parts = base.split("-")
 
-  // Mínimo: Unidade, Tipo, DD, MM
-  if (parts.length < 4) return { unidade: null, tipo_lista: null, data_lista: null }
+  // Mínimo: Unidade, Tipo, DD, MM → 4 parts
+  if (parts.length < 4) return NONE
 
   const ddStr = parts[parts.length - 2]
   const mmStr = parts[parts.length - 1]
 
-  if (!/^\d{1,2}$/.test(ddStr) || !/^\d{1,2}$/.test(mmStr)) {
-    return { unidade: null, tipo_lista: null, data_lista: null }
-  }
+  if (!/^\d{1,2}$/.test(ddStr) || !/^\d{1,2}$/.test(mmStr)) return NONE
 
   const dd = parseInt(ddStr, 10)
   const mm = parseInt(mmStr, 10)
+  if (dd < 1 || dd > 31 || mm < 1 || mm > 12) return NONE
 
-  if (dd < 1 || dd > 31 || mm < 1 || mm > 12) {
-    return { unidade: null, tipo_lista: null, data_lista: null }
+  // Tokens do meio (entre o primeiro e os dois últimos)
+  const middle = parts.slice(1, parts.length - 2).map(p => p.trim().toUpperCase())
+
+  let segmento:   string | null = null
+  let tipo_lista: string | null = null
+
+  if (middle.length === 1) {
+    // Sem segmento: middle[0] deve ser tipo válido
+    if (!VALID_TIPOS[middle[0]]) return NONE
+    tipo_lista = middle[0]
+  } else if (middle.length === 2) {
+    // Com segmento: middle[0] = segmento, middle[1] = tipo
+    if (!VALID_SEGMENTOS[middle[0]] || !VALID_TIPOS[middle[1]]) return NONE
+    segmento   = middle[0]
+    tipo_lista = middle[1]
+  } else {
+    return NONE
   }
 
-  // Segmentos do meio (entre o primeiro e os dois últimos) compõem o tipo
-  const tipoRaw = parts.slice(1, parts.length - 2).join("-").trim().toUpperCase()
-
-  if (!VALID_TIPOS[tipoRaw]) {
-    return { unidade: null, tipo_lista: null, data_lista: null }
-  }
-
-  const unidade = parts[0].trim()
-  const year    = new Date().getFullYear()
+  const unidade    = normalizeUnidade(parts[0])
+  const year       = new Date().getFullYear()
   const data_lista = `${year}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`
 
-  return { unidade, tipo_lista: tipoRaw, data_lista }
+  return { unidade, tipo_lista, segmento, data_lista }
 }
 
 // ─── Phone normalizer ─────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ interface Lista {
   nome_arquivo: string
   unidade: string
   tipo_lista: string
+  segmento: string | null
   data_lista: string
   total_leads: number
   formato: string
@@ -1154,7 +1155,7 @@ export default function ListasPage() {
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [parsing, setParsing] = useState(false)
   const [parseResult, setParseResult] = useState<{ meta: ListaMeta; leads: LeadInput[] } | null>(null)
-  const [metaOverride, setMetaOverride] = useState({ unidade: "", tipo_lista: "", data_lista: "" })
+  const [metaOverride, setMetaOverride] = useState({ unidade: "", tipo_lista: "", segmento: "", data_lista: "" })
   const [importing, setImporting] = useState(false)
   const [importOk, setImportOk] = useState<{ lista_id: string; total: number } | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -1209,6 +1210,7 @@ export default function ListasPage() {
         setMetaOverride({
           unidade:    json.meta.unidade    ?? "",
           tipo_lista: json.meta.tipo_lista ?? "",
+          segmento:   json.meta.segmento   ?? "",
           data_lista: json.meta.data_lista ?? "",
         })
         setDuplicataSummary({
@@ -1239,6 +1241,7 @@ export default function ListasPage() {
     form.append("arquivo",    uploadFile)
     form.append("unidade",    metaOverride.unidade)
     form.append("tipo_lista", metaOverride.tipo_lista)
+    form.append("segmento",   metaOverride.segmento)
     form.append("data_lista", metaOverride.data_lista)
     form.append("confirmar",  "true")
 
@@ -1278,7 +1281,7 @@ export default function ListasPage() {
     setParseResult(null)
     setUploadFile(null)
     setUploadError(null)
-    setMetaOverride({ unidade: "", tipo_lista: "", data_lista: "" })
+    setMetaOverride({ unidade: "", tipo_lista: "", segmento: "", data_lista: "" })
     setDuplicataSummary(null)
     setSugestoesExpanded(false)
   }
@@ -1439,6 +1442,18 @@ export default function ListasPage() {
                       !metaOverride.tipo_lista ? "border-amber-300 focus:ring-amber-400" : "border-gray-200 focus:ring-emerald-400"
                     )}
                   />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Segmento</label>
+                  <select
+                    value={metaOverride.segmento}
+                    onChange={e => setMetaOverride(m => ({ ...m, segmento: e.target.value }))}
+                    className="text-sm border border-gray-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-400 bg-white"
+                  >
+                    <option value="">—</option>
+                    <option value="T">T — Técnico</option>
+                    <option value="P">P — Profissionalizante</option>
+                  </select>
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Data da Lista</label>
@@ -1629,7 +1644,14 @@ export default function ListasPage() {
                       <td className="px-3 py-2.5 text-gray-700 font-medium max-w-[180px] truncate">{l.nome_arquivo}</td>
                       <td className="px-3 py-2.5 text-gray-600">{l.unidade}</td>
                       <td className="px-3 py-2.5">
-                        <span className="font-mono text-[10px] bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">{l.tipo_lista}</span>
+                        <div className="flex items-center gap-1">
+                          {l.segmento && (
+                            <span className="font-mono text-[10px] bg-blue-50 text-blue-600 border border-blue-200 rounded px-1.5 py-0.5">
+                              {l.segmento}
+                            </span>
+                          )}
+                          <span className="font-mono text-[10px] bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">{l.tipo_lista}</span>
+                        </div>
                       </td>
                       <td className="px-3 py-2.5 text-gray-500 tabular-nums">{fmtDate(l.data_lista)}</td>
                       <td className="px-3 py-2.5 text-gray-700 tabular-nums font-medium">{l.total_leads}</td>

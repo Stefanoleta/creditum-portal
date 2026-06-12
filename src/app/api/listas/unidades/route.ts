@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase-server"
-import { normalizePhone } from "@/lib/lista-parser"
+import { normalizePhone, normalizeUnidade } from "@/lib/lista-parser"
 
 // GET /api/listas/unidades
 // Retorna métricas por unidade para o Termômetro de Unidades.
-// Score = 100 - (contatos_definitivos / total_leads * 100)
-// Score 100 = nenhuma ligação definitiva; decresce à medida que contatos definitivos se acumulam.
+// Score = 100 − (contatos_definitivos / total_leads × 100)
+// total_leads = contagem ao vivo da tabela leads (não o campo armazenado em listas)
 
 export interface UnidadeMetrica {
   unidade:              string
-  score:                number          // 0-100
+  score:                number          // 0–100
   status:               "pronta" | "em_andamento" | "descanso"
   total_leads:          number
   contatos_definitivos: number
@@ -17,10 +17,8 @@ export interface UnidadeMetrica {
   ultima_lista_em:      string
 }
 
-// Categorias de tabulacao_ia que encerram definitivamente o potencial do lead
-// "não gostou" → nao_gostou_proposta
-// "não tem interesse" → recusa_definitiva
-// "já é aluno" → ja_resolveu
+// Categorias que encerram definitivamente o potencial do lead
+// "não gostou" → nao_gostou_proposta  |  "não tem interesse" → recusa_definitiva  |  "já é aluno" → ja_resolveu
 const DEFINITIVE_CATS = new Set(["nao_gostou_proposta", "recusa_definitiva", "ja_resolveu"])
 
 function scoreStatus(score: number): "pronta" | "em_andamento" | "descanso" {
@@ -34,10 +32,11 @@ export async function GET() {
     return NextResponse.json({ unidades: [], warning: "Supabase não configurado" })
   }
 
-  // Busca todas as listas ordenadas por data (desc)
+  // ── 1. Busca listas (metadados de unidade) ─────────────────────────────────
+
   const { data: listas, error: listasErr } = await supabase
     .from("listas")
-    .select("id, unidade, data_lista, total_leads, uploaded_at")
+    .select("id, unidade, data_lista, uploaded_at")
     .order("data_lista", { ascending: false })
 
   if (listasErr) {
@@ -48,31 +47,55 @@ export async function GET() {
     return NextResponse.json({ unidades: [] })
   }
 
-  // Constrói índices por unidade
-  const listasById          = new Map<string, string>()   // lista_id → unidade
-  const totalLeadsByUnidade = new Map<string, number>()
-  const qtdListasByUnidade  = new Map<string, number>()
+  // ── 2. Constrói índices por unidade normalizada ────────────────────────────
+
+  const listasById           = new Map<string, string>()  // lista_id → unidade normalizada
+  const qtdListasByUnidade   = new Map<string, number>()
   const ultimaListaByUnidade = new Map<string, string>()
 
   for (const lista of listas) {
-    const u = lista.unidade ?? "(sem unidade)"
+    const u = normalizeUnidade(lista.unidade) ?? "(sem unidade)"
     listasById.set(lista.id, u)
-    totalLeadsByUnidade.set(u, (totalLeadsByUnidade.get(u) ?? 0) + (lista.total_leads ?? 0))
     qtdListasByUnidade.set(u, (qtdListasByUnidade.get(u) ?? 0) + 1)
     if (!ultimaListaByUnidade.has(u)) {
       ultimaListaByUnidade.set(u, lista.data_lista ?? lista.uploaded_at?.split("T")[0] ?? "")
     }
   }
 
-  // Busca análises com coaching_data (onde tabulacao_ia é armazenada)
+  // ── 3. Contagem ao vivo de leads por lista_id ──────────────────────────────
+  // Evita depender de listas.total_leads (armazenado no momento do import — pode ser 0
+  // se todos os leads eram duplicatas ou higienização naquele momento).
+
+  const { data: leadRows } = await supabase
+    .from("leads")
+    .select("lista_id")
+
+  const liveLeadCount = new Map<string, number>()
+  for (const row of leadRows ?? []) {
+    if (!row.lista_id) continue
+    liveLeadCount.set(row.lista_id, (liveLeadCount.get(row.lista_id) ?? 0) + 1)
+  }
+
+  // Agrega total_leads por unidade
+  const totalLeadsByUnidade = new Map<string, number>()
+  for (const [listaId, unidade] of listasById.entries()) {
+    const cnt = liveLeadCount.get(listaId) ?? 0
+    totalLeadsByUnidade.set(unidade, (totalLeadsByUnidade.get(unidade) ?? 0) + cnt)
+
+    // Debug: loga qualquer unidade que contenha "alecrim" (case-insensitive)
+    if (unidade.toLowerCase().includes("alecrim")) {
+      console.log("[termometro] alecrim lista_id:", listaId, "live_count:", cnt)
+    }
+  }
+
+  // ── 4. Análises com tabulacao_ia definitiva ────────────────────────────────
+
   const { data: analyses } = await supabase
     .from("call_analyses")
     .select("coaching_data, pending_payload")
     .not("coaching_data", "is", null)
 
-  // Extrai phones normalizados de análises definitivas (1 phone por Set = sem duplicatas por chamada)
   const definitivePhones = new Set<string>()
-
   for (const a of analyses ?? []) {
     const cd    = a.coaching_data as Record<string, unknown> | null
     const tabIa = cd?.tabulacao_ia as { categoria?: string } | null
@@ -91,7 +114,8 @@ export async function GET() {
     if (normalized) definitivePhones.add(normalized)
   }
 
-  // Mapeia phones → unidade via leads table (deduplicado por lead_id)
+  // ── 5. Mapeia phones → unidade via leads table ─────────────────────────────
+
   const definitivesByUnidade = new Map<string, number>()
 
   if (definitivePhones.size > 0) {
@@ -101,16 +125,9 @@ export async function GET() {
 
     for (let i = 0; i < phonesArray.length; i += BATCH) {
       const batch = phonesArray.slice(i, i + BATCH)
-
       const [{ data: byPrimary }, { data: bySecondary }] = await Promise.all([
-        supabase
-          .from("leads")
-          .select("id, lista_id")
-          .in("telefone_principal", batch),
-        supabase
-          .from("leads")
-          .select("id, lista_id")
-          .in("telefone_secundario", batch),
+        supabase.from("leads").select("id, lista_id").in("telefone_principal", batch),
+        supabase.from("leads").select("id, lista_id").in("telefone_secundario", batch),
       ])
 
       for (const lead of [...(byPrimary ?? []), ...(bySecondary ?? [])]) {
@@ -123,7 +140,8 @@ export async function GET() {
     }
   }
 
-  // Compõe métricas por unidade
+  // ── 6. Compõe métricas ─────────────────────────────────────────────────────
+
   const unidades: UnidadeMetrica[] = []
 
   for (const [unidade, totalLeads] of totalLeadsByUnidade.entries()) {
@@ -131,6 +149,10 @@ export async function GET() {
     const score = totalLeads > 0
       ? Math.max(0, Math.round(100 - (definitivos / totalLeads * 100)))
       : 100
+
+    if (unidade.toLowerCase().includes("alecrim")) {
+      console.log("[termometro] alecrim final:", { unidade, totalLeads, definitivos, score })
+    }
 
     unidades.push({
       unidade,
@@ -143,7 +165,6 @@ export async function GET() {
     })
   }
 
-  // Ordena por score desc, desempate por nome
   unidades.sort((a, b) => b.score - a.score || a.unidade.localeCompare(b.unidade))
 
   return NextResponse.json({ unidades })

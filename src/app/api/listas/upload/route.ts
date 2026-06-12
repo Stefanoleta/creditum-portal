@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { parseLista, type LeadInput } from "@/lib/lista-parser"
+import { parseLista, normalizeUnidade, type LeadInput } from "@/lib/lista-parser"
 import { supabase } from "@/lib/supabase-server"
 
 // ─── Classificação de leads ────────────────────────────────────────────────────
@@ -40,8 +40,11 @@ export async function POST(req: NextRequest) {
     const { meta, leads } = parseLista(buffer, filename)
 
     // Resolve meta: override do form > detectado no nome > null
-    const unidade    = (form.get("unidade")    as string | null)?.trim() || meta.unidade    || null
+    // normalizeUnidade: trim, title case, aliases (ex: "meriti" → "São João de Meriti")
+    const unidadeRaw = (form.get("unidade") as string | null)?.trim() || meta.unidade || null
+    const unidade    = normalizeUnidade(unidadeRaw)
     const tipo_lista = (form.get("tipo_lista") as string | null)?.trim() || meta.tipo_lista || null
+    const segmento   = (form.get("segmento")   as string | null)?.trim() || meta.segmento   || null
     const data_lista = (form.get("data_lista") as string | null)?.trim() || meta.data_lista || null
     const confirmar  = form.get("confirmar") === "true"
 
@@ -54,7 +57,7 @@ export async function POST(req: NextRequest) {
         duplicatas_ignoradas:    0,
         possiveis_higienizacoes: [],
         leads_higienizacao:      0,
-        meta:                    { ...meta, unidade, tipo_lista, data_lista },
+        meta:                    { ...meta, unidade, tipo_lista, segmento, data_lista },
         preview:                 leads.slice(0, 5),
         warning:                 "Supabase não configurado — dados não foram salvos",
       })
@@ -184,7 +187,7 @@ export async function POST(req: NextRequest) {
       lista_origem:   c.listaOrigem,
     }))
 
-    const resolvedMeta = { ...meta, unidade, tipo_lista, data_lista }
+    const resolvedMeta = { ...meta, unidade, tipo_lista, segmento, data_lista }
     const allToInsert  = [...caso2.map(c => c.lead), ...caso3.map(c => c.lead), ...caso4.map(c => c.lead)]
     const preview      = allToInsert.slice(0, 5)
 
@@ -220,9 +223,10 @@ export async function POST(req: NextRequest) {
         nome_arquivo: filename,
         unidade,
         tipo_lista,
+        segmento:    segmento ?? null,
         data_lista,
-        total_leads:  novosLeads + caso3.length,
-        formato:      meta.formato,
+        total_leads: novosLeads + caso3.length,
+        formato:     meta.formato,
       })
       .select("id")
       .single()

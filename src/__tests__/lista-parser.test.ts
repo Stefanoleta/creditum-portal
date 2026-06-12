@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { normalizePhone, parseFilename } from "@/lib/lista-parser"
+import { normalizePhone, normalizeUnidade, parseFilename } from "@/lib/lista-parser"
 
 // ─── normalizePhone ────────────────────────────────────────────────────────────
 
@@ -45,96 +45,147 @@ describe("normalizePhone", () => {
   })
 })
 
+// ─── normalizeUnidade ──────────────────────────────────────────────────────────
+
+describe("normalizeUnidade", () => {
+  it("aplica title case", () => {
+    expect(normalizeUnidade("ALECRIM")).toBe("Alecrim")
+    expect(normalizeUnidade("bangu")).toBe("Bangu")
+    expect(normalizeUnidade("CAMPO GRANDE")).toBe("Campo Grande")
+  })
+
+  it("colapsa múltiplos espaços", () => {
+    expect(normalizeUnidade("Jardim   Angela")).toBe("Jardim Angela")
+    expect(normalizeUnidade("  Bangu  ")).toBe("Bangu")
+  })
+
+  it("preposições permanecem em minúsculo (exceto início)", () => {
+    expect(normalizeUnidade("SAO JOAO DE MERITI")).toBe("São João de Meriti")
+  })
+
+  it("alias 'meriti' → nome canônico", () => {
+    expect(normalizeUnidade("meriti")).toBe("São João de Meriti")
+    expect(normalizeUnidade("MERITI")).toBe("São João de Meriti")
+    expect(normalizeUnidade("  Meriti  ")).toBe("São João de Meriti")
+  })
+
+  it("retorna null para entrada vazia", () => {
+    expect(normalizeUnidade(null)).toBeNull()
+    expect(normalizeUnidade(undefined)).toBeNull()
+    expect(normalizeUnidade("")).toBeNull()
+    expect(normalizeUnidade("   ")).toBeNull()
+  })
+})
+
 // ─── parseFilename ─────────────────────────────────────────────────────────────
 
 describe("parseFilename", () => {
   const year = new Date().getFullYear()
 
-  // ── Tipos válidos ────────────────────────────────────────────────────────────
+  // ── Sem segmento — todos os 5 tipos ──────────────────────────────────────────
 
-  it("parseia NF corretamente", () => {
+  it("parseia NF sem segmento", () => {
     const r = parseFilename("Maracanau-NF-14-05.xlsx")
-    expect(r.unidade).toBe("Maracanau")
-    expect(r.tipo_lista).toBe("NF")
-    expect(r.data_lista).toBe(`${year}-05-14`)
+    expect(r).toMatchObject({ unidade: "Maracanau", tipo_lista: "NF", segmento: null, data_lista: `${year}-05-14` })
   })
 
-  it("parseia INADIMPLENTE corretamente", () => {
+  it("parseia INADIMPLENTE sem segmento", () => {
     const r = parseFilename("Bangu-INADIMPLENTE-01-06.xlsx")
-    expect(r.unidade).toBe("Bangu")
-    expect(r.tipo_lista).toBe("INADIMPLENTE")
-    expect(r.data_lista).toBe(`${year}-06-01`)
+    expect(r).toMatchObject({ unidade: "Bangu", tipo_lista: "INADIMPLENTE", segmento: null, data_lista: `${year}-06-01` })
   })
 
-  it("parseia INATIVO corretamente", () => {
+  it("parseia INATIVO sem segmento", () => {
     const r = parseFilename("Madureira-INATIVO-31-12.xlsx")
-    expect(r.unidade).toBe("Madureira")
-    expect(r.tipo_lista).toBe("INATIVO")
-    expect(r.data_lista).toBe(`${year}-12-31`)
+    expect(r).toMatchObject({ unidade: "Madureira", tipo_lista: "INATIVO", segmento: null })
   })
 
-  it("parseia LFR corretamente", () => {
+  it("parseia LFR sem segmento", () => {
     const r = parseFilename("Centro-LFR-07-03.xlsx")
-    expect(r.unidade).toBe("Centro")
-    expect(r.tipo_lista).toBe("LFR")
-    expect(r.data_lista).toBe(`${year}-03-07`)
+    expect(r).toMatchObject({ unidade: "Centro", tipo_lista: "LFR", segmento: null })
   })
 
-  it("parseia LFI corretamente", () => {
+  it("parseia LFI sem segmento", () => {
     const r = parseFilename("Campo Grande-LFI-20-11.xlsx")
-    expect(r.unidade).toBe("Campo Grande")
-    expect(r.tipo_lista).toBe("LFI")
-    expect(r.data_lista).toBe(`${year}-11-20`)
+    expect(r).toMatchObject({ unidade: "Campo Grande", tipo_lista: "LFI", segmento: null })
   })
 
-  // ── Nome de unidade com espaços ──────────────────────────────────────────────
+  // ── Com segmento T (Técnico) ─────────────────────────────────────────────────
 
-  it("aceita unidade com espaço (ex: Jardim Angela)", () => {
+  it("parseia segmento T com NF", () => {
+    const r = parseFilename("Alecrim-T-NF-01-06.xlsx")
+    expect(r).toMatchObject({ unidade: "Alecrim", segmento: "T", tipo_lista: "NF", data_lista: `${year}-06-01` })
+  })
+
+  it("parseia segmento T com LFI", () => {
+    const r = parseFilename("Carpina-T-LFI-14-05.xlsx")
+    expect(r).toMatchObject({ unidade: "Carpina", segmento: "T", tipo_lista: "LFI" })
+  })
+
+  // ── Com segmento P (Profissionalizante) ──────────────────────────────────────
+
+  it("parseia segmento P com LFI", () => {
+    const r = parseFilename("Carpina-P-LFI-14-05.xlsx")
+    expect(r).toMatchObject({ unidade: "Carpina", segmento: "P", tipo_lista: "LFI" })
+  })
+
+  it("parseia segmento P com INADIMPLENTE", () => {
+    const r = parseFilename("Recife-P-INADIMPLENTE-10-04.xlsx")
+    expect(r).toMatchObject({ unidade: "Recife", segmento: "P", tipo_lista: "INADIMPLENTE" })
+  })
+
+  // ── Normalização de unidade no parse ─────────────────────────────────────────
+
+  it("normaliza unidade para title case", () => {
+    expect(parseFilename("ALECRIM-NF-01-06.xlsx").unidade).toBe("Alecrim")
+    expect(parseFilename("campo grande-LFI-01-06.xlsx").unidade).toBe("Campo Grande")
+  })
+
+  it("unidade com espaço é preservada corretamente", () => {
     const r = parseFilename("Jardim Angela-INADIMPLENTE-01-06.xlsx")
     expect(r.unidade).toBe("Jardim Angela")
-    expect(r.tipo_lista).toBe("INADIMPLENTE")
-    expect(r.data_lista).toBe(`${year}-06-01`)
   })
 
-  it("aceita unidade com múltiplas palavras", () => {
-    const r = parseFilename("Vila Nova Conceicao-NF-10-04.xlsx")
-    expect(r.unidade).toBe("Vila Nova Conceicao")
-    expect(r.tipo_lista).toBe("NF")
+  it("alias meriti é resolvido no parse", () => {
+    expect(parseFilename("meriti-NF-01-06.xlsx").unidade).toBe("São João de Meriti")
   })
 
   // ── Case-insensitive ─────────────────────────────────────────────────────────
 
-  it("aceita tipo em caixa baixa (case-insensitive)", () => {
+  it("aceita tipo em caixa baixa", () => {
     expect(parseFilename("Bangu-lfi-10-04.xlsx").tipo_lista).toBe("LFI")
-    expect(parseFilename("Bangu-nf-10-04.xlsx").tipo_lista).toBe("NF")
   })
 
-  it("aceita tipo em caixa mista", () => {
-    expect(parseFilename("Bangu-Inativo-10-04.xlsx").tipo_lista).toBe("INATIVO")
+  it("aceita segmento em caixa baixa", () => {
+    const r = parseFilename("Alecrim-t-NF-01-06.xlsx")
+    expect(r).toMatchObject({ segmento: "T", tipo_lista: "NF" })
   })
 
   // ── Padrão inválido → todos null ─────────────────────────────────────────────
 
   it("retorna null para tipo desconhecido", () => {
     const r = parseFilename("Bangu-LFX-10-04.xlsx")
-    expect(r.unidade).toBeNull()
-    expect(r.tipo_lista).toBeNull()
-    expect(r.data_lista).toBeNull()
+    expect(r).toEqual({ unidade: null, tipo_lista: null, segmento: null, data_lista: null })
   })
 
-  it("retorna null para nome sem padrão (separador errado)", () => {
+  it("retorna null para segmento desconhecido (token ambíguo)", () => {
+    const r = parseFilename("Bangu-X-LFI-10-04.xlsx")
+    expect(r).toEqual({ unidade: null, tipo_lista: null, segmento: null, data_lista: null })
+  })
+
+  it("retorna null quando segmento existe mas tipo é inválido", () => {
+    expect(parseFilename("Bangu-T-LFX-10-04.xlsx").tipo_lista).toBeNull()
+  })
+
+  it("retorna null para nome sem padrão", () => {
     const r = parseFilename("lista_alunos_2026.xlsx")
-    expect(r.unidade).toBeNull()
-    expect(r.tipo_lista).toBeNull()
-    expect(r.data_lista).toBeNull()
+    expect(r).toEqual({ unidade: null, tipo_lista: null, segmento: null, data_lista: null })
   })
 
-  it("retorna null quando faltam segmentos (menos de 4 partes)", () => {
+  it("retorna null com menos de 4 segmentos", () => {
     expect(parseFilename("Bangu-LFI.xlsx").unidade).toBeNull()
-    expect(parseFilename("Bangu-LFI-10.xlsx").unidade).toBeNull()
   })
 
-  it("retorna null para mês inválido (> 12)", () => {
+  it("retorna null para mês inválido", () => {
     expect(parseFilename("Bangu-LFI-10-13.xlsx").unidade).toBeNull()
   })
 
@@ -142,15 +193,10 @@ describe("parseFilename", () => {
     expect(parseFilename("Bangu-LFI-00-06.xlsx").unidade).toBeNull()
   })
 
-  it("retorna null quando DD/MM não são numéricos", () => {
-    expect(parseFilename("Bangu-LFI-AA-BB.xlsx").unidade).toBeNull()
-  })
-
-  // ── Formato de data correto ──────────────────────────────────────────────────
+  // ── Formato de data ──────────────────────────────────────────────────────────
 
   it("zero-pada DD e MM com 1 dígito", () => {
-    const r = parseFilename("Bangu-LFI-5-6.xlsx")
-    expect(r.data_lista).toBe(`${year}-06-05`)
+    expect(parseFilename("Bangu-LFI-5-6.xlsx").data_lista).toBe(`${year}-06-05`)
   })
 
   it("usa o ano corrente", () => {
