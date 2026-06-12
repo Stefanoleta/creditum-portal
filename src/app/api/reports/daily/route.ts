@@ -190,7 +190,7 @@ function buildHojeFromItems(
     ? Math.round((ligacoes_curtas / atendidas) * 1000) / 10 : 0
 
   const { total_conversoes: qualificacoes } = adaptTabulacoes(tabulacaoItems)
-  const tabuladas_pelo_operador = tabulacaoItems.filter(t => (t.origemTabulacao ?? "").toUpperCase().includes("OPERADOR")).length
+  const tabuladas_pelo_operador = tabulacaoItems.filter(t => !(t.origemTabulacao ?? "").toUpperCase().includes("DISCADOR")).length
   const nao_tabulado_count = Math.max(0, atendidas - tabuladas_pelo_operador)
   const pct_nao_tabulado = atendidas > 0
     ? Math.round((nao_tabulado_count / atendidas) * 1000) / 10 : 0

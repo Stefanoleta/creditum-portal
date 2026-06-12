@@ -64,7 +64,7 @@ export async function GET() {
     type Entry = { tabulou: number; cliente_desligou: number }
     const qualityMap = new Map<string, Entry>()
     for (const item of tabulacaoItems) {
-      if ((item.origemTabulacao ?? "").toUpperCase() !== "OPERADOR") continue
+      if ((item.origemTabulacao ?? "").toUpperCase().includes("DISCADOR")) continue
       const op = (item.usuarioOperador ?? "").toUpperCase().trim()
       if (!op || op === "DISCADOR") continue
       if (!qualityMap.has(op)) qualityMap.set(op, { tabulou: 0, cliente_desligou: 0 })
@@ -109,7 +109,7 @@ export async function GET() {
     }
 
     const tabulacoesOperador = tabulacaoItems.filter(t =>
-      (t.origemTabulacao ?? "").toUpperCase().includes("OPERADOR")
+      !(t.origemTabulacao ?? "").toUpperCase().includes("DISCADOR")
     ).length
     const tabulacoesDiscador = tabulacaoItems.filter(t =>
       (t.origemTabulacao ?? "").toUpperCase().includes("DISCADOR")
