@@ -252,30 +252,16 @@ async function saveResultadosDiscador(ligacoesItems: ArgusLigacaoItem[]) {
 
     if (rows.length === 0) return
 
-    // Insert com ON CONFLICT ignorado via ignoreSomethingConflict emulado:
-    // Tenta inserir em lotes; duplicatas retornam erro 23505 que o Supabase converte em erro não-fatal.
     const BATCH = 50
-    const novosPorId = new Map<string, typeof rows[0]>()
-    for (const r of rows) novosPorId.set(r.id_ligacao_argus, r)
-
-    // Verifica existentes para só inserir novos
-    const { data: existentes } = await supabase
-      .from("resultados_discador")
-      .select("id_ligacao_argus")
-      .in("id_ligacao_argus", rows.map(r => r.id_ligacao_argus))
-
-    const existentesSet = new Set((existentes ?? []).map(e => e.id_ligacao_argus))
-    const novos = rows.filter(r => !existentesSet.has(r.id_ligacao_argus))
-
-    for (let i = 0; i < novos.length; i += BATCH) {
+    for (let i = 0; i < rows.length; i += BATCH) {
       const { error } = await supabase
         .from("resultados_discador")
-        .insert(novos.slice(i, i + BATCH))
-      if (error) console.error("[metrics/saveResultados] insert:", error.message)
+        .upsert(rows.slice(i, i + BATCH), { onConflict: "id_ligacao_argus" })
+      if (error) console.error("[metrics/saveResultados] upsert:", error.message)
     }
 
     // Atualiza recontato nos leads cruzados com base na tabulação mais recente
-    const comLead = novos.filter(r => r.lead_id)
+    const comLead = rows.filter(r => r.lead_id)
     for (const r of comLead) {
       const categoria    = classifyRecontato(r.tabulacao, r.resultado_ligacao)
       const recontato_em = calcRecontatoEm(categoria)
@@ -285,8 +271,8 @@ async function saveResultadosDiscador(ligacoesItems: ArgusLigacaoItem[]) {
         .eq("id", r.lead_id!)
     }
 
-    if (novos.length > 0) {
-      console.log(`[metrics/saveResultados] ${novos.length} novos registros — ${comLead.length} leads cruzados`)
+    if (rows.length > 0) {
+      console.log(`[metrics/saveResultados] ${rows.length} registros upserted — ${comLead.length} leads cruzados`)
     }
   } catch (err) {
     console.error("[metrics/saveResultados] erro:", err instanceof Error ? err.message : err)
