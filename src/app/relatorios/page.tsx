@@ -157,9 +157,6 @@ function pct(n: number) {
   return `${n.toFixed(1)}%`
 }
 
-function brl(n: number) {
-  return `R$ ${n.toLocaleString("pt-BR")}`
-}
 
 function convRowBg(taxa: number) {
   if (taxa >= 15) return "bg-emerald-50"
@@ -640,7 +637,7 @@ function TabOperadores({ rows }: { rows: OperatorRow[] }) {
 
 function TabHistorico({ rows }: { rows: DailyRow[] }) {
   const maxConv = Math.max(...rows.map((r) => r.conversoes), 1)
-  const avgConv = rows.reduce((s, r) => s + r.conversoes, 0) / rows.length
+  const avgConv = rows.length > 0 ? rows.reduce((s, r) => s + r.conversoes, 0) / rows.length : 0
 
   return (
     <div className="space-y-4">
@@ -650,19 +647,17 @@ function TabHistorico({ rows }: { rows: DailyRow[] }) {
           <p className="text-xl font-bold text-emerald-700 mt-1">
             {rows.find((r) => r.conversoes === maxConv)?.dia ?? "—"}
           </p>
-          <p className="text-xs text-gray-400">{maxConv} conversões</p>
+          <p className="text-xs text-gray-400">{maxConv} qualificações</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
           <p className="text-xs text-gray-400 uppercase tracking-wide">Média diária</p>
           <p className="text-xl font-bold text-teal-600 mt-1">{avgConv.toFixed(1)}</p>
-          <p className="text-xs text-gray-400">conversões / dia</p>
+          <p className="text-xs text-gray-400">qualificações / dia</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-          <p className="text-xs text-gray-400 uppercase tracking-wide">Receita 15 dias</p>
-          <p className="text-xl font-bold text-emerald-700 mt-1">
-            {brl(rows.reduce((s, r) => s + r.receita, 0))}
-          </p>
-          <p className="text-xs text-gray-400">estimado</p>
+          <p className="text-xs text-gray-400 uppercase tracking-wide">Média Qualif / dia</p>
+          <p className="text-xl font-bold text-emerald-700 mt-1">{avgConv.toFixed(1)}</p>
+          <p className="text-xs text-gray-400">últimos 15 dias úteis</p>
         </div>
       </div>
 
@@ -671,14 +666,14 @@ function TabHistorico({ rows }: { rows: DailyRow[] }) {
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
             Histórico — últimos 15 dias úteis
             <span className="ml-4 font-normal normal-case text-gray-400">
-              Taxa conv: <span className="text-emerald-600">≥ 15%</span>  ·  <span className="text-amber-600">10–14%</span>
+              Taxa qualif: <span className="text-emerald-600">≥ 15%</span>  ·  <span className="text-amber-600">10–14%</span>
             </span>
           </p>
         </div>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100">
-              {["Data", "Ligações", "Atendidas", "Conv", "Taxa Contato", "Taxa Conv", "TMA", "Receita"].map((h) => (
+              {["Data", "Ligações", "Atendidas", "Qualif", "Taxa Contato", "Taxa Qualif", "TMA"].map((h) => (
                 <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
                   {h}
                 </th>
@@ -702,7 +697,6 @@ function TabHistorico({ rows }: { rows: DailyRow[] }) {
                 <td className={cn("px-4 py-2.5 tabular-nums", r.tma_segundos <= 240 ? "text-gray-600" : "text-amber-700")}>
                   {formatSeconds(r.tma_segundos)}
                 </td>
-                <td className="px-4 py-2.5 tabular-nums text-gray-600">{brl(r.receita)}</td>
               </tr>
             ))}
           </tbody>
@@ -719,9 +713,6 @@ function TabHistorico({ rows }: { rows: DailyRow[] }) {
                 {rows.reduce((s, r) => s + r.conversoes, 0)}
               </td>
               <td className="px-4 py-2.5" colSpan={3} />
-              <td className="px-4 py-2.5 tabular-nums text-emerald-700">
-                {brl(rows.reduce((s, r) => s + r.receita, 0))}
-              </td>
             </tr>
           </tfoot>
         </table>

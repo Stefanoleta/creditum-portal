@@ -49,7 +49,6 @@ export interface DailyRow {
   tma_segundos: number
   taxa_contato: number
   taxa_conversao: number
-  receita: number
 }
 
 export interface HourlyRow {
@@ -159,7 +158,6 @@ function makeDailyRow(r: RawMetric, day: DayInfo): DailyRow {
     tma_segundos: r.tma,
     taxa_contato,
     taxa_conversao,
-    receita: r.c * 1600,
   }
 }
 

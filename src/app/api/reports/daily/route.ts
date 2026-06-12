@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server"
 import { generateMockReports } from "@/lib/mock-reports"
-import type { HojeData, HojeOntem, OperatorRow, HourlyRow } from "@/lib/mock-reports"
+import type { HojeData, HojeOntem, OperatorRow, HourlyRow, DailyRow } from "@/lib/mock-reports"
 import { adaptSDRs, adaptTabulacoes, extractArray, getVendasAllowlist } from "@/lib/argus-adapter"
 import type { ArgusDesempenhoItem, ArgusTabulacaoItem, ArgusLigacaoItem } from "@/types/argus"
-import { DAILY_BASE } from "@/lib/mock-reports"
 import { supabase } from "@/lib/supabase-server"
 
 const BASE_URL    = process.env.ARGUS_BASE_URL
@@ -53,6 +52,85 @@ async function argusPost<T = Record<string, unknown>>(
   }
 
   return json as T
+}
+
+// ─── historical data from Argus ───────────────────────────────────────────────
+
+const PT_DAY = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"]
+
+function getWorkingDays(count: number): Date[] {
+  const days: Date[] = []
+  const cursor = new Date()
+  cursor.setHours(0, 0, 0, 0)
+  cursor.setDate(cursor.getDate() - 1) // começa em ontem
+  while (days.length < count) {
+    const dow = cursor.getDay()
+    if (dow > 0 && dow < 6) days.unshift(new Date(cursor))
+    cursor.setDate(cursor.getDate() - 1)
+  }
+  return days
+}
+
+async function fetchDayMetrics(day: Date): Promise<DailyRow> {
+  const range   = withCampaign(dateRange(day))
+  const dateStr = day.toISOString().split("T")[0]
+  const dow  = PT_DAY[day.getDay()]
+  const mm   = String(day.getMonth() + 1).padStart(2, "0")
+  const dd   = String(day.getDate()).padStart(2, "0")
+  const dia  = `${dow} ${dd}/${mm}`
+
+  const zero: DailyRow = { date: dateStr, dia, ligacoes: 0, atendidas: 0, conversoes: 0, tma_segundos: 0, taxa_contato: 0, taxa_conversao: 0 }
+
+  try {
+    const [rawLig, rawTab] = await Promise.allSettled([
+      argusPost("report/ligacoesdetalhadas",   range),
+      argusPost("report/tabulacoesdetalhadas", range),
+    ])
+
+    const ligItems = rawLig.status === "fulfilled"
+      ? extractArray<ArgusLigacaoItem>(rawLig.value as Record<string, unknown>, ["ligacoesDetalhadas", "itens", "data", "ligacoes"])
+      : []
+    const tabItems = rawTab.status === "fulfilled"
+      ? extractArray<ArgusTabulacaoItem>(rawTab.value as Record<string, unknown>, ["itens", "data", "tabulacoes"])
+      : []
+
+    const atendItems    = ligItems.filter(i => (i.resultadoLigacao ?? "").toUpperCase() === "ATENDIMENTO")
+    const ligacoes      = ligItems.length
+    const atendidas     = atendItems.length
+    const tma_soma      = atendItems.reduce((s, i) => s + getDur(i), 0)
+    const tma_segundos  = atendidas > 0 ? Math.round(tma_soma / atendidas) : 0
+
+    // Qualificações: contém "QUALIFICA" na tabulação ou categoria "SUCESSO"
+    const conversoes = tabItems.filter(t =>
+      (t.tabulado ?? t.tabulacao ?? "").toUpperCase().includes("QUALIFICA") ||
+      (t.categoriaTabulacao ?? "").toUpperCase() === "SUCESSO"
+    ).length
+
+    return {
+      date: dateStr,
+      dia,
+      ligacoes,
+      atendidas,
+      conversoes,
+      tma_segundos,
+      taxa_contato:   ligacoes  > 0 ? Math.round((atendidas  / ligacoes)  * 1000) / 10 : 0,
+      taxa_conversao: atendidas > 0 ? Math.round((conversoes / atendidas) * 1000) / 10 : 0,
+    }
+  } catch {
+    return zero
+  }
+}
+
+async function buildHistorico(): Promise<DailyRow[]> {
+  const days  = getWorkingDays(15)
+  const rows: DailyRow[] = []
+  // Lotes de 5 dias (10 chamadas simultâneas) para não sobrecarregar o Argus
+  const BATCH = 5
+  for (let i = 0; i < days.length; i += BATCH) {
+    const lote = await Promise.all(days.slice(i, i + BATCH).map(fetchDayMetrics))
+    rows.push(...lote)
+  }
+  return rows
 }
 
 // ─── intraday builder (real data from ligacoesdetalhadas) ─────────────────────
@@ -240,10 +318,11 @@ export async function GET() {
 
     const todayRange = withCampaign(dateRange(today))
 
-    const [rawDesempenho, rawTabulacoes, rawLigacoes] = await Promise.all([
+    const [rawDesempenho, rawTabulacoes, rawLigacoes, historico] = await Promise.all([
       argusPost("report/desempenhoresumido",   todayRange),
       argusPost("report/tabulacoesdetalhadas", todayRange),
       argusPost("report/ligacoesdetalhadas",   todayRange),
+      buildHistorico(),
     ])
 
     const vendasList = getVendasAllowlist(process.env.ARGUS_SDR_ALLOWLIST)
@@ -362,7 +441,7 @@ export async function GET() {
       intraday,
       por_hora: intraday,
       operadores,
-      historico: DAILY_BASE,
+      historico,
       source: "argus",
       updated_at: new Date().toISOString(),
     })
