@@ -38,6 +38,7 @@ export async function GET(req: NextRequest) {
     .from("call_analyses")
     .select("*")
     .eq("status", "pendente")
+    .gt("duration_seconds", 20)
     .order("started_at", { ascending: true })
     .limit(MAX_PER_RUN)
 

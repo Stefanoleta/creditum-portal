@@ -41,6 +41,12 @@ async function processWebhook(payload: ArgusWebhook): Promise<void> {
   const sdrName    = payload.nomeUsuario ?? payload.nome_usuario ?? "SDR"
   const phone      = maskPhone(payload.telefone ?? payload.telefone_discado)
   const duration   = parseDuration(payload.tempoLigacao ?? payload.tempo_ligacao ?? 0)
+
+  if (duration <= 20) {
+    console.log(`[webhook/argus] ignorando ${call_id} — duração ${duration}s ≤ 20s`)
+    return
+  }
+
   const startedAt  = payload.dataInicioLigacao
     ? new Date(payload.dataInicioLigacao).toISOString()
     : new Date().toISOString()
