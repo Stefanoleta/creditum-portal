@@ -1463,7 +1463,7 @@ export default function ListasPage() {
               {metaNeedsInput && (
                 <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                  Nome do arquivo não segue a convenção Unidade-TipoLista-DD/MM.xlsx. Preencha os campos acima.
+                  Nome do arquivo não segue a convenção esperada (ex: Bangu-LFI-10-06.xlsx). Tipos válidos: NF, INADIMPLENTE, INATIVO, LFR, LFI. Preencha os campos acima.
                 </div>
               )}
 

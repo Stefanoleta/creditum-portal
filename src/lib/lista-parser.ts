@@ -38,36 +38,57 @@ export interface ParseResult {
 }
 
 // ─── Filename parser ──────────────────────────────────────────────────────────
+//
+// Convenção: Unidade-Tipo-DD-MM.xlsx  (separador: hífen; ano = corrente)
+// Ex: Maracanau-NF-14-05.xlsx        → { unidade: "Maracanau", tipo: "NF", data: "2026-05-14" }
+// Ex: Jardim Angela-INADIMPLENTE-01-06.xlsx → { unidade: "Jardim Angela", tipo: "INADIMPLENTE", data: "2026-06-01" }
+// Tipos inválidos ou padrão não reconhecido → todos os campos null.
 
-// Convenção: Unidade-TipoLista-DD/MM.xlsx  ou  Unidade-TipoLista-DD/MM (qualquer ext)
-// Exemplos: Bangu-LFI-10/06.xlsx, LFI_GRAU_T_MADUREIRA_.xlsx (formato livre → null)
+export const VALID_TIPOS: Record<string, string> = {
+  NF:           "Não Formado",
+  INADIMPLENTE: "Inadimplente",
+  INATIVO:      "Inativo",
+  LFR:          "Limpeza de Frequência",
+  LFI:          "Limpeza Financeira",
+}
+
 export function parseFilename(filename: string): {
   unidade: string | null
   tipo_lista: string | null
   data_lista: string | null
 } {
-  const base = filename.replace(/\.[^.]+$/, "") // remove extensão
+  const base = filename.replace(/\.[^.]+$/, "")  // remove extensão
+  const parts = base.split("-")
 
-  // Tenta Unidade-TipoLista-DD/MM
-  const match = base.match(/^([^-]+)-([^-]+)-(\d{1,2})\/(\d{1,2})$/)
-  if (match) {
-    const [, unidade, tipo_lista, day, month] = match
-    const year = new Date().getFullYear()
-    const date = new Date(year, parseInt(month) - 1, parseInt(day))
-    // Se a data já passou de 60 dias, provavelmente é do ano seguinte
-    const today = new Date()
-    if (date.getTime() - today.getTime() > 60 * 24 * 3600 * 1000) {
-      date.setFullYear(year - 1)
-    }
-    const iso = date.toISOString().split("T")[0]
-    return {
-      unidade: unidade.trim(),
-      tipo_lista: tipo_lista.trim().toUpperCase(),
-      data_lista: iso,
-    }
+  // Mínimo: Unidade, Tipo, DD, MM
+  if (parts.length < 4) return { unidade: null, tipo_lista: null, data_lista: null }
+
+  const ddStr = parts[parts.length - 2]
+  const mmStr = parts[parts.length - 1]
+
+  if (!/^\d{1,2}$/.test(ddStr) || !/^\d{1,2}$/.test(mmStr)) {
+    return { unidade: null, tipo_lista: null, data_lista: null }
   }
 
-  return { unidade: null, tipo_lista: null, data_lista: null }
+  const dd = parseInt(ddStr, 10)
+  const mm = parseInt(mmStr, 10)
+
+  if (dd < 1 || dd > 31 || mm < 1 || mm > 12) {
+    return { unidade: null, tipo_lista: null, data_lista: null }
+  }
+
+  // Segmentos do meio (entre o primeiro e os dois últimos) compõem o tipo
+  const tipoRaw = parts.slice(1, parts.length - 2).join("-").trim().toUpperCase()
+
+  if (!VALID_TIPOS[tipoRaw]) {
+    return { unidade: null, tipo_lista: null, data_lista: null }
+  }
+
+  const unidade = parts[0].trim()
+  const year    = new Date().getFullYear()
+  const data_lista = `${year}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`
+
+  return { unidade, tipo_lista: tipoRaw, data_lista }
 }
 
 // ─── Phone normalizer ─────────────────────────────────────────────────────────
