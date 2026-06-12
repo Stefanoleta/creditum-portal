@@ -356,13 +356,6 @@ export async function GET() {
     // origemTabulacao=DISCADOR registros não têm SDR identificável, por isso usamos a diferença
     const sdrQualityMap = buildSdrQuality(tabulacaoItems)
 
-    // [DEBUG] log temporário — remover após confirmar match de nomes
-    const tabOps = [...new Set(tabulacaoItems.map(t => (t.usuarioOperador ?? "").trim()).filter(Boolean))]
-    console.log("[metrics/debug] usuarioOperador em tabulacoes:", tabOps)
-    console.log("[metrics/debug] origemTabulacao valores:", [...new Set(tabulacaoItems.map(t => t.origemTabulacao ?? "(undefined)"))])
-    console.log("[metrics/debug] SDRs do desempenho:", sdrs.map(s => s.name))
-    console.log("[metrics/debug] sdrQualityMap:", Object.fromEntries(sdrQualityMap))
-
     const enrichedSdrs = sdrs.map(sdr => {
       const q          = lookupSdrQuality(sdr.name, sdrQualityMap)
       const atendidas  = sdr.ligacoes_atendidas
@@ -374,12 +367,6 @@ export async function GET() {
         pct_cliente_desligou: q.tabulou > 0 ? Math.round((q.cliente_desligou / q.tabulou) * 1000) / 10 : 0,
       }
     })
-
-    console.log("[metrics] enrichedSdrs:", JSON.stringify(enrichedSdrs.map(s => ({
-      name: s.name,
-      pct_nao_tabulou: s.pct_nao_tabulou,
-      pct_cliente_desligou: s.pct_cliente_desligou,
-    }))))
 
     // Build hourly chart from real call timestamps — no fake uniform distribution
     const { chart: hourlyChart, source: hourlySource } = buildHourlyChartFromCalls(
