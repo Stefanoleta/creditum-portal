@@ -215,7 +215,7 @@ export async function transcribeAudio(base64Audio: string, contentTypeHint = "")
   )
 }
 
-// ─── Analyze transcript with Claude Opus 4.8 ────────────────────────────────
+// ─── Analyze transcript with Claude Sonnet 4.6 ──────────────────────────────
 
 // Raw shape returned by the AI (before we fill in legacy compat fields)
 interface RawClaudeCoaching {
@@ -259,9 +259,8 @@ export async function analyzeWithClaude(params: {
   })
 
   const message = await anthropic.messages.create({
-    model: "claude-opus-4-8",
-    max_tokens: 2048,
-    thinking: { type: "adaptive" },
+    model: "claude-sonnet-4-6",
+    max_tokens: 1024,
     system: ANALYSIS_SYSTEM_PROMPT,
     messages: [{ role: "user", content: userMessage }],
   })
