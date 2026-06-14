@@ -1292,6 +1292,8 @@ export default function ListasPage() {
   const [listas, setListas] = useState<Lista[]>([])
   const [listasLoading, setListasLoading] = useState(true)
   const [selectedLista, setSelectedLista] = useState<Lista | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<Lista | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   // ── Carregar listas
   const loadListas = useCallback(() => {
@@ -1313,6 +1315,24 @@ export default function ListasPage() {
   }, [])
 
   useEffect(() => { loadHigienizacaoCount() }, [loadHigienizacaoCount])
+
+  async function handleDelete(lista: Lista) {
+    setDeletingId(lista.id)
+    try {
+      const res = await fetch(`/api/listas/${lista.id}`, { method: "DELETE" })
+      if (!res.ok) {
+        const d = await res.json()
+        throw new Error(d.error ?? `Erro ${res.status}`)
+      }
+      setListas(prev => prev.filter(l => l.id !== lista.id))
+      if (selectedLista?.id === lista.id) setSelectedLista(null)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Erro ao excluir lista")
+    } finally {
+      setDeletingId(null)
+      setConfirmDelete(null)
+    }
+  }
 
   // ── Parsear arquivo — fase de preview (nunca salva automaticamente)
   async function handleFile(f: File) {
@@ -1794,8 +1814,17 @@ export default function ListasPage() {
                       <td className="px-3 py-2.5 text-gray-400 tabular-nums">
                         {new Date(l.uploaded_at).toLocaleDateString("pt-BR")}
                       </td>
-                      <td className="px-3 py-2.5 text-gray-300">
-                        <ChevronRight className="w-3.5 h-3.5" />
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={e => { e.stopPropagation(); setConfirmDelete(l) }}
+                            disabled={deletingId === l.id}
+                            className="text-[10px] font-medium px-2 py-1 rounded border border-red-200 text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
+                          >
+                            Excluir
+                          </button>
+                          <ChevronRight className="w-3.5 h-3.5 text-gray-300 shrink-0" />
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1817,6 +1846,44 @@ export default function ListasPage() {
           />
           <LeadsPanel lista={selectedLista} onClose={() => setSelectedLista(null)} />
         </>
+      )}
+
+      {/* Modal de confirmação de exclusão */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/30 backdrop-blur-[2px]"
+            onClick={() => !deletingId && setConfirmDelete(null)}
+          />
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-sm p-6 flex flex-col gap-4">
+            <div className="flex flex-col gap-1">
+              <h3 className="text-sm font-semibold text-gray-800">Excluir lista?</h3>
+              <p className="text-xs text-gray-500">
+                <span className="font-medium text-gray-700">{confirmDelete.nome_arquivo}</span>
+                {" "}— {confirmDelete.unidade} · {confirmDelete.total_leads} leads
+              </p>
+              <p className="text-xs text-red-500 mt-1">
+                Todos os leads desta lista serão excluídos permanentemente. Esta ação não pode ser desfeita.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                disabled={!!deletingId}
+                onClick={() => setConfirmDelete(null)}
+                className="text-xs px-3 py-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                disabled={!!deletingId}
+                onClick={() => handleDelete(confirmDelete)}
+                className="text-xs font-medium px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-40 transition-colors"
+              >
+                {deletingId ? "Excluindo..." : "Sim, excluir"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
