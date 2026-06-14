@@ -3,7 +3,7 @@
 import Image from "next/image"
 import Link from "next/link"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { BarChart3, Microscope, LayoutList, List, Upload, X, ChevronRight, AlertTriangle, CheckCircle2, Clock, PhoneOff, Check, ArrowRightLeft, Thermometer, RefreshCw } from "lucide-react"
+import { BarChart3, Microscope, LayoutList, List, Upload, X, ChevronRight, AlertTriangle, CheckCircle2, Clock, PhoneOff, Check, ArrowRightLeft, Thermometer, RefreshCw, Download, FileUp } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { type ListaMeta, type LeadInput } from "@/lib/lista-parser"
 
@@ -417,6 +417,15 @@ function LeadsPanel({
 
 // ─── Higienização tab ─────────────────────────────────────────────────────────
 
+interface ImportResult {
+  total:           number
+  invalidos:       number
+  validos:         number
+  nao_encontrados: number
+  coluna_telefone: string
+  coluna_status:   string
+}
+
 function HigienizacaoTab({ onResolved }: { onResolved: () => void }) {
   const [subTab, setSubTab] = useState<"pendentes" | "sugestoes">("pendentes")
 
@@ -435,6 +444,16 @@ function HigienizacaoTab({ onResolved }: { onResolved: () => void }) {
   const [corrections, setCorrections] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState<Record<string, boolean>>({})
 
+  // Export / Import Lemitti
+  const [exporting, setExporting] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<ImportResult | null>(null)
+  const [importError, setImportError] = useState<string | null>(null)
+  const importInputRef = useRef<HTMLInputElement>(null)
+  // Counter to force reload of pendentes after import (can't call loadPendentes directly
+  // since it's declared later; incrementing this rebuilds the useCallback and fires the effect)
+  const [pendentesReloadKey, setPendentesReloadKey] = useState(0)
+
   const PER_PAGE = 20
 
   const loadPendentes = useCallback(() => {
@@ -449,7 +468,9 @@ function HigienizacaoTab({ onResolved }: { onResolved: () => void }) {
       })
       .catch(e => setApiError(e instanceof Error ? e.message : "Erro de rede"))
       .finally(() => setLoading(false))
-  }, [pagePendentes])
+  // pendentesReloadKey forces reload after import without page navigation
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagePendentes, pendentesReloadKey])
 
   const loadSugestoes = useCallback(() => {
     setLoading(true)
@@ -467,6 +488,51 @@ function HigienizacaoTab({ onResolved }: { onResolved: () => void }) {
 
   useEffect(() => { if (subTab === "pendentes") loadPendentes() }, [loadPendentes, subTab])
   useEffect(() => { if (subTab === "sugestoes") loadSugestoes() }, [loadSugestoes, subTab])
+
+  async function handleExport() {
+    setExporting(true)
+    try {
+      const res = await fetch("/api/leads/higienizacao/export")
+      if (!res.ok) {
+        const d = await res.json()
+        throw new Error(d.error ?? `Erro ${res.status}`)
+      }
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement("a")
+      a.href     = url
+      const today = new Date().toISOString().split("T")[0]
+      a.download  = `higienizacao-${today}.xlsx`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Erro ao exportar")
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  async function handleImport(file: File) {
+    setImporting(true)
+    setImportResult(null)
+    setImportError(null)
+    const form = new FormData()
+    form.append("arquivo", file)
+    try {
+      const res = await fetch("/api/leads/higienizacao/import", { method: "POST", body: form })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d.error ?? `Erro ${res.status}`)
+      setImportResult(d as ImportResult)
+      setPagePendentes(1)
+      setPendentesReloadKey(k => k + 1)
+      onResolved()
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : "Erro ao importar")
+    } finally {
+      setImporting(false)
+      if (importInputRef.current) importInputRef.current.value = ""
+    }
+  }
 
   async function resolve(lead_id: string, telefone_corrigido: string | null) {
     setSaving(s => ({ ...s, [lead_id]: true }))
@@ -496,8 +562,68 @@ function HigienizacaoTab({ onResolved }: { onResolved: () => void }) {
 
   return (
     <div className="bg-white rounded-lg shadow-sm flex flex-col">
+      {/* Toolbar: exportar / importar */}
+      <div className="flex items-center gap-2 px-5 pt-4 pb-2 flex-wrap">
+        <button
+          onClick={handleExport}
+          disabled={exporting}
+          className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors disabled:opacity-50"
+        >
+          <Download className="w-3.5 h-3.5" />
+          {exporting ? "Exportando..." : "Exportar para Higienização"}
+        </button>
+
+        <label className={cn(
+          "flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md border cursor-pointer transition-colors",
+          importing
+            ? "border-blue-200 text-blue-500 bg-blue-50 opacity-60 cursor-not-allowed"
+            : "border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"
+        )}>
+          <FileUp className="w-3.5 h-3.5" />
+          {importing ? "Importando..." : "Importar Resultado Lemitti"}
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            disabled={importing}
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleImport(f) }}
+          />
+        </label>
+
+        {importError && (
+          <div className="flex items-center gap-1.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-1.5">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            {importError}
+          </div>
+        )}
+      </div>
+
+      {importResult && (
+        <div className="mx-5 mb-3 flex flex-col gap-1">
+          <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+            <span>
+              Importação concluída —{" "}
+              <strong>{importResult.invalidos} inválido{importResult.invalidos !== 1 ? "s" : ""}</strong>
+              {" "}marcado{importResult.invalidos !== 1 ? "s" : ""},
+              {" "}<strong>{importResult.validos} válido{importResult.validos !== 1 ? "s" : ""}</strong>
+              {importResult.nao_encontrados > 0 && `, ${importResult.nao_encontrados} não encontrado${importResult.nao_encontrados !== 1 ? "s" : ""}`}
+              {" "}· Colunas usadas: <em>{importResult.coluna_telefone}</em> / <em>{importResult.coluna_status}</em>
+            </span>
+            <button
+              onClick={() => setImportResult(null)}
+              className="ml-auto text-emerald-500 hover:text-emerald-700"
+              title="Fechar"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Sub-tabs */}
-      <div className="flex items-center gap-0 border-b border-gray-100 px-5 pt-5">
+      <div className="flex items-center gap-0 border-b border-gray-100 px-5 pt-1">
         <button
           onClick={() => setSubTab("pendentes")}
           className={cn(
