@@ -1177,6 +1177,7 @@ function RecontatosTab() {
                     <th className="px-3 py-2.5 text-left">Nome</th>
                     <th className="px-3 py-2.5 text-left">Telefone</th>
                     <th className="px-3 py-2.5 text-left">Unidade</th>
+                    <th className="px-3 py-2.5 text-left">Tipo</th>
                     <th className="px-3 py-2.5 text-left">Categoria</th>
                     <th className="px-3 py-2.5 text-left">Agendado para</th>
                     <th className="px-3 py-2.5 text-right">Tentativas</th>
@@ -1184,12 +1185,17 @@ function RecontatosTab() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {fila.map(l => {
-                    const lista = l.listas as { unidade?: string } | null
+                    const lista = l.listas as { unidade?: string; tipo_lista?: string } | null
                     return (
                       <tr key={l.id} className="bg-white hover:bg-gray-50/50">
                         <td className="px-3 py-2 font-medium text-gray-800">{l.nome}</td>
                         <td className="px-3 py-2 text-gray-500 tabular-nums">{l.telefone_principal ?? "—"}</td>
                         <td className="px-3 py-2 text-gray-500">{lista?.unidade ?? "—"}</td>
+                        <td className="px-3 py-2">
+                          {lista?.tipo_lista
+                            ? <span className="font-mono text-[10px] bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">{lista.tipo_lista}</span>
+                            : <span className="text-gray-400">—</span>}
+                        </td>
                         <td className="px-3 py-2 text-gray-500">
                           {l.recontato_categoria ? (CAT_LABEL[l.recontato_categoria] ?? l.recontato_categoria) : "—"}
                         </td>
