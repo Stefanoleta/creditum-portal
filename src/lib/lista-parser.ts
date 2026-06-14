@@ -84,6 +84,26 @@ const UNIDADE_ALIASES: Record<string, string> = {
   "jardimangela":     "Jardim Angela",
   // Joinville
   "joinville":        "Joinville",
+  // Divinópolis — normKey strips ó → "divinopolis" (cobre "Divinopolis" e "Divinópolis")
+  "divinopolis":      "Divinópolis",
+  // João Pessoa — normKey("Joao Pessoa") = "joaopessoa"
+  "joaopessoa":       "João Pessoa",
+  // Maracanaú — normKey strips ú → "maracanau"
+  "maracanau":        "Maracanaú",
+  // Mogi das Cruzes
+  "mogidascruzes":    "Mogi das Cruzes",
+  // Santa Cruz
+  "santacruz":        "Santa Cruz",
+  // Santo Amaro
+  "santoamaro":       "Santo Amaro",
+  // São Gonçalo — normKey strips ã e ç → "saogoncalo"
+  "saogoncalo":       "São Gonçalo",
+  // Sumaré — normKey strips é → "sumare"
+  "sumare":           "Sumaré",
+  // Teresina — "Terezina" é grafia incorreta; ambos normalizam para Teresina
+  "terezina":         "Teresina",
+  // Zona Norte
+  "zonanorte":        "Zona Norte",
 }
 
 // Normaliza nome de unidade:

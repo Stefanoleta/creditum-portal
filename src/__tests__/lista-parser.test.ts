@@ -145,6 +145,112 @@ describe("normalizeUnidade — variações de acento (normKey garante mesmo grup
   })
 })
 
+describe("normalizeUnidade — novos aliases (detectados no Termômetro 2026-06-14)", () => {
+  // Divinópolis — acento no ó
+  it("'Divinopolis' (sem acento) → Divinópolis", () => {
+    expect(normalizeUnidade("Divinopolis")).toBe("Divinópolis")
+    expect(normalizeUnidade("DIVINOPOLIS")).toBe("Divinópolis")
+  })
+
+  it("'Divinópolis' (com acento) → Divinópolis", () => {
+    expect(normalizeUnidade("Divinópolis")).toBe("Divinópolis")
+    expect(normalizeUnidade("divinópolis")).toBe("Divinópolis")
+  })
+
+  // João Pessoa — acento no ã
+  it("'Joao Pessoa' (sem acento) → João Pessoa", () => {
+    expect(normalizeUnidade("Joao Pessoa")).toBe("João Pessoa")
+    expect(normalizeUnidade("JOAO PESSOA")).toBe("João Pessoa")
+  })
+
+  it("'joaopessoa' (colado) → João Pessoa", () => {
+    expect(normalizeUnidade("joaopessoa")).toBe("João Pessoa")
+  })
+
+  it("'João Pessoa' (com acento) → João Pessoa", () => {
+    expect(normalizeUnidade("João Pessoa")).toBe("João Pessoa")
+  })
+
+  // Maracanaú — acento no ú
+  it("'Maracanau' (sem acento) → Maracanaú", () => {
+    expect(normalizeUnidade("Maracanau")).toBe("Maracanaú")
+    expect(normalizeUnidade("MARACANAU")).toBe("Maracanaú")
+  })
+
+  it("'Maracanaú' (com acento) → Maracanaú", () => {
+    expect(normalizeUnidade("Maracanaú")).toBe("Maracanaú")
+  })
+
+  // Mogi das Cruzes — concatenado
+  it("'mogidascruzes' (colado) → Mogi das Cruzes", () => {
+    expect(normalizeUnidade("mogidascruzes")).toBe("Mogi das Cruzes")
+  })
+
+  it("'MOGI DAS CRUZES' (maiúsculo) → Mogi das Cruzes", () => {
+    expect(normalizeUnidade("MOGI DAS CRUZES")).toBe("Mogi das Cruzes")
+  })
+
+  // Santa Cruz — concatenado
+  it("'santacruz' (colado) → Santa Cruz", () => {
+    expect(normalizeUnidade("santacruz")).toBe("Santa Cruz")
+  })
+
+  it("'SANTA CRUZ' (maiúsculo) → Santa Cruz", () => {
+    expect(normalizeUnidade("SANTA CRUZ")).toBe("Santa Cruz")
+  })
+
+  // Santo Amaro — concatenado
+  it("'santoamaro' (colado) → Santo Amaro", () => {
+    expect(normalizeUnidade("santoamaro")).toBe("Santo Amaro")
+  })
+
+  it("'SANTO AMARO' (maiúsculo) → Santo Amaro", () => {
+    expect(normalizeUnidade("SANTO AMARO")).toBe("Santo Amaro")
+  })
+
+  // São Gonçalo — concatenado + acentos
+  it("'saogoncalo' (colado, sem acento) → São Gonçalo", () => {
+    expect(normalizeUnidade("saogoncalo")).toBe("São Gonçalo")
+  })
+
+  it("'SAO GONCALO' (sem acento) → São Gonçalo", () => {
+    expect(normalizeUnidade("SAO GONCALO")).toBe("São Gonçalo")
+  })
+
+  it("'São Gonçalo' (com acentos) → São Gonçalo", () => {
+    expect(normalizeUnidade("São Gonçalo")).toBe("São Gonçalo")
+  })
+
+  // Sumaré — acento no é
+  it("'Sumare' (sem acento) → Sumaré", () => {
+    expect(normalizeUnidade("Sumare")).toBe("Sumaré")
+    expect(normalizeUnidade("SUMARE")).toBe("Sumaré")
+  })
+
+  it("'Sumaré' (com acento) → Sumaré", () => {
+    expect(normalizeUnidade("Sumaré")).toBe("Sumaré")
+  })
+
+  // Teresina vs Terezina — grafia incorreta
+  it("'Terezina' (grafia incorreta) → Teresina", () => {
+    expect(normalizeUnidade("Terezina")).toBe("Teresina")
+    expect(normalizeUnidade("TEREZINA")).toBe("Teresina")
+  })
+
+  it("'Teresina' (grafia correta) → Teresina", () => {
+    expect(normalizeUnidade("Teresina")).toBe("Teresina")
+  })
+
+  // Zona Norte — concatenado
+  it("'zonanorte' (colado) → Zona Norte", () => {
+    expect(normalizeUnidade("zonanorte")).toBe("Zona Norte")
+  })
+
+  it("'ZONA NORTE' (maiúsculo) → Zona Norte", () => {
+    expect(normalizeUnidade("ZONA NORTE")).toBe("Zona Norte")
+  })
+})
+
 // ─── parseFilename ─────────────────────────────────────────────────────────────
 
 describe("parseFilename", () => {
@@ -154,7 +260,7 @@ describe("parseFilename", () => {
 
   it("parseia NF sem segmento", () => {
     const r = parseFilename("Maracanau-NF-14-05.xlsx")
-    expect(r).toMatchObject({ unidade: "Maracanau", tipo_lista: "NF", segmento: null, data_lista: `${year}-05-14` })
+    expect(r).toMatchObject({ unidade: "Maracanaú", tipo_lista: "NF", segmento: null, data_lista: `${year}-05-14` })
   })
 
   it("parseia INADIMPLENTE sem segmento", () => {
