@@ -141,7 +141,7 @@ export function calcRecontatoEm(categoria: RecontatoCategoria): string | null {
   const dias = DIAS_RECONTATO[categoria]
   if (dias === null) return null
   const d = new Date()
-  d.setDate(d.getDate() + dias)
+  d.setUTCDate(d.getUTCDate() + dias)
   return d.toISOString().split("T")[0]
 }
 
@@ -160,7 +160,7 @@ export interface LeadRecontatoUpdate {
   bloqueado_motivo?: string | null
   bloqueado_em?: string | null
   recontato_em?: string | null
-  recontato_categoria?: string
+  recontato_categoria?: RecontatoCategoria
   precisa_higienizacao?: boolean
   numero_invalido?: boolean
 }
@@ -199,7 +199,7 @@ const RECONTATO_PENDENTE: Set<RecontatoCategoria> = new Set([
 
 function addDays(days: number): string {
   const d = new Date()
-  d.setDate(d.getDate() + days)
+  d.setUTCDate(d.getUTCDate() + days)
   return d.toISOString().split("T")[0]
 }
 
@@ -273,9 +273,11 @@ export function applyTabulacaoRules(
   }
 
   // ── Sucesso / qualificado / outros ────────────────────────────────────────
+  // qualificado / outros: reseta seguidas; agenda se DIAS_RECONTATO tem valor
+  const diasFallback = DIAS_RECONTATO[categoria]
   return {
     recontato_tentativas_seguidas: 0,
-    recontato_em:                  null,
+    recontato_em:                  diasFallback != null ? addDays(diasFallback) : null,
     recontato_categoria:           categoria,
   }
 }
