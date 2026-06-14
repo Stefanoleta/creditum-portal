@@ -2016,6 +2016,15 @@ export default function ListasPage() {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr className="border-t border-gray-100 bg-gray-50/70">
+                    <td colSpan={4} className="px-3 py-2 text-[11px] text-gray-400">Total</td>
+                    <td className="px-3 py-2 text-[11px] tabular-nums font-medium text-gray-600">
+                      {listas.reduce((s, l) => s + l.total_leads, 0).toLocaleString("pt-BR")} leads
+                    </td>
+                    <td colSpan={3} />
+                  </tr>
+                </tfoot>
               </table>
             </div>
           )}
