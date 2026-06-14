@@ -144,3 +144,138 @@ export function calcRecontatoEm(categoria: RecontatoCategoria): string | null {
   d.setDate(d.getDate() + dias)
   return d.toISOString().split("T")[0]
 }
+
+// ── Rules engine ─────────────────────────────────────────────────────────────
+
+export interface LeadRecontatoState {
+  recontato_tentativas: number
+  recontato_tentativas_seguidas: number
+}
+
+export interface LeadRecontatoUpdate {
+  recontato_tentativas?: number
+  recontato_tentativas_seguidas?: number
+  pausado_ate?: string | null
+  bloqueado?: boolean
+  bloqueado_motivo?: string | null
+  bloqueado_em?: string | null
+  recontato_em?: string | null
+  recontato_categoria?: string
+  precisa_higienizacao?: boolean
+  numero_invalido?: boolean
+}
+
+// Dias de recontato específicos para as regras anti-desgaste (sobrescreve DIAS_RECONTATO)
+const DIAS_RECONTATO_REGRAS: Partial<Record<RecontatoCategoria, number>> = {
+  ocupado_recontatar:    1,
+  mae_atendeu:           2,
+  mae_familiar_atendeu:  2,
+  nao_podia_falar:       1,
+  terceiro_nao_conhece:  1,
+}
+
+// Categorias que causam bloqueio permanente (sem_interesse ou ja_resolveu)
+const BLOQUEIA: Set<RecontatoCategoria> = new Set([
+  "nao_gostou",
+  "nao_gostou_proposta",
+  "recusa_definitiva",
+  "fora_politica",
+  "ja_resolveu",
+  "convertido",
+])
+
+// Categorias de recontato pendente (pessoa foi atingida mas não pôde atender/falar)
+const RECONTATO_PENDENTE: Set<RecontatoCategoria> = new Set([
+  "ocupado_recontatar",
+  "mae_atendeu",
+  "mae_familiar_atendeu",
+  "nao_podia_falar",
+  "terceiro_nao_conhece",
+  "nao_reconhece_aguardar",
+  "objecao_financeira",
+  "objecao_prazo",
+  "interessado_sem_fechar",
+])
+
+function addDays(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  return d.toISOString().split("T")[0]
+}
+
+/**
+ * Aplica as regras anti-desgaste do discador ao estado atual de um lead.
+ * Retorna os campos a atualizar no banco — nunca modifica estado diretamente.
+ *
+ * Regras:
+ *   nao_atendeu → incrementa tentativas; pausa 3 dias se 3 consecutivas; higienização se 5 total
+ *   recontato_pendente → reseta consecutivas; agenda recontato
+ *   bloqueia (sem_interesse/ja_cliente) → bloqueio permanente
+ *   numero_invalido → numero_invalido + higienização
+ *   qualificado/sucesso → reseta consecutivas, limpa recontato_em
+ */
+export function applyTabulacaoRules(
+  categoria: RecontatoCategoria,
+  state: LeadRecontatoState
+): LeadRecontatoUpdate {
+  const now = new Date().toISOString()
+
+  // ── Número inválido ──────────────────────────────────────────────────────
+  if (categoria === "numero_invalido") {
+    return {
+      numero_invalido:      true,
+      precisa_higienizacao: true,
+      recontato_em:         null,
+      recontato_tentativas_seguidas: 0,
+      recontato_categoria:  categoria,
+    }
+  }
+
+  // ── Bloqueio permanente ──────────────────────────────────────────────────
+  if (BLOQUEIA.has(categoria)) {
+    return {
+      bloqueado:        true,
+      bloqueado_motivo: categoria,
+      bloqueado_em:     now,
+      recontato_em:     null,
+      recontato_categoria: categoria,
+      recontato_tentativas_seguidas: 0,
+    }
+  }
+
+  // ── Não atendeu ──────────────────────────────────────────────────────────
+  if (categoria === "nao_atendeu" || categoria === "nao_atendeu_multiplas") {
+    const tentativas        = state.recontato_tentativas + 1
+    const tentativasSeguidas = state.recontato_tentativas_seguidas + 1
+    const update: LeadRecontatoUpdate = {
+      recontato_tentativas:          tentativas,
+      recontato_tentativas_seguidas: tentativasSeguidas,
+      recontato_em:                  addDays(2),
+      recontato_categoria:           categoria,
+    }
+    if (tentativasSeguidas >= 3) {
+      update.pausado_ate = addDays(3)
+    }
+    if (tentativas >= 5) {
+      update.precisa_higienizacao = true
+    }
+    return update
+  }
+
+  // ── Recontato pendente (pessoa foi contatada mas precisa de novo contato) ──
+  if (RECONTATO_PENDENTE.has(categoria)) {
+    const dias = DIAS_RECONTATO_REGRAS[categoria] ?? DIAS_RECONTATO[categoria] ?? 2
+    return {
+      recontato_tentativas_seguidas: 0,
+      recontato_em:                  addDays(dias),
+      recontato_categoria:           categoria,
+    }
+  }
+
+  // ── Sucesso / qualificado / outros ────────────────────────────────────────
+  return {
+    recontato_tentativas_seguidas: 0,
+    recontato_em:                  null,
+    recontato_categoria:           categoria,
+  }
+}
