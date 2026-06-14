@@ -1006,8 +1006,8 @@ function RecontatosTab() {
   }, [loadHorarios, loadFila, loadResumo])
 
   useEffect(() => {
-    if (bloqueadosOpen && bloqueados.length === 0) loadBloqueados(1)
-  }, [bloqueadosOpen, bloqueados.length, loadBloqueados])
+    if (filaPage > 1) loadFila(filaPage)
+  }, [filaPage, loadFila])
 
   useEffect(() => {
     if (bloqueadosOpen) loadBloqueados(bloqueadosPage)
@@ -1026,6 +1026,7 @@ function RecontatosTab() {
         a.click()
         URL.revokeObjectURL(url)
       })
+      .catch(() => { alert("Erro de rede ao exportar") })
       .finally(() => setExportando(false))
   }
 
@@ -1191,14 +1192,14 @@ function RecontatosTab() {
                 <span className="text-[11px] text-gray-400">{filaTotal} total</span>
                 <button
                   disabled={filaPage === 1}
-                  onClick={() => { setFilaPage(p => p - 1); loadFila(filaPage - 1) }}
+                  onClick={() => setFilaPage(p => p - 1)}
                   className="text-[11px] px-2 py-1 rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50"
                 >
                   ‹ Anterior
                 </button>
                 <button
                   disabled={filaPage * PER_PAGE_FILA >= filaTotal}
-                  onClick={() => { setFilaPage(p => p + 1); loadFila(filaPage + 1) }}
+                  onClick={() => setFilaPage(p => p + 1)}
                   className="text-[11px] px-2 py-1 rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50"
                 >
                   Próxima ›
