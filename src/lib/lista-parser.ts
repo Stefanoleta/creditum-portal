@@ -54,22 +54,52 @@ function toTitleCase(str: string): string {
     .join(" ")
 }
 
-// Mapa de apelidos → nome canônico (chave em minúsculas, valor em title case)
-const UNIDADE_ALIASES: Record<string, string> = {
-  "meriti":             "São João de Meriti",
-  "sao joao de meriti": "São João de Meriti",
-  "são joao de meriti": "São João de Meriti",
+// Normalização para lookup: remove acentos, lowercase, remove espaços.
+// "São João de Meriti" → "saojoaodomeriti"   "ALECRIM" → "alecrim"
+// Garante que variações com/sem acento e com/sem espaço acham o mesmo alias.
+function normKey(s: string): string {
+  // eslint-disable-next-line no-misleading-character-class
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, "")
 }
 
-// Normaliza nome de unidade: trim, colapsa espaços, title case, aplica aliases.
-// Exportada para reutilização no upload route e Termômetro API.
+// Separa palavras coladas com CamelCase: "DuqueDeCaxias" → "Duque De Caxias"
+function splitCamelCase(s: string): string {
+  return s.replace(/([a-zà-ü])([A-ZÀ-Ü])/g, "$1 $2")
+}
+
+// Alias map — chave = normKey do nome/apelido, valor = nome canônico com acentos
+const UNIDADE_ALIASES: Record<string, string> = {
+  // São João de Meriti — normKey("São João de Meriti") = "saojoaodemeriti"
+  "meriti":           "São João de Meriti",
+  "saojoaodemeriti":  "São João de Meriti",
+  // Duque de Caxias
+  "duquedecaxias":    "Duque de Caxias",
+  // Belford Roxo
+  "belfordroxo":      "Belford Roxo",
+  // Jardim Angela
+  "jardimangela":     "Jardim Angela",
+  // Joinville
+  "joinville":        "Joinville",
+}
+
+// Normaliza nome de unidade:
+//  1. Separa CamelCase ("DuqueDeCaxias" → "Duque De Caxias")
+//  2. Colapsa espaços e remove bordas
+//  3. Lookup no alias map via normKey (strip acentos + lowercase + sem espaços)
+//  4. Fallback: title case com preposições PT-BR em minúsculo
+// Exportada para reutilização no upload route, filename parser e Termômetro.
 export function normalizeUnidade(raw: string | null | undefined): string | null {
   if (!raw) return null
-  const trimmed = raw.trim().replace(/\s+/g, " ")
-  if (!trimmed) return null
-  const lower = trimmed.toLowerCase()
-  if (lower in UNIDADE_ALIASES) return UNIDADE_ALIASES[lower]
-  return toTitleCase(trimmed)
+  const split = splitCamelCase(raw.trim())
+  const collapsed = split.replace(/\s+/g, " ").trim()
+  if (!collapsed) return null
+  const key = normKey(collapsed)
+  if (key in UNIDADE_ALIASES) return UNIDADE_ALIASES[key]
+  return toTitleCase(collapsed)
 }
 
 // ─── Filename parser ──────────────────────────────────────────────────────────

@@ -69,27 +69,54 @@ export async function GET() {
   // ── 3. Contagem ao vivo de leads por lista_id ──────────────────────────────
   // Evita depender de listas.total_leads (armazenado no momento do import — pode ser 0
   // se todos os leads eram duplicatas ou higienização naquele momento).
-
-  const { data: leadRows } = await supabase
-    .from("leads")
-    .select("lista_id")
+  // Paginação obrigatória: PostgREST limita respostas a 1000 linhas por padrão;
+  // sem paginação a contagem fica truncada silenciosamente.
 
   const liveLeadCount = new Map<string, number>()
-  for (const row of leadRows ?? []) {
-    if (!row.lista_id) continue
-    liveLeadCount.set(row.lista_id, (liveLeadCount.get(row.lista_id) ?? 0) + 1)
+  const LEAD_PAGE = 1000
+  let leadOffset = 0
+  let totalLeadsFromDB = 0
+
+  while (true) {
+    const { data: page, error: pageErr } = await supabase
+      .from("leads")
+      .select("lista_id")
+      .range(leadOffset, leadOffset + LEAD_PAGE - 1)
+
+    if (pageErr) {
+      console.error("[termometro] erro ao buscar leads:", pageErr.message, "| offset:", leadOffset)
+      break
+    }
+    if (!page || page.length === 0) break
+
+    for (const row of page) {
+      if (!row.lista_id) continue
+      liveLeadCount.set(row.lista_id, (liveLeadCount.get(row.lista_id) ?? 0) + 1)
+    }
+
+    totalLeadsFromDB += page.length
+    if (page.length < LEAD_PAGE) break
+    leadOffset += LEAD_PAGE
   }
+
+  // Diagnóstico: ajuda a depurar leads: 0
+  const top5 = [...liveLeadCount.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+  console.log(
+    `[termometro] leads em DB: ${totalLeadsFromDB} | listas com leads: ${liveLeadCount.size}` +
+    ` | top-5: ${top5.map(([id, n]) => `${id.slice(-8)}:${n}`).join(", ") || "(nenhum)"}`
+  )
+  console.log(
+    `[termometro] lista_ids conhecidas (${listasById.size}):`,
+    [...listasById.keys()].map(id => id.slice(-8)).join(", ")
+  )
 
   // Agrega total_leads por unidade
   const totalLeadsByUnidade = new Map<string, number>()
   for (const [listaId, unidade] of listasById.entries()) {
     const cnt = liveLeadCount.get(listaId) ?? 0
     totalLeadsByUnidade.set(unidade, (totalLeadsByUnidade.get(unidade) ?? 0) + cnt)
-
-    // Debug: loga qualquer unidade que contenha "alecrim" (case-insensitive)
-    if (unidade.toLowerCase().includes("alecrim")) {
-      console.log("[termometro] alecrim lista_id:", listaId, "live_count:", cnt)
-    }
   }
 
   // ── 4. Análises com tabulação definitiva ──────────────────────────────────

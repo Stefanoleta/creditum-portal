@@ -47,7 +47,7 @@ describe("normalizePhone", () => {
 
 // ─── normalizeUnidade ──────────────────────────────────────────────────────────
 
-describe("normalizeUnidade", () => {
+describe("normalizeUnidade — title case básico", () => {
   it("aplica title case", () => {
     expect(normalizeUnidade("ALECRIM")).toBe("Alecrim")
     expect(normalizeUnidade("bangu")).toBe("Bangu")
@@ -59,14 +59,8 @@ describe("normalizeUnidade", () => {
     expect(normalizeUnidade("  Bangu  ")).toBe("Bangu")
   })
 
-  it("preposições permanecem em minúsculo (exceto início)", () => {
-    expect(normalizeUnidade("SAO JOAO DE MERITI")).toBe("São João de Meriti")
-  })
-
-  it("alias 'meriti' → nome canônico", () => {
-    expect(normalizeUnidade("meriti")).toBe("São João de Meriti")
-    expect(normalizeUnidade("MERITI")).toBe("São João de Meriti")
-    expect(normalizeUnidade("  Meriti  ")).toBe("São João de Meriti")
+  it("preposições PT-BR em minúsculo (exceto início)", () => {
+    expect(normalizeUnidade("CENTRO DE MADUREIRA")).toBe("Centro de Madureira")
   })
 
   it("retorna null para entrada vazia", () => {
@@ -74,6 +68,80 @@ describe("normalizeUnidade", () => {
     expect(normalizeUnidade(undefined)).toBeNull()
     expect(normalizeUnidade("")).toBeNull()
     expect(normalizeUnidade("   ")).toBeNull()
+  })
+})
+
+describe("normalizeUnidade — aliases (lookup sem acento/espaço)", () => {
+  // São João de Meriti
+  it("alias 'meriti' → nome canônico", () => {
+    expect(normalizeUnidade("meriti")).toBe("São João de Meriti")
+    expect(normalizeUnidade("MERITI")).toBe("São João de Meriti")
+    expect(normalizeUnidade("  Meriti  ")).toBe("São João de Meriti")
+  })
+
+  it("'SAO JOAO DE MERITI' (sem acento, com espaço) → nome canônico", () => {
+    expect(normalizeUnidade("SAO JOAO DE MERITI")).toBe("São João de Meriti")
+  })
+
+  it("'São João de Meriti' (com acento) → nome canônico", () => {
+    expect(normalizeUnidade("São João de Meriti")).toBe("São João de Meriti")
+  })
+
+  // Duque de Caxias
+  it("'duquedecaxias' (colado, sem acento) → Duque de Caxias", () => {
+    expect(normalizeUnidade("duquedecaxias")).toBe("Duque de Caxias")
+  })
+
+  it("'duque de caxias' (com espaços) → Duque de Caxias", () => {
+    expect(normalizeUnidade("duque de caxias")).toBe("Duque de Caxias")
+  })
+
+  it("'DUQUE DE CAXIAS' (maiúsculo) → Duque de Caxias", () => {
+    expect(normalizeUnidade("DUQUE DE CAXIAS")).toBe("Duque de Caxias")
+  })
+
+  // Belford Roxo
+  it("'belfordroxo' (colado) → Belford Roxo", () => {
+    expect(normalizeUnidade("belfordroxo")).toBe("Belford Roxo")
+  })
+
+  it("'BELFORD ROXO' (maiúsculo) → Belford Roxo", () => {
+    expect(normalizeUnidade("BELFORD ROXO")).toBe("Belford Roxo")
+  })
+
+  // Jardim Angela
+  it("'jardimangela' (colado) → Jardim Angela", () => {
+    expect(normalizeUnidade("jardimangela")).toBe("Jardim Angela")
+  })
+
+  it("'JARDIM ANGELA' (maiúsculo) → Jardim Angela", () => {
+    expect(normalizeUnidade("JARDIM ANGELA")).toBe("Jardim Angela")
+  })
+
+  // Joinville
+  it("'joinville' → Joinville", () => {
+    expect(normalizeUnidade("joinville")).toBe("Joinville")
+    expect(normalizeUnidade("JOINVILLE")).toBe("Joinville")
+  })
+})
+
+describe("normalizeUnidade — CamelCase split", () => {
+  it("DuqueDeCaxias → Duque de Caxias (via alias)", () => {
+    expect(normalizeUnidade("DuqueDeCaxias")).toBe("Duque de Caxias")
+  })
+
+  it("BelfordRoxo → Belford Roxo (via alias)", () => {
+    expect(normalizeUnidade("BelfordRoxo")).toBe("Belford Roxo")
+  })
+
+  it("JardimAngela → Jardim Angela (via alias)", () => {
+    expect(normalizeUnidade("JardimAngela")).toBe("Jardim Angela")
+  })
+})
+
+describe("normalizeUnidade — variações de acento (normKey garante mesmo grupo)", () => {
+  it("'Sao Joao de Meriti' (sem acentos) → nome canônico com acentos", () => {
+    expect(normalizeUnidade("Sao Joao de Meriti")).toBe("São João de Meriti")
   })
 })
 
