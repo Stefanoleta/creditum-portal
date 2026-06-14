@@ -1,65 +1,117 @@
 import { describe, it, expect } from "vitest"
-import { classifyRecontato, calcRecontatoEm } from "@/lib/recontato-classifier"
+import { classifyRecontato, calcRecontatoEm, type RecontatoCategoria } from "@/lib/recontato-classifier"
 
-describe("classifyRecontato", () => {
-  it("identifica convertido por CONTRATO", () => {
+// ── Exact Argus tabulado values (fetched 2026-06-14, campanha Vendas) ──────────
+
+const ARGUS_CASES: [string, RecontatoCategoria][] = [
+  ["CAIXA POSTAL / MENSAGEM OPERADORA",        "nao_atendeu"],
+  ["CLIENTE DESLIGOU",                          "nao_atendeu"],
+  ["CLIENTE NÃO TEM INTERESSE",                 "nao_gostou"],
+  ["CONTRATO FECHADO",                          "convertido"],
+  ["FALECIDO",                                  "fora_politica"],
+  ["FORA DA POLITICA",                          "fora_politica"],
+  ["LIGAÇÃO MUDA",                              "nao_atendeu"],
+  ["NÃO RECONHECE CONTATO (DESCONHECIDO)",      "terceiro_nao_conhece"],
+  ["NÃO TABULADO",                              "outros"],
+  ["PROPOSTA ENVIADA",                          "qualificado"],
+  ["QUALIFICAÇÃO",                              "qualificado"],
+  ["QUESTÃO FINANCEIRA (SEM CONDIÇÕES)",        "objecao_financeira"],
+  ["RECADO",                                    "nao_podia_falar"],
+  ["RECLAMAÇÃO GRAU",                           "outros"],
+  ["RETORNAR CONTATO - PRIVADO",                "nao_podia_falar"],
+  ["SEM GARANTIDOR",                            "fora_politica"],
+  ["TEL. NÃO É DO CLIENTE - *FINALIZAR LEAD*", "numero_invalido"],
+  ["TELEFONE BLOQUEADO - BLOCK LIST",           "numero_invalido"],
+  ["TEMPO POS CHAMADA EXCEDIDO",                "outros"],
+]
+
+describe("classifyRecontato — valores exatos do Argus", () => {
+  it.each(ARGUS_CASES)('classifica "%s" como %s', (tab, expected) => {
+    expect(classifyRecontato(tab, "ATENDIMENTO")).toBe(expected)
+  })
+})
+
+// ── Fallback substring matching (legado / valores IA) ─────────────────────────
+
+describe("classifyRecontato — fallback substring", () => {
+  it("convertido por substring CONTRATO", () => {
     expect(classifyRecontato("CONTRATO ASSINADO", "ATENDIMENTO")).toBe("convertido")
   })
 
-  it("identifica convertido por FECHAMENTO (antes de qualificado)", () => {
+  it("convertido por substring FECHAMENTO", () => {
     expect(classifyRecontato("FECHAMENTO DE NEGÓCIO", "ATENDIMENTO")).toBe("convertido")
   })
 
-  it("identifica qualificado", () => {
+  it("qualificado por substring QUALIFICA", () => {
     expect(classifyRecontato("QUALIFICADO - APTO", "ATENDIMENTO")).toBe("qualificado")
   })
 
-  it("identifica fora_politica", () => {
+  it("fora_politica por FORA DA POLÍTICA (com acento)", () => {
     expect(classifyRecontato("FORA DA POLÍTICA", "ATENDIMENTO")).toBe("fora_politica")
-    expect(classifyRecontato("FORA DA POLITICA", "ATENDIMENTO")).toBe("fora_politica")
   })
 
-  it("identifica nao_gostou por recusa", () => {
+  it("nao_gostou por RECUSA", () => {
     expect(classifyRecontato("RECUSA TOTAL", "ATENDIMENTO")).toBe("nao_gostou")
-    expect(classifyRecontato("NÃO TEM INTERESSE", "ATENDIMENTO")).toBe("nao_gostou")
-    expect(classifyRecontato("SEM INTERESSE", "ATENDIMENTO")).toBe("nao_gostou")
   })
 
-  it("identifica terceiro_nao_conhece", () => {
-    expect(classifyRecontato("NÃO RECONHECE O ALUNO", "ATENDIMENTO")).toBe("terceiro_nao_conhece")
+  it("nao_gostou por NÃO TEM INTERESSE (substring)", () => {
+    expect(classifyRecontato("NÃO TEM INTERESSE", "ATENDIMENTO")).toBe("nao_gostou")
+  })
+
+  it("terceiro_nao_conhece por TERCEIRO", () => {
     expect(classifyRecontato("TERCEIRO ATENDEU", "ATENDIMENTO")).toBe("terceiro_nao_conhece")
   })
 
-  it("identifica mae_atendeu", () => {
+  it("mae_atendeu por MÃE", () => {
     expect(classifyRecontato("MÃE ATENDEU", "ATENDIMENTO")).toBe("mae_atendeu")
-    expect(classifyRecontato("RESPONSÁVEL INFORMOU", "ATENDIMENTO")).toBe("mae_atendeu")
+  })
+
+  it("mae_atendeu por FAMILIAR", () => {
     expect(classifyRecontato("FAMILIAR ATENDEU", "ATENDIMENTO")).toBe("mae_atendeu")
   })
 
-  it("identifica nao_podia_falar", () => {
-    expect(classifyRecontato("NÃO PODIA FALAR AGORA", "ATENDIMENTO")).toBe("nao_podia_falar")
+  it("nao_podia_falar por OCUPADO", () => {
     expect(classifyRecontato("OCUPADO", "ATENDIMENTO")).toBe("nao_podia_falar")
+  })
+
+  it("nao_podia_falar por EM AULA", () => {
     expect(classifyRecontato("EM AULA", "ATENDIMENTO")).toBe("nao_podia_falar")
   })
 
-  it("identifica nao_atendeu por resultado CANCELADO", () => {
+  it("numero_invalido por BLOQUEADO", () => {
+    expect(classifyRecontato("NÚMERO BLOQUEADO", "ATENDIMENTO")).toBe("numero_invalido")
+  })
+
+  it("nao_atendeu por resultado CANCELADO", () => {
     expect(classifyRecontato("", "CANCELADO")).toBe("nao_atendeu")
+  })
+
+  it("nao_atendeu por resultado NÃO ATENDE", () => {
     expect(classifyRecontato(null, "NÃO ATENDE")).toBe("nao_atendeu")
   })
 
-  it("identifica nao_atendeu por tabulação vazia", () => {
+  it("nao_atendeu por tabulação vazia", () => {
     expect(classifyRecontato("", "ATENDIMENTO")).toBe("nao_atendeu")
   })
 
-  it("retorna outros para tabulação desconhecida", () => {
-    expect(classifyRecontato("OUTRO MOTIVO", "ATENDIMENTO")).toBe("outros")
+  it("outros para tabulação desconhecida", () => {
+    expect(classifyRecontato("OUTRO MOTIVO QUALQUER", "ATENDIMENTO")).toBe("outros")
+  })
+})
+
+// ── Robustez ──────────────────────────────────────────────────────────────────
+
+describe("classifyRecontato — null/undefined", () => {
+  it("não lança erro para null/null", () => {
+    expect(() => classifyRecontato(null, null)).not.toThrow()
   })
 
-  it("trata null/undefined sem lançar erro", () => {
-    expect(() => classifyRecontato(null, null)).not.toThrow()
+  it("não lança erro para undefined/undefined", () => {
     expect(() => classifyRecontato(undefined, undefined)).not.toThrow()
   })
 })
+
+// ── calcRecontatoEm ───────────────────────────────────────────────────────────
 
 describe("calcRecontatoEm", () => {
   it("retorna null para qualificado", () => {
@@ -72,6 +124,10 @@ describe("calcRecontatoEm", () => {
 
   it("retorna null para fora_politica", () => {
     expect(calcRecontatoEm("fora_politica")).toBeNull()
+  })
+
+  it("retorna null para numero_invalido", () => {
+    expect(calcRecontatoEm("numero_invalido")).toBeNull()
   })
 
   it("retorna data futura para nao_atendeu (2 dias)", () => {

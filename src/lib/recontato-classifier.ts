@@ -80,40 +80,56 @@ function upper(s: string | null | undefined): string {
   return (s ?? "").toUpperCase()
 }
 
+// Exact match table — real Argus tabulado values (fetched 2026-06-14, campanha Vendas)
+const ARGUS_EXACT: Record<string, RecontatoCategoria> = {
+  "CAIXA POSTAL / MENSAGEM OPERADORA":        "nao_atendeu",
+  "CLIENTE DESLIGOU":                          "nao_atendeu",
+  "CLIENTE NÃO TEM INTERESSE":                 "nao_gostou",
+  "CONTRATO FECHADO":                          "convertido",
+  "FALECIDO":                                  "fora_politica",
+  "FORA DA POLITICA":                          "fora_politica",
+  "LIGAÇÃO MUDA":                              "nao_atendeu",
+  "NÃO RECONHECE CONTATO (DESCONHECIDO)":      "terceiro_nao_conhece",
+  "NÃO TABULADO":                              "outros",
+  "PROPOSTA ENVIADA":                          "qualificado",
+  "QUALIFICAÇÃO":                              "qualificado",
+  "QUESTÃO FINANCEIRA (SEM CONDIÇÕES)":        "objecao_financeira",
+  "RECADO":                                    "nao_podia_falar",
+  "RECLAMAÇÃO GRAU":                           "outros",
+  "RETORNAR CONTATO - PRIVADO":                "nao_podia_falar",
+  "SEM GARANTIDOR":                            "fora_politica",
+  "TEL. NÃO É DO CLIENTE - *FINALIZAR LEAD*": "numero_invalido",
+  "TELEFONE BLOQUEADO - BLOCK LIST":           "numero_invalido",
+  "TEMPO POS CHAMADA EXCEDIDO":                "outros",
+}
+
 export function classifyRecontato(
   tabulacao: string | null | undefined,
   resultadoLigacao: string | null | undefined
 ): RecontatoCategoria {
   const tab = upper(tabulacao)
-  const res = upper(resultadoLigacao)
 
-  // Convertido: contrato ou fechamento (antes de qualificado para não engolir)
+  // 1. Exact match — real Argus tabulado strings
+  if (tab in ARGUS_EXACT) return ARGUS_EXACT[tab]
+
+  // 2. Substring fallback — covers legacy values and AI-derived tabulações
   if (tab.includes("CONTRATO") || tab.includes("FECHAMENTO")) return "convertido"
-
-  // Qualificado
   if (tab.includes("QUALIFICA")) return "qualificado"
-
-  // Fora da política
   if (tab.includes("FORA DA POLÍTICA") || tab.includes("FORA DA POLITICA")) return "fora_politica"
-
-  // Não gostou / recusa
   if (tab.includes("NÃO TEM INTERESSE") || tab.includes("NAO TEM INTERESSE") ||
       tab.includes("RECUSA") || tab.includes("SEM INTERESSE")) return "nao_gostou"
-
-  // Terceiro não conhece
   if (tab.includes("NÃO RECONHECE") || tab.includes("NAO RECONHECE") ||
       tab.includes("DESCONHECIDO") || tab.includes("TERCEIRO")) return "terceiro_nao_conhece"
-
-  // Mãe / responsável atendeu
   if (tab.includes("MÃE") || tab.includes("MAE") || tab.includes("RESPONSÁVEL") ||
       tab.includes("RESPONSAVEL") || tab.includes("FAMILIAR")) return "mae_atendeu"
-
-  // Não podia falar
   if (tab.includes("NÃO PODIA") || tab.includes("NAO PODIA") ||
       tab.includes("LIGAR DEPOIS") || tab.includes("OCUPADO") ||
       tab.includes("EM AULA") || tab.includes("VOLTAR")) return "nao_podia_falar"
+  if (tab.includes("CAIXA POSTAL") || tab.includes("BLOQUEADO") ||
+      tab.includes("NÃO É DO CLIENTE")) return "numero_invalido"
 
-  // Não atendeu: resultado cancelado/não atende ou tabulação vazia
+  // 3. Fallback via resultadoLigacao or empty tabulação
+  const res = upper(resultadoLigacao)
   if (res.includes("CANCELAD") || res.includes("NÃO ATEND") || res.includes("NAO ATEND") ||
       res.includes("CAIXA POSTAL") || res.includes("INEXISTENTE") ||
       tab === "") return "nao_atendeu"

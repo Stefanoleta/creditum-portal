@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase-server"
 import { normalizePhone, normalizeUnidade } from "@/lib/lista-parser"
+import { classifyRecontato, type RecontatoCategoria } from "@/lib/recontato-classifier"
 
 // GET /api/listas/unidades
 // Retorna métricas por unidade para o Termômetro de Unidades.
@@ -17,9 +18,12 @@ export interface UnidadeMetrica {
   ultima_lista_em:      string
 }
 
-// Categorias que encerram definitivamente o potencial do lead
-// "não gostou" → nao_gostou_proposta  |  "não tem interesse" → recusa_definitiva  |  "já é aluno" → ja_resolveu
-const DEFINITIVE_CATS = new Set(["nao_gostou_proposta", "recusa_definitiva", "ja_resolveu"])
+// Categorias que encerram definitivamente o potencial do lead (via tabulação real Argus)
+const DEFINITIVE_CATS    = new Set<RecontatoCategoria>(["nao_gostou", "fora_politica"])
+// Número inválido: lead deve ser desconsiderado, mas não penaliza o score
+const IGNORED_CATS       = new Set<RecontatoCategoria>(["numero_invalido"])
+// Legado: categorias AI para calls analisadas antes desta versão (sem tabulacaoDesc em pending_payload)
+const AI_DEFINITIVE_CATS = new Set(["nao_gostou_proposta", "recusa_definitiva", "ja_resolveu"])
 
 function scoreStatus(score: number): "pronta" | "em_andamento" | "descanso" {
   if (score >= 70) return "pronta"
@@ -88,21 +92,36 @@ export async function GET() {
     }
   }
 
-  // ── 4. Análises com tabulacao_ia definitiva ────────────────────────────────
+  // ── 4. Análises com tabulação definitiva ──────────────────────────────────
+  // Fonte primária: tabulacaoDesc do Argus em pending_payload (armazenado em todos os
+  // calls a partir desta versão). Fallback: coaching_data.tabulacao_ia (calls históricas
+  // analisadas antes desta versão que não têm tabulacaoDesc em pending_payload).
 
   const { data: analyses } = await supabase
     .from("call_analyses")
-    .select("coaching_data, pending_payload")
-    .not("coaching_data", "is", null)
+    .select("pending_payload, coaching_data")
 
   const definitivePhones = new Set<string>()
   for (const a of analyses ?? []) {
-    const cd    = a.coaching_data as Record<string, unknown> | null
-    const tabIa = cd?.tabulacao_ia as { categoria?: string } | null
-    if (!tabIa?.categoria || !DEFINITIVE_CATS.has(tabIa.categoria)) continue
-
     let payload: Record<string, unknown> | null = null
-    try { payload = a.pending_payload ? JSON.parse(a.pending_payload as string) : null } catch { continue }
+    try { payload = a.pending_payload ? JSON.parse(a.pending_payload as string) : null } catch { /* ignore */ }
+
+    const tabulado = (payload?.tabulacaoDesc ?? "") as string
+    let isDefinitive = false
+
+    if (tabulado) {
+      // Nova forma: tabulação real do Argus
+      const cat = classifyRecontato(tabulado, null)
+      if (IGNORED_CATS.has(cat)) continue
+      isDefinitive = DEFINITIVE_CATS.has(cat)
+    } else {
+      // Legado: análise IA para calls sem tabulacaoDesc
+      const cd    = a.coaching_data as Record<string, unknown> | null
+      const tabIa = cd?.tabulacao_ia as { categoria?: string } | null
+      isDefinitive = !!(tabIa?.categoria && AI_DEFINITIVE_CATS.has(tabIa.categoria))
+    }
+
+    if (!isDefinitive) continue
 
     const rawPhone = (
       payload?.telefone ??

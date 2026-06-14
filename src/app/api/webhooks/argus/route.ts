@@ -41,6 +41,14 @@ async function processWebhook(payload: ArgusWebhook): Promise<void> {
   const sdrName    = payload.nomeUsuario ?? payload.nome_usuario ?? "SDR"
   const phone      = maskPhone(payload.telefone ?? payload.telefone_discado)
   const duration   = parseDuration(payload.tempoLigacao ?? payload.tempo_ligacao ?? 0)
+  const rawPhone   = payload.telefone ?? payload.telefone_discado ?? ""
+  // Stored in ALL calls so the Termômetro can classify by raw Argus tabulação
+  // without depending on AI coaching_data (which requires audio + transcript).
+  const tabulacaoCtx = JSON.stringify({
+    tabulacaoDesc:    payload.tabulacaoDesc ?? "",
+    telefone:         rawPhone,
+    ligacaoRelevante: { telefone: rawPhone },
+  })
 
   if (duration <= 20) {
     console.log(`[webhook/argus] ignorando ${call_id} — duração ${duration}s ≤ 20s`)
@@ -129,10 +137,11 @@ async function processWebhook(payload: ArgusWebhook): Promise<void> {
       duration_seconds: duration,
       transcript,
       ...aiResult,
-      analisado_em: new Date().toISOString(),
-      source:       "ai",
-      data_source:  "argus_real",
-      status:       "completed",
+      analisado_em:    new Date().toISOString(),
+      source:          "ai",
+      data_source:     "argus_real",
+      status:          "completed",
+      pending_payload: tabulacaoCtx,
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -156,10 +165,11 @@ async function processWebhook(payload: ArgusWebhook): Promise<void> {
       como_tratou_objecoes: "Análise IA indisponível",
       pontos_positivos:    [],
       pontos_negativos:    ["Análise automática falhou — verifique ANTHROPIC_API_KEY"],
-      analisado_em: new Date().toISOString(),
-      source:       "mock",
-      data_source:  "metadata_only",
-      status:       "completed",
+      analisado_em:    new Date().toISOString(),
+      source:          "mock",
+      data_source:     "metadata_only",
+      status:          "completed",
+      pending_payload: tabulacaoCtx,
     }
   }
 
