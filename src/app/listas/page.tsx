@@ -3,7 +3,7 @@
 import Image from "next/image"
 import Link from "next/link"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { BarChart3, Microscope, LayoutList, List, Upload, X, ChevronRight, AlertTriangle, CheckCircle2, Clock, PhoneOff, Check, ArrowRightLeft, Thermometer, RefreshCw, Download, FileUp, Trash2 } from "lucide-react"
+import { BarChart3, Microscope, LayoutList, List, Upload, X, ChevronRight, AlertTriangle, CheckCircle2, Clock, PhoneOff, Check, ArrowRightLeft, Thermometer, RefreshCw, Download, FileUp, Trash2, Ban, TrendingUp, Calendar, Phone } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { type ListaMeta, type LeadInput } from "@/lib/lista-parser"
 
@@ -95,6 +95,40 @@ interface RecontatoLead {
   recontato_em:       string | null
   observacao:         string | null
   listas:             { nome_arquivo: string; unidade: string } | null
+}
+
+interface FilaLead {
+  id: string
+  nome: string
+  telefone_principal: string | null
+  recontato_em: string | null
+  recontato_categoria: string | null
+  recontato_tentativas: number | null
+  listas: { unidade: string; tipo_lista: string } | null
+}
+
+interface ResumoRecontatos {
+  agendado_futuro: number
+  prontos_hoje: number
+  em_pausa: number
+  bloqueados: number
+  higienizacao: number
+}
+
+interface InteligenciaHorario {
+  melhor_dia: string
+  melhor_horario: string
+  taxa_atendimento: number
+  baseado_em: number
+}
+
+interface BloqueadoLead {
+  id: string
+  nome: string
+  telefone_principal: string | null
+  bloqueado_motivo: string | null
+  bloqueado_em: string | null
+  listas: { unidade: string } | null
 }
 
 interface UnidadeMetrica {
@@ -880,251 +914,380 @@ function HigienizacaoTab({ onResolved }: { onResolved: () => void }) {
 
 // ─── Recontatos ───────────────────────────────────────────────────────────────
 
-const CAT_COLOR: Record<RecontatoCategoria, { dot: string; badge: string; ring: string }> = {
-  // Originais
-  nao_atendeu:           { dot: "bg-gray-400",    badge: "bg-gray-50 text-gray-500 border-gray-200",         ring: "ring-gray-100"   },
-  nao_podia_falar:       { dot: "bg-amber-400",   badge: "bg-amber-50 text-amber-700 border-amber-200",      ring: "ring-amber-100"  },
-  mae_atendeu:           { dot: "bg-blue-400",    badge: "bg-blue-50 text-blue-700 border-blue-200",         ring: "ring-blue-100"   },
-  nao_gostou:            { dot: "bg-red-400",     badge: "bg-red-50 text-red-600 border-red-200",            ring: "ring-red-100"    },
-  terceiro_nao_conhece:  { dot: "bg-purple-400",  badge: "bg-purple-50 text-purple-700 border-purple-200",   ring: "ring-purple-100" },
-  fora_politica:         { dot: "bg-red-600",     badge: "bg-red-100 text-red-700 border-red-300",           ring: "ring-red-200"    },
-  qualificado:           { dot: "bg-emerald-400", badge: "bg-emerald-50 text-emerald-700 border-emerald-200", ring: "ring-emerald-100"},
-  convertido:            { dot: "bg-emerald-600", badge: "bg-emerald-100 text-emerald-800 border-emerald-300", ring: "ring-emerald-200"},
-  outros:                { dot: "bg-gray-300",    badge: "bg-gray-50 text-gray-400 border-gray-200",         ring: "ring-gray-100"   },
-  // IA
-  ocupado_recontatar:    { dot: "bg-amber-300",   badge: "bg-amber-50 text-amber-600 border-amber-200",      ring: "ring-amber-100"  },
-  interessado_sem_fechar:{ dot: "bg-emerald-300", badge: "bg-emerald-50 text-emerald-600 border-emerald-200", ring: "ring-emerald-100"},
-  mae_familiar_atendeu:  { dot: "bg-blue-300",    badge: "bg-blue-50 text-blue-600 border-blue-200",         ring: "ring-blue-100"   },
-  nao_reconhece_aguardar:{ dot: "bg-purple-300",  badge: "bg-purple-50 text-purple-600 border-purple-200",   ring: "ring-purple-100" },
-  objecao_financeira:    { dot: "bg-orange-400",  badge: "bg-orange-50 text-orange-700 border-orange-200",   ring: "ring-orange-100" },
-  objecao_prazo:         { dot: "bg-orange-300",  badge: "bg-orange-50 text-orange-600 border-orange-200",   ring: "ring-orange-100" },
-  nao_gostou_proposta:   { dot: "bg-red-400",     badge: "bg-red-50 text-red-600 border-red-200",            ring: "ring-red-100"    },
-  ja_resolveu:           { dot: "bg-gray-400",    badge: "bg-gray-50 text-gray-500 border-gray-200",         ring: "ring-gray-100"   },
-  numero_invalido:       { dot: "bg-gray-300",    badge: "bg-gray-50 text-gray-400 border-gray-200",         ring: "ring-gray-100"   },
-  recusa_definitiva:     { dot: "bg-red-600",     badge: "bg-red-100 text-red-700 border-red-300",           ring: "ring-red-200"    },
-  nao_atendeu_multiplas: { dot: "bg-gray-500",    badge: "bg-gray-50 text-gray-600 border-gray-200",         ring: "ring-gray-100"   },
+const CAT_LABEL: Record<string, string> = {
+  nao_atendeu:           "Não Atendeu",
+  nao_podia_falar:       "Não Podia Falar",
+  mae_atendeu:           "Mãe / Responsável",
+  nao_gostou:            "Sem Interesse",
+  terceiro_nao_conhece:  "Terceiro Atendeu",
+  fora_politica:         "Fora da Política",
+  qualificado:           "Qualificado",
+  convertido:            "Convertido",
+  outros:                "Outros",
+  ocupado_recontatar:    "Ocupado / Pediu Retorno",
+  interessado_sem_fechar:"Interessado sem Fechar",
+  mae_familiar_atendeu:  "Mãe / Familiar (IA)",
+  nao_reconhece_aguardar:"Não Reconhece",
+  objecao_financeira:    "Objeção Financeira",
+  objecao_prazo:         "Objeção de Prazo",
+  nao_gostou_proposta:   "Não Gostou da Proposta",
+  ja_resolveu:           "Já Resolveu",
+  numero_invalido:       "Número Inválido",
+  recusa_definitiva:     "Recusa Definitiva",
+  nao_atendeu_multiplas: "Não Atendeu (Múltiplas)",
 }
 
 function RecontatosTab() {
-  const [grupos, setGrupos]                 = useState<RecontatoGrupo[]>([])
-  const [loading, setLoading]               = useState(true)
-  const [error, setError]                   = useState<string | null>(null)
-  const [expanded, setExpanded]             = useState<RecontatoCategoria | null>(null)
-  const [leads, setLeads]                   = useState<RecontatoLead[]>([])
-  const [leadsTotal, setLeadsTotal]         = useState(0)
-  const [leadsPage, setLeadsPage]           = useState(1)
-  const [leadsLoading, setLeadsLoading]     = useState(false)
-  const [gerandoLista, setGerandoLista]     = useState<RecontatoCategoria | null>(null)
-  const [listaGerada, setListaGerada]       = useState<string | null>(null)
-  const PER_PAGE = 50
+  // ── Section 1: Inteligência de Horários ──
+  const [horarios, setHorarios]               = useState<Record<string, InteligenciaHorario | null>>({})
+  const [horariosLoading, setHorariosLoading] = useState(true)
+  const [horariosOpen, setHorariosOpen]       = useState(false)
 
-  const loadGrupos = useCallback(() => {
-    setLoading(true)
-    setError(null)
-    fetch("/api/leads/recontatos")
-      .then(async r => {
-        const d = await r.json()
-        if (!r.ok) { setError(d.error ?? `Erro ${r.status}`); return }
-        setGrupos(d.grupos ?? [])
-      })
-      .catch(e => setError(e instanceof Error ? e.message : "Erro de rede"))
-      .finally(() => setLoading(false))
+  // ── Section 2: Fila do Dia ──
+  const [fila, setFila]                   = useState<FilaLead[]>([])
+  const [filaTotal, setFilaTotal]         = useState(0)
+  const [filaPage, setFilaPage]           = useState(1)
+  const [filaLoading, setFilaLoading]     = useState(true)
+  const [exportando, setExportando]       = useState(false)
+  const PER_PAGE_FILA = 50
+
+  // ── Section 3: Resumo ──
+  const [resumo, setResumo]               = useState<ResumoRecontatos | null>(null)
+  const [resumoLoading, setResumoLoading] = useState(true)
+
+  // ── Section 4: Bloqueados ──
+  const [bloqueados, setBloqueados]             = useState<BloqueadoLead[]>([])
+  const [bloqueadosTotal, setBloqueadosTotal]   = useState(0)
+  const [bloqueadosPage, setBloqueadosPage]     = useState(1)
+  const [bloqueadosLoading, setBloqueadosLoading] = useState(false)
+  const [bloqueadosOpen, setBloqueadosOpen]     = useState(false)
+  const PER_PAGE_BLOQ = 50
+
+  const loadHorarios = useCallback(() => {
+    setHorariosLoading(true)
+    fetch("/api/listas/inteligencia-horarios")
+      .then(r => r.json())
+      .then(d => setHorarios(d ?? {}))
+      .catch(() => setHorarios({}))
+      .finally(() => setHorariosLoading(false))
   }, [])
 
-  useEffect(() => { loadGrupos() }, [loadGrupos])
-
-  const loadLeads = useCallback((cat: RecontatoCategoria, page: number) => {
-    setLeadsLoading(true)
-    fetch(`/api/leads/recontatos?categoria=${cat}&page=${page}&per_page=${PER_PAGE}`)
-      .then(async r => {
-        const d = await r.json()
-        if (!r.ok) return
-        setLeads(d.leads ?? [])
-        setLeadsTotal(d.total ?? 0)
-      })
-      .finally(() => setLeadsLoading(false))
+  const loadFila = useCallback((page: number) => {
+    setFilaLoading(true)
+    fetch(`/api/leads/recontatos?mode=fila_do_dia&page=${page}&per_page=${PER_PAGE_FILA}`)
+      .then(r => r.json())
+      .then(d => { setFila(d.leads ?? []); setFilaTotal(d.total ?? 0) })
+      .catch(() => {})
+      .finally(() => setFilaLoading(false))
   }, [])
 
-  function toggleExpand(cat: RecontatoCategoria) {
-    if (expanded === cat) { setExpanded(null); setLeads([]); return }
-    setExpanded(cat)
-    setLeadsPage(1)
-    loadLeads(cat, 1)
-  }
+  const loadResumo = useCallback(() => {
+    setResumoLoading(true)
+    fetch("/api/leads/recontatos?mode=resumo")
+      .then(r => r.json())
+      .then(d => setResumo(d.resumo ?? null))
+      .catch(() => {})
+      .finally(() => setResumoLoading(false))
+  }, [])
+
+  const loadBloqueados = useCallback((page: number) => {
+    setBloqueadosLoading(true)
+    fetch(`/api/leads/recontatos?mode=bloqueados&page=${page}&per_page=${PER_PAGE_BLOQ}`)
+      .then(r => r.json())
+      .then(d => { setBloqueados(d.leads ?? []); setBloqueadosTotal(d.total ?? 0) })
+      .catch(() => {})
+      .finally(() => setBloqueadosLoading(false))
+  }, [])
 
   useEffect(() => {
-    if (expanded) loadLeads(expanded, leadsPage)
-  }, [expanded, leadsPage, loadLeads])
+    loadHorarios()
+    loadFila(1)
+    loadResumo()
+  }, [loadHorarios, loadFila, loadResumo])
 
-  function gerarLista(cat: RecontatoCategoria, count: number) {
-    setGerandoLista(cat)
-    // Busca todos os leads da categoria para montar CSV
-    fetch(`/api/leads/recontatos?categoria=${cat}&page=1&per_page=200`)
-      .then(r => r.json())
-      .then(d => {
-        const rows: RecontatoLead[] = d.leads ?? []
-        const linhas = ["Nome,Telefone,Unidade,Recontato Em"]
-        for (const l of rows) {
-          const unidade = (l.listas as { unidade?: string } | null)?.unidade ?? ""
-          linhas.push(`"${l.nome}","${l.telefone_principal ?? ""}","${unidade}","${l.recontato_em ?? ""}"`)
-        }
-        const csv  = linhas.join("\n")
-        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+  useEffect(() => {
+    if (bloqueadosOpen && bloqueados.length === 0) loadBloqueados(1)
+  }, [bloqueadosOpen, bloqueados.length, loadBloqueados])
+
+  useEffect(() => {
+    if (bloqueadosOpen) loadBloqueados(bloqueadosPage)
+  }, [bloqueadosPage, bloqueadosOpen, loadBloqueados])
+
+  function handleExportFila() {
+    setExportando(true)
+    fetch("/api/leads/recontatos/export")
+      .then(async r => {
+        if (!r.ok) { alert("Erro ao exportar"); return }
+        const blob = await r.blob()
         const url  = URL.createObjectURL(blob)
         const a    = document.createElement("a")
         a.href     = url
-        a.download = `recontatos-${cat}-${new Date().toISOString().split("T")[0]}.csv`
+        a.download = `recontatos-${new Date().toISOString().split("T")[0]}.xlsx`
         a.click()
         URL.revokeObjectURL(url)
-        setListaGerada(`${count} leads exportados`)
-        setTimeout(() => setListaGerada(null), 4000)
       })
-      .finally(() => setGerandoLista(null))
+      .finally(() => setExportando(false))
   }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-16 gap-3 text-sm text-gray-400">
-        <div className="w-4 h-4 border-2 border-gray-200 border-t-emerald-500 rounded-full animate-spin" />
-        Carregando recontatos...
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-lg px-4 py-3">
-        <AlertTriangle className="w-4 h-4 shrink-0" />
-        Erro ao carregar: {error}
-        <button className="ml-auto text-xs underline" onClick={loadGrupos}>Tentar novamente</button>
-      </div>
-    )
-  }
-
-  if (grupos.length === 0) {
-    return (
-      <div className="bg-white rounded-lg shadow-sm p-5">
-        <div className="flex flex-col items-center gap-2 py-12 text-gray-400">
-          <Clock className="w-8 h-8 text-gray-200" />
-          <p className="text-sm">Nenhum lead com recontato agendado.</p>
-          <p className="text-xs text-gray-300">Execute o backfill para cruzar ligações do Argus com as listas.</p>
-        </div>
-      </div>
-    )
-  }
-
-  const totalLeads = grupos.reduce((s, g) => s + g.count, 0)
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-5 flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-semibold text-gray-700">Recontatos por Categoria</h2>
-          <p className="text-xs text-gray-400 mt-0.5">
-            {totalLeads} lead{totalLeads !== 1 ? "s" : ""} com recontato agendado
-          </p>
-        </div>
-        <button onClick={loadGrupos} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
-          <RefreshCw className="w-3.5 h-3.5" />
+    <div className="flex flex-col gap-4">
+
+      {/* ── Section 1: Inteligência de Horários ───────────────────────────── */}
+      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+        <button
+          onClick={() => setHorariosOpen(v => !v)}
+          className="w-full flex items-center gap-2 px-5 py-4 hover:bg-gray-50/70 transition-colors text-left"
+        >
+          <TrendingUp className="w-4 h-4 text-emerald-500 shrink-0" />
+          <span className="text-sm font-semibold text-gray-800 flex-1">Inteligência de Horários</span>
+          <span className="text-xs text-gray-400 mr-2">
+            {Object.keys(horarios).length} unidades
+          </span>
+          <ChevronRight className={cn("w-4 h-4 text-gray-300 transition-transform", horariosOpen && "rotate-90")} />
         </button>
-      </div>
 
-      {listaGerada && (
-        <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 rounded-lg px-4 py-2">
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
-          {listaGerada}
-        </div>
-      )}
-
-      <div className="flex flex-col divide-y divide-gray-50">
-        {grupos.map(grupo => {
-          const cfg   = CAT_COLOR[grupo.categoria]
-          const isExp = expanded === grupo.categoria
-          return (
-            <div key={grupo.categoria} className="py-1">
-              <button
-                onClick={() => toggleExpand(grupo.categoria)}
-                className={cn(
-                  "w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left",
-                  isExp ? "bg-gray-50" : "hover:bg-gray-50/70"
-                )}
-              >
-                <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", cfg.dot)} />
-                <span className="text-sm font-medium text-gray-800 flex-1">{grupo.label}</span>
-                <span className={cn("text-[11px] font-bold border rounded-full px-2 py-0.5 tabular-nums", cfg.badge)}>
-                  {grupo.count}
-                </span>
-                {grupo.proxima_em && (
-                  <span className="text-[11px] text-gray-400 tabular-nums hidden sm:inline">
-                    próx. {fmtDate(grupo.proxima_em)}
-                  </span>
-                )}
-                <button
-                  onClick={e => { e.stopPropagation(); gerarLista(grupo.categoria, grupo.count) }}
-                  disabled={gerandoLista === grupo.categoria}
-                  className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-2 py-1 hover:bg-emerald-100 transition-colors disabled:opacity-50 hidden sm:block"
-                >
-                  {gerandoLista === grupo.categoria ? "..." : "Gerar Lista"}
-                </button>
-                <ChevronRight className={cn("w-3.5 h-3.5 text-gray-300 shrink-0 transition-transform", isExp && "rotate-90")} />
-              </button>
-
-              {isExp && (
-                <div className="ml-5 mt-1 mb-2">
-                  {leadsLoading ? (
-                    <div className="flex items-center gap-2 py-4 text-xs text-gray-400">
-                      <div className="w-3 h-3 border-2 border-gray-200 border-t-emerald-500 rounded-full animate-spin" />
-                      Carregando...
-                    </div>
-                  ) : (
-                    <>
-                      <div className="overflow-x-auto rounded-lg border border-gray-100">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="bg-gray-50 text-gray-400 font-medium">
-                              <th className="px-3 py-2 text-left">Nome</th>
-                              <th className="px-3 py-2 text-left">Telefone</th>
-                              <th className="px-3 py-2 text-left">Unidade</th>
-                              <th className="px-3 py-2 text-left">Recontato em</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-50">
-                            {leads.map(l => (
-                              <tr key={l.id} className="bg-white hover:bg-gray-50/50">
-                                <td className="px-3 py-2 font-medium text-gray-800">{l.nome}</td>
-                                <td className="px-3 py-2 text-gray-500 tabular-nums">{l.telefone_principal ?? "—"}</td>
-                                <td className="px-3 py-2 text-gray-500">
-                                  {(l.listas as { unidade?: string } | null)?.unidade ?? "—"}
-                                </td>
-                                <td className="px-3 py-2 text-gray-500 tabular-nums">{fmtDate(l.recontato_em)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                      {leadsTotal > PER_PAGE && (
-                        <div className="flex items-center justify-end gap-2 mt-2">
-                          <span className="text-[11px] text-gray-400">{leadsTotal} total</span>
-                          <button
-                            disabled={leadsPage === 1}
-                            onClick={() => setLeadsPage(p => p - 1)}
-                            className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-600 disabled:opacity-30"
-                          >Anterior</button>
-                          <button
-                            disabled={(leadsPage - 1) * PER_PAGE + leads.length >= leadsTotal}
-                            onClick={() => setLeadsPage(p => p + 1)}
-                            className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-600 disabled:opacity-30"
-                          >Próxima</button>
+        {horariosOpen && (
+          <div className="px-5 pb-5">
+            {horariosLoading ? (
+              <div className="flex items-center gap-2 py-6 text-xs text-gray-400">
+                <div className="w-3 h-3 border-2 border-gray-200 border-t-emerald-500 rounded-full animate-spin" />
+                Analisando dados de ligações...
+              </div>
+            ) : Object.keys(horarios).length === 0 ? (
+              <p className="text-xs text-gray-400 py-4">Nenhum dado de ligações nos últimos 90 dias.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-1">
+                {Object.entries(horarios).map(([unidade, info]) => (
+                  <div key={unidade} className="border border-gray-100 rounded-lg p-3">
+                    <p className="text-xs font-semibold text-gray-700 mb-1.5">{unidade}</p>
+                    {info === null ? (
+                      <p className="text-[11px] text-gray-400">Dados insuficientes (mín. 20 ligações)</p>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-1.5 text-[11px] text-gray-600">
+                          <Calendar className="w-3 h-3 text-emerald-400" />
+                          <span className="font-medium">{info.melhor_dia}</span>
+                          <span className="text-gray-400">·</span>
+                          <span>{info.melhor_horario}</span>
                         </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          )
-        })}
+                        <div className="flex items-center gap-1.5 text-[11px] text-gray-500 mt-1">
+                          <Phone className="w-3 h-3 text-blue-400" />
+                          <span>{Math.round(info.taxa_atendimento * 100)}% de atendimento</span>
+                          <span className="text-gray-300">·</span>
+                          <span className="text-gray-400">{info.baseado_em} lig.</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* ── Section 3: Resumo por Categoria ──────────────────────────────── */}
+      <div className="bg-white rounded-lg shadow-sm p-5">
+        <h3 className="text-sm font-semibold text-gray-800 mb-3">Resumo</h3>
+        {resumoLoading ? (
+          <div className="flex items-center gap-2 text-xs text-gray-400">
+            <div className="w-3 h-3 border-2 border-gray-200 border-t-emerald-500 rounded-full animate-spin" />
+            Carregando...
+          </div>
+        ) : resumo ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="flex flex-col gap-0.5 border border-amber-100 rounded-lg p-3 bg-amber-50/40">
+              <span className="text-[10px] font-medium text-amber-600 uppercase tracking-wide">🟡 Agendado futuro</span>
+              <span className="text-xl font-bold text-amber-700 tabular-nums">{resumo.agendado_futuro}</span>
+            </div>
+            <div className="flex flex-col gap-0.5 border border-emerald-100 rounded-lg p-3 bg-emerald-50/40">
+              <span className="text-[10px] font-medium text-emerald-600 uppercase tracking-wide">🟢 Prontos hoje</span>
+              <span className="text-xl font-bold text-emerald-700 tabular-nums">{resumo.prontos_hoje}</span>
+            </div>
+            <div className="flex flex-col gap-0.5 border border-gray-100 rounded-lg p-3 bg-gray-50/40">
+              <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">⏸ Em pausa</span>
+              <span className="text-xl font-bold text-gray-700 tabular-nums">{resumo.em_pausa}</span>
+            </div>
+            <div className="flex flex-col gap-0.5 border border-red-100 rounded-lg p-3 bg-red-50/40">
+              <span className="text-[10px] font-medium text-red-600 uppercase tracking-wide">🔴 Bloqueados</span>
+              <span className="text-xl font-bold text-red-700 tabular-nums">{resumo.bloqueados}</span>
+            </div>
+            <div className="flex flex-col gap-0.5 border border-blue-100 rounded-lg p-3 bg-blue-50/40">
+              <span className="text-[10px] font-medium text-blue-600 uppercase tracking-wide">🏥 Higienização</span>
+              <span className="text-xl font-bold text-blue-700 tabular-nums">{resumo.higienizacao}</span>
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400">Sem dados.</p>
+        )}
+      </div>
+
+      {/* ── Section 2: Fila do Dia ────────────────────────────────────────── */}
+      <div className="bg-white rounded-lg shadow-sm p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-800">Fila do Dia</h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Leads prontos para ligar agora (recontato_em ≤ hoje, não bloqueados, não pausados)
+            </p>
+          </div>
+          <button
+            onClick={handleExportFila}
+            disabled={exportando || filaTotal === 0}
+            className="flex items-center gap-1.5 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-md px-3 py-1.5 transition-colors disabled:opacity-50"
+          >
+            <Download className="w-3.5 h-3.5" />
+            {exportando ? "Gerando..." : `Gerar Lista do Dia (${filaTotal} leads)`}
+          </button>
+        </div>
+
+        {filaLoading ? (
+          <div className="flex items-center gap-2 py-8 text-xs text-gray-400">
+            <div className="w-3 h-3 border-2 border-gray-200 border-t-emerald-500 rounded-full animate-spin" />
+            Carregando fila do dia...
+          </div>
+        ) : fila.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-10 text-gray-300">
+            <CheckCircle2 className="w-8 h-8" />
+            <p className="text-sm text-gray-400">Nenhum lead na fila do dia.</p>
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto rounded-lg border border-gray-100">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-50 text-gray-400 font-medium">
+                    <th className="px-3 py-2.5 text-left">Nome</th>
+                    <th className="px-3 py-2.5 text-left">Telefone</th>
+                    <th className="px-3 py-2.5 text-left">Unidade</th>
+                    <th className="px-3 py-2.5 text-left">Categoria</th>
+                    <th className="px-3 py-2.5 text-left">Agendado para</th>
+                    <th className="px-3 py-2.5 text-right">Tentativas</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {fila.map(l => {
+                    const lista = l.listas as { unidade?: string } | null
+                    return (
+                      <tr key={l.id} className="bg-white hover:bg-gray-50/50">
+                        <td className="px-3 py-2 font-medium text-gray-800">{l.nome}</td>
+                        <td className="px-3 py-2 text-gray-500 tabular-nums">{l.telefone_principal ?? "—"}</td>
+                        <td className="px-3 py-2 text-gray-500">{lista?.unidade ?? "—"}</td>
+                        <td className="px-3 py-2 text-gray-500">
+                          {l.recontato_categoria ? (CAT_LABEL[l.recontato_categoria] ?? l.recontato_categoria) : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-gray-500 tabular-nums">{fmtDate(l.recontato_em)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-gray-400">
+                          {l.recontato_tentativas ?? 0}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {filaTotal > PER_PAGE_FILA && (
+              <div className="flex items-center justify-end gap-2 mt-3">
+                <span className="text-[11px] text-gray-400">{filaTotal} total</span>
+                <button
+                  disabled={filaPage === 1}
+                  onClick={() => { setFilaPage(p => p - 1); loadFila(filaPage - 1) }}
+                  className="text-[11px] px-2 py-1 rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50"
+                >
+                  ‹ Anterior
+                </button>
+                <button
+                  disabled={filaPage * PER_PAGE_FILA >= filaTotal}
+                  onClick={() => { setFilaPage(p => p + 1); loadFila(filaPage + 1) }}
+                  className="text-[11px] px-2 py-1 rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50"
+                >
+                  Próxima ›
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* ── Section 4: Bloqueados ─────────────────────────────────────────── */}
+      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+        <button
+          onClick={() => setBloqueadosOpen(v => !v)}
+          className="w-full flex items-center gap-2 px-5 py-4 hover:bg-gray-50/70 transition-colors text-left"
+        >
+          <Ban className="w-4 h-4 text-red-400 shrink-0" />
+          <span className="text-sm font-semibold text-gray-800 flex-1">Bloqueados Permanentemente</span>
+          <span className="text-xs text-gray-400 mr-2">Auditoria</span>
+          <ChevronRight className={cn("w-4 h-4 text-gray-300 transition-transform", bloqueadosOpen && "rotate-90")} />
+        </button>
+
+        {bloqueadosOpen && (
+          <div className="px-5 pb-5">
+            {bloqueadosLoading ? (
+              <div className="flex items-center gap-2 py-6 text-xs text-gray-400">
+                <div className="w-3 h-3 border-2 border-gray-200 border-t-red-400 rounded-full animate-spin" />
+                Carregando bloqueados...
+              </div>
+            ) : bloqueados.length === 0 ? (
+              <p className="text-xs text-gray-400 py-4">Nenhum lead bloqueado permanentemente.</p>
+            ) : (
+              <>
+                <div className="overflow-x-auto rounded-lg border border-gray-100 mt-1">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-gray-50 text-gray-400 font-medium">
+                        <th className="px-3 py-2 text-left">Nome</th>
+                        <th className="px-3 py-2 text-left">Telefone</th>
+                        <th className="px-3 py-2 text-left">Unidade</th>
+                        <th className="px-3 py-2 text-left">Motivo</th>
+                        <th className="px-3 py-2 text-left">Bloqueado em</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {bloqueados.map(l => {
+                        const lista = l.listas as { unidade?: string } | null
+                        return (
+                          <tr key={l.id} className="bg-white hover:bg-red-50/30">
+                            <td className="px-3 py-2 font-medium text-gray-700">{l.nome}</td>
+                            <td className="px-3 py-2 text-gray-500 tabular-nums">{l.telefone_principal ?? "—"}</td>
+                            <td className="px-3 py-2 text-gray-500">{lista?.unidade ?? "—"}</td>
+                            <td className="px-3 py-2 text-gray-500">
+                              {l.bloqueado_motivo ? (CAT_LABEL[l.bloqueado_motivo] ?? l.bloqueado_motivo) : "—"}
+                            </td>
+                            <td className="px-3 py-2 text-gray-400 tabular-nums">
+                              {l.bloqueado_em ? fmtDate(l.bloqueado_em.split("T")[0]) : "—"}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {bloqueadosTotal > PER_PAGE_BLOQ && (
+                  <div className="flex items-center justify-end gap-2 mt-3">
+                    <span className="text-[11px] text-gray-400">{bloqueadosTotal} total</span>
+                    <button
+                      disabled={bloqueadosPage === 1}
+                      onClick={() => setBloqueadosPage(p => p - 1)}
+                      className="text-[11px] px-2 py-1 rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50"
+                    >
+                      ‹ Anterior
+                    </button>
+                    <button
+                      disabled={bloqueadosPage * PER_PAGE_BLOQ >= bloqueadosTotal}
+                      onClick={() => setBloqueadosPage(p => p + 1)}
+                      className="text-[11px] px-2 py-1 rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50"
+                    >
+                      Próxima ›
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
     </div>
   )
 }
