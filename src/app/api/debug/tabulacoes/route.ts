@@ -1,19 +1,13 @@
-import { NextResponse, type NextRequest } from "next/server"
+import { NextResponse } from "next/server"
 
 const BASE_URL    = process.env.ARGUS_BASE_URL!
 const TOKEN       = process.env.ARGUS_TOKEN!
 const CAMPAIGN_ID = Number(process.env.ARGUS_CAMPAIGN_ID ?? "1")
-const CRON_SECRET = process.env.CRON_SECRET
 
 // GET /api/debug/tabulacoes
 // Retorna todos os valores únicos de `tabulado` dos últimos 30 dias.
 // Uso temporário — deletar após coleta dos dados reais.
-export async function GET(req: NextRequest) {
-  const auth = req.headers.get("authorization") ?? ""
-  if (!CRON_SECRET || auth !== `Bearer ${CRON_SECRET}`) {
-    return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  }
-
+export async function GET() {
   if (!BASE_URL || !TOKEN) {
     return NextResponse.json({ error: "ARGUS_BASE_URL ou ARGUS_TOKEN não configurados" }, { status: 503 })
   }
