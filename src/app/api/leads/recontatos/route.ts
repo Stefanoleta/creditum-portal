@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
     const { data, error, count } = await supabase
       .from("leads")
       .select(
-        "id, nome, telefone_principal, recontato_em, recontato_categoria, recontato_tentativas, listas!leads_lista_id_fkey(unidade, tipo_lista)",
+        "id, nome, telefone_principal, recontato_em, recontato_categoria, recontato_tentativas, listas!leads_lista_id_fkey!left(unidade, tipo_lista)",
         { count: "exact" }
       )
       .eq("bloqueado", false)
@@ -91,7 +91,7 @@ export async function GET(req: NextRequest) {
     const { data, error, count } = await supabase
       .from("leads")
       .select(
-        "id, nome, telefone_principal, bloqueado_motivo, bloqueado_em, listas!leads_lista_id_fkey(unidade)",
+        "id, nome, telefone_principal, bloqueado_motivo, bloqueado_em, listas!leads_lista_id_fkey!left(unidade)",
         { count: "exact" }
       )
       .eq("bloqueado", true)

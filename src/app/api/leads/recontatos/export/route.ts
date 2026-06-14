@@ -40,7 +40,7 @@ export async function GET() {
   while (true) {
     const { data, error } = await supabase
       .from("leads")
-      .select("nome, telefone_principal, recontato_em, recontato_categoria, listas!leads_lista_id_fkey(unidade, tipo_lista)")
+      .select("nome, telefone_principal, recontato_em, recontato_categoria, listas!leads_lista_id_fkey!left(unidade, tipo_lista)")
       .eq("bloqueado", false)
       .lte("recontato_em", hoje)
       .not("recontato_em", "is", null)
