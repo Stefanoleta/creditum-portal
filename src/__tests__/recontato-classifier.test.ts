@@ -160,3 +160,134 @@ describe("calcRecontatoEm", () => {
     expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 })
+
+// ── applyTabulacaoRules ────────────────────────────────────────────────────────
+
+import { applyTabulacaoRules, type LeadRecontatoState } from "@/lib/recontato-classifier"
+
+const emptyState: LeadRecontatoState = { recontato_tentativas: 0, recontato_tentativas_seguidas: 0 }
+
+describe("applyTabulacaoRules — nao_atendeu", () => {
+  it("incrementa tentativas e seguidas na primeira tentativa", () => {
+    const update = applyTabulacaoRules("nao_atendeu", emptyState)
+    expect(update.recontato_tentativas).toBe(1)
+    expect(update.recontato_tentativas_seguidas).toBe(1)
+    expect(update.recontato_em).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(update.pausado_ate).toBeUndefined()
+    expect(update.precisa_higienizacao).toBeUndefined()
+  })
+
+  it("define pausado_ate quando seguidas chegam a 3", () => {
+    const state: LeadRecontatoState = { recontato_tentativas: 2, recontato_tentativas_seguidas: 2 }
+    const update = applyTabulacaoRules("nao_atendeu", state)
+    expect(update.recontato_tentativas_seguidas).toBe(3)
+    expect(update.pausado_ate).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
+  it("não pausa com seguidas = 2 (antes de atingir 3)", () => {
+    const state: LeadRecontatoState = { recontato_tentativas: 1, recontato_tentativas_seguidas: 1 }
+    const update = applyTabulacaoRules("nao_atendeu", state)
+    expect(update.recontato_tentativas_seguidas).toBe(2)
+    expect(update.pausado_ate).toBeUndefined()
+  })
+
+  it("define precisa_higienizacao quando tentativas totais chegam a 5", () => {
+    const state: LeadRecontatoState = { recontato_tentativas: 4, recontato_tentativas_seguidas: 1 }
+    const update = applyTabulacaoRules("nao_atendeu", state)
+    expect(update.precisa_higienizacao).toBe(true)
+  })
+
+  it("não marca higienização antes de 5 tentativas totais", () => {
+    const state: LeadRecontatoState = { recontato_tentativas: 3, recontato_tentativas_seguidas: 0 }
+    const update = applyTabulacaoRules("nao_atendeu", state)
+    expect(update.precisa_higienizacao).toBeUndefined()
+  })
+
+  it("nao_atendeu_multiplas tratado igual a nao_atendeu", () => {
+    const update = applyTabulacaoRules("nao_atendeu_multiplas", emptyState)
+    expect(update.recontato_tentativas).toBe(1)
+    expect(update.recontato_tentativas_seguidas).toBe(1)
+  })
+})
+
+describe("applyTabulacaoRules — recontato_pendente", () => {
+  it("nao_podia_falar → reseta seguidas, agenda +1 dia", () => {
+    const state: LeadRecontatoState = { recontato_tentativas: 2, recontato_tentativas_seguidas: 2 }
+    const update = applyTabulacaoRules("nao_podia_falar", state)
+    expect(update.recontato_tentativas_seguidas).toBe(0)
+    const diasAte = Math.round(
+      (new Date(update.recontato_em!).getTime() - new Date().setUTCHours(0, 0, 0, 0)) / 86400000
+    )
+    expect(diasAte).toBe(1)
+  })
+
+  it("mae_atendeu → reseta seguidas, agenda +2 dias", () => {
+    const update = applyTabulacaoRules("mae_atendeu", emptyState)
+    expect(update.recontato_tentativas_seguidas).toBe(0)
+    const diasAte = Math.round(
+      (new Date(update.recontato_em!).getTime() - new Date().setUTCHours(0, 0, 0, 0)) / 86400000
+    )
+    expect(diasAte).toBe(2)
+  })
+
+  it("terceiro_nao_conhece → reseta seguidas, agenda +1 dia", () => {
+    const update = applyTabulacaoRules("terceiro_nao_conhece", emptyState)
+    expect(update.recontato_tentativas_seguidas).toBe(0)
+    const diasAte = Math.round(
+      (new Date(update.recontato_em!).getTime() - new Date().setUTCHours(0, 0, 0, 0)) / 86400000
+    )
+    expect(diasAte).toBe(1)
+  })
+
+  it("não incrementa tentativas totais para recontato_pendente", () => {
+    const update = applyTabulacaoRules("nao_podia_falar", emptyState)
+    expect(update.recontato_tentativas).toBeUndefined()
+  })
+})
+
+describe("applyTabulacaoRules — bloqueio permanente", () => {
+  it("nao_gostou → bloqueado = true, bloqueado_motivo, recontato_em null", () => {
+    const update = applyTabulacaoRules("nao_gostou", emptyState)
+    expect(update.bloqueado).toBe(true)
+    expect(update.bloqueado_motivo).toBe("nao_gostou")
+    expect(update.recontato_em).toBeNull()
+    expect(update.bloqueado_em).toBeTruthy()
+  })
+
+  it("recusa_definitiva → bloqueado = true", () => {
+    const update = applyTabulacaoRules("recusa_definitiva", emptyState)
+    expect(update.bloqueado).toBe(true)
+    expect(update.recontato_em).toBeNull()
+  })
+
+  it("convertido → bloqueado = true (sai da fila)", () => {
+    const update = applyTabulacaoRules("convertido", emptyState)
+    expect(update.bloqueado).toBe(true)
+    expect(update.recontato_em).toBeNull()
+  })
+})
+
+describe("applyTabulacaoRules — numero_invalido", () => {
+  it("numero_invalido → numero_invalido = true, precisa_higienizacao = true, recontato_em null", () => {
+    const update = applyTabulacaoRules("numero_invalido", emptyState)
+    expect(update.numero_invalido).toBe(true)
+    expect(update.precisa_higienizacao).toBe(true)
+    expect(update.recontato_em).toBeNull()
+  })
+})
+
+describe("applyTabulacaoRules — sucesso/outros", () => {
+  it("qualificado → reseta seguidas, recontato_em null", () => {
+    const state: LeadRecontatoState = { recontato_tentativas: 3, recontato_tentativas_seguidas: 2 }
+    const update = applyTabulacaoRules("qualificado", state)
+    expect(update.recontato_tentativas_seguidas).toBe(0)
+    expect(update.recontato_em).toBeNull()
+    expect(update.bloqueado).toBeUndefined()
+  })
+
+  it("outros → reseta seguidas, agenda recontato (5 dias)", () => {
+    const update = applyTabulacaoRules("outros", emptyState)
+    expect(update.recontato_tentativas_seguidas).toBe(0)
+    expect(update.recontato_em).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+})
