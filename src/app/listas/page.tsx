@@ -3,7 +3,7 @@
 import Image from "next/image"
 import Link from "next/link"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { BarChart3, Microscope, LayoutList, List, Upload, X, ChevronRight, AlertTriangle, CheckCircle2, Clock, PhoneOff, Check, ArrowRightLeft, Thermometer, RefreshCw, Download, FileUp } from "lucide-react"
+import { BarChart3, Microscope, LayoutList, List, Upload, X, ChevronRight, AlertTriangle, CheckCircle2, Clock, PhoneOff, Check, ArrowRightLeft, Thermometer, RefreshCw, Download, FileUp, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { type ListaMeta, type LeadInput } from "@/lib/lista-parser"
 
@@ -1819,9 +1819,10 @@ export default function ListasPage() {
                           <button
                             onClick={e => { e.stopPropagation(); setConfirmDelete(l) }}
                             disabled={deletingId === l.id}
-                            className="text-[10px] font-medium px-2 py-1 rounded border border-red-200 text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
+                            title="Excluir lista"
+                            className="p-1 rounded text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
                           >
-                            Excluir
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                           <ChevronRight className="w-3.5 h-3.5 text-gray-300 shrink-0" />
                         </div>
@@ -1857,13 +1858,12 @@ export default function ListasPage() {
           />
           <div className="relative bg-white rounded-xl shadow-xl w-full max-w-sm p-6 flex flex-col gap-4">
             <div className="flex flex-col gap-1">
-              <h3 className="text-sm font-semibold text-gray-800">Excluir lista?</h3>
+              <h3 className="text-sm font-semibold text-gray-800">
+                Excluir lista {confirmDelete.nome_arquivo} e todos os seus leads?
+              </h3>
               <p className="text-xs text-gray-500">
-                <span className="font-medium text-gray-700">{confirmDelete.nome_arquivo}</span>
-                {" "}— {confirmDelete.unidade} · {confirmDelete.total_leads} leads
-              </p>
-              <p className="text-xs text-red-500 mt-1">
-                Todos os leads desta lista serão excluídos permanentemente. Esta ação não pode ser desfeita.
+                {confirmDelete.unidade} · {confirmDelete.total_leads} leads serão excluídos permanentemente.
+                Esta ação não pode ser desfeita.
               </p>
             </div>
             <div className="flex items-center justify-end gap-2">
