@@ -100,8 +100,6 @@ const UNIDADE_ALIASES: Record<string, string> = {
   "saogoncalo":       "São Gonçalo",
   // Sumaré — normKey strips é → "sumare"
   "sumare":           "Sumaré",
-  // Teresina — "Terezina" é grafia incorreta; ambos normalizam para Teresina
-  "terezina":         "Teresina",
   // Zona Norte
   "zonanorte":        "Zona Norte",
 }

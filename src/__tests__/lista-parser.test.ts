@@ -231,16 +231,6 @@ describe("normalizeUnidade — novos aliases (detectados no Termômetro 2026-06-
     expect(normalizeUnidade("Sumaré")).toBe("Sumaré")
   })
 
-  // Teresina vs Terezina — grafia incorreta
-  it("'Terezina' (grafia incorreta) → Teresina", () => {
-    expect(normalizeUnidade("Terezina")).toBe("Teresina")
-    expect(normalizeUnidade("TEREZINA")).toBe("Teresina")
-  })
-
-  it("'Teresina' (grafia correta) → Teresina", () => {
-    expect(normalizeUnidade("Teresina")).toBe("Teresina")
-  })
-
   // Zona Norte — concatenado
   it("'zonanorte' (colado) → Zona Norte", () => {
     expect(normalizeUnidade("zonanorte")).toBe("Zona Norte")
