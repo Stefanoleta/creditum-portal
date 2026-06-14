@@ -2,18 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase-server"
 import { CATEGORIA_LABEL, type RecontatoCategoria } from "@/lib/recontato-classifier"
 
-// GET /api/leads/recontatos
-// Retorna leads agrupados por categoria de recontato para a aba Recontatos.
-// Só inclui leads com observacao like 'recontato:%' e recontato_em >= hoje.
-
-// GET /api/leads/recontatos?categoria=nao_atendeu&page=1&per_page=50
-// Retorna leads de uma categoria específica (para exibição/exportação).
-
 export interface RecontatoGrupo {
   categoria:   RecontatoCategoria
   label:       string
   count:       number
-  proxima_em:  string | null  // menor recontato_em do grupo
+  proxima_em:  string | null
 }
 
 export async function GET(req: NextRequest) {
@@ -22,6 +15,7 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url)
+  const mode     = searchParams.get("mode")
   const categoria = searchParams.get("categoria") as RecontatoCategoria | null
   const page      = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10))
   const per_page  = Math.min(200, parseInt(searchParams.get("per_page") ?? "50", 10))
@@ -30,83 +24,124 @@ export async function GET(req: NextRequest) {
 
   const hoje = new Date().toISOString().split("T")[0]
 
-  // ── Retorna lista de leads de uma categoria específica ─────────────────────
-  if (categoria) {
+  // ── mode=resumo: contagens para os 5 blocos do painel ──────────────────────
+  if (mode === "resumo") {
+    const [
+      { count: agendadoFuturo },
+      { count: prontosHoje },
+      { count: emPausa },
+      { count: bloqueados },
+      { count: higienizacao },
+    ] = await Promise.all([
+      supabase
+        .from("leads").select("id", { count: "exact", head: true })
+        .eq("bloqueado", false)
+        .gt("recontato_em", hoje)
+        .or(`pausado_ate.is.null,pausado_ate.lte.${hoje}`),
+      supabase
+        .from("leads").select("id", { count: "exact", head: true })
+        .eq("bloqueado", false)
+        .lte("recontato_em", hoje)
+        .not("recontato_em", "is", null)
+        .or(`pausado_ate.is.null,pausado_ate.lte.${hoje}`),
+      supabase
+        .from("leads").select("id", { count: "exact", head: true })
+        .gt("pausado_ate", hoje),
+      supabase
+        .from("leads").select("id", { count: "exact", head: true })
+        .eq("bloqueado", true),
+      supabase
+        .from("leads").select("id", { count: "exact", head: true })
+        .eq("precisa_higienizacao", true)
+        .is("higienizado_em", null),
+    ])
+    return NextResponse.json({
+      resumo: {
+        agendado_futuro: agendadoFuturo ?? 0,
+        prontos_hoje:    prontosHoje ?? 0,
+        em_pausa:        emPausa ?? 0,
+        bloqueados:      bloqueados ?? 0,
+        higienizacao:    higienizacao ?? 0,
+      }
+    })
+  }
+
+  // ── mode=fila_do_dia: leads prontos para ligar hoje ─────────────────────────
+  if (mode === "fila_do_dia") {
     const { data, error, count } = await supabase
       .from("leads")
       .select(
-        "id, nome, telefone_principal, recontato_em, observacao, listas!leads_lista_id_fkey(nome_arquivo, unidade)",
+        "id, nome, telefone_principal, recontato_em, recontato_categoria, recontato_tentativas, listas!leads_lista_id_fkey(unidade, tipo_lista)",
         { count: "exact" }
       )
-      .eq("observacao", `recontato:${categoria}`)
+      .eq("bloqueado", false)
+      .lte("recontato_em", hoje)
       .not("recontato_em", "is", null)
+      .or(`pausado_ate.is.null,pausado_ate.lte.${hoje}`)
+      .order("recontato_categoria", { ascending: true, nullsFirst: false })
       .order("recontato_em", { ascending: true })
       .range(from, to)
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
     return NextResponse.json({ leads: data ?? [], total: count ?? 0, page, per_page })
   }
 
-  // ── Retorna agrupamento por categoria ──────────────────────────────────────
+  // ── mode=bloqueados: auditoria de bloqueios permanentes ─────────────────────
+  if (mode === "bloqueados") {
+    const { data, error, count } = await supabase
+      .from("leads")
+      .select(
+        "id, nome, telefone_principal, bloqueado_motivo, bloqueado_em, listas!leads_lista_id_fkey(unidade)",
+        { count: "exact" }
+      )
+      .eq("bloqueado", true)
+      .order("bloqueado_em", { ascending: false, nullsFirst: false })
+      .range(from, to)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ leads: data ?? [], total: count ?? 0, page, per_page })
+  }
+
+  // ── categoria específica (legado + backcompat) ──────────────────────────────
+  if (categoria) {
+    const { data, error, count } = await supabase
+      .from("leads")
+      .select(
+        "id, nome, telefone_principal, recontato_em, observacao, recontato_categoria, listas!leads_lista_id_fkey(nome_arquivo, unidade)",
+        { count: "exact" }
+      )
+      .or(`observacao.eq.recontato:${categoria},recontato_categoria.eq.${categoria}`)
+      .not("recontato_em", "is", null)
+      .eq("bloqueado", false)
+      .order("recontato_em", { ascending: true })
+      .range(from, to)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ leads: data ?? [], total: count ?? 0, page, per_page })
+  }
+
+  // ── Agrupamento por categoria (legado — mantido para backcompat) ────────────
   const CATEGORIAS: RecontatoCategoria[] = [
-    // Originais (cruzamento Argus × tabulação manual)
-    "nao_atendeu",
-    "nao_podia_falar",
-    "mae_atendeu",
-    "nao_gostou",
-    "terceiro_nao_conhece",
-    "fora_politica",
-    "qualificado",
-    "convertido",
-    "outros",
-    // IA (tabulacao_ia automática)
-    "ocupado_recontatar",
-    "interessado_sem_fechar",
-    "mae_familiar_atendeu",
-    "nao_reconhece_aguardar",
-    "objecao_financeira",
-    "objecao_prazo",
-    "nao_gostou_proposta",
-    "ja_resolveu",
-    "nao_atendeu_multiplas",
+    "nao_atendeu", "nao_podia_falar", "mae_atendeu", "nao_gostou",
+    "terceiro_nao_conhece", "fora_politica", "qualificado", "convertido", "outros",
+    "ocupado_recontatar", "interessado_sem_fechar", "mae_familiar_atendeu",
+    "nao_reconhece_aguardar", "objecao_financeira", "objecao_prazo",
+    "nao_gostou_proposta", "ja_resolveu", "nao_atendeu_multiplas",
   ]
 
   const grupos: RecontatoGrupo[] = []
-
   for (const cat of CATEGORIAS) {
     const { count, data: primeiros } = await supabase
       .from("leads")
       .select("recontato_em", { count: "exact" })
-      .eq("observacao", `recontato:${cat}`)
+      .or(`observacao.eq.recontato:${cat},recontato_categoria.eq.${cat}`)
       .not("recontato_em", "is", null)
+      .eq("bloqueado", false)
       .order("recontato_em", { ascending: true })
       .limit(1)
 
     if (!count || count === 0) continue
-
-    grupos.push({
-      categoria:  cat,
-      label:      CATEGORIA_LABEL[cat],
-      count,
-      proxima_em: primeiros?.[0]?.recontato_em ?? null,
-    })
-  }
-
-  // Conta também leads com recontato_em definido mas sem categoria (legado)
-  const { count: legadoCount } = await supabase
-    .from("leads")
-    .select("id", { count: "exact", head: true })
-    .not("recontato_em", "is", null)
-    .is("observacao", null)
-
-  if (legadoCount && legadoCount > 0) {
-    grupos.push({
-      categoria:  "outros",
-      label:      `${CATEGORIA_LABEL["outros"]} (sem categoria)`,
-      count:      legadoCount,
-      proxima_em: hoje,
-    })
+    grupos.push({ categoria: cat, label: CATEGORIA_LABEL[cat], count, proxima_em: primeiros?.[0]?.recontato_em ?? null })
   }
 
   return NextResponse.json({ grupos })
