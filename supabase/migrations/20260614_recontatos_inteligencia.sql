@@ -24,3 +24,7 @@ CREATE INDEX IF NOT EXISTS idx_leads_bloqueados
 CREATE INDEX IF NOT EXISTS idx_leads_pausados
   ON leads(pausado_ate)
   WHERE pausado_ate IS NOT NULL;
+
+-- Reload PostgREST schema cache (obrigatório quando migration rodada via SQL editor)
+-- Sem isso, colunas novas não aparecem no SELECT e a Fila do Dia retorna 0.
+NOTIFY pgrst, 'reload schema';

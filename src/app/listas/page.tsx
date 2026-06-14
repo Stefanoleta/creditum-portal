@@ -948,6 +948,7 @@ function RecontatosTab() {
   const [filaTotal, setFilaTotal]         = useState(0)
   const [filaPage, setFilaPage]           = useState(1)
   const [filaLoading, setFilaLoading]     = useState(true)
+  const [filaError, setFilaError]         = useState<string | null>(null)
   const [exportando, setExportando]       = useState(false)
   const PER_PAGE_FILA = 50
 
@@ -974,10 +975,15 @@ function RecontatosTab() {
 
   const loadFila = useCallback((page: number) => {
     setFilaLoading(true)
+    setFilaError(null)
     fetch(`/api/leads/recontatos?mode=fila_do_dia&page=${page}&per_page=${PER_PAGE_FILA}`)
       .then(r => r.json())
-      .then(d => { setFila(d.leads ?? []); setFilaTotal(d.total ?? 0) })
-      .catch(() => {})
+      .then(d => {
+        if (d.error) { setFilaError(d.error); return }
+        setFila(d.leads ?? [])
+        setFilaTotal(d.total ?? 0)
+      })
+      .catch((e: unknown) => setFilaError(e instanceof Error ? e.message : "Erro de rede"))
       .finally(() => setFilaLoading(false))
   }, [])
 
@@ -1146,6 +1152,16 @@ function RecontatosTab() {
           <div className="flex items-center gap-2 py-8 text-xs text-gray-400">
             <div className="w-3 h-3 border-2 border-gray-200 border-t-emerald-500 rounded-full animate-spin" />
             Carregando fila do dia...
+          </div>
+        ) : filaError ? (
+          <div className="flex flex-col items-center gap-2 py-10 text-red-300">
+            <AlertTriangle className="w-8 h-8" />
+            <p className="text-sm text-red-500 font-medium">Erro ao carregar fila do dia</p>
+            <p className="text-xs text-red-400 max-w-sm text-center">{filaError}</p>
+            <p className="text-xs text-gray-400 max-w-sm text-center mt-1">
+              Se o erro mencionar uma coluna não encontrada, execute no Supabase SQL editor:<br />
+              <code className="bg-gray-100 text-gray-600 px-1 rounded">NOTIFY pgrst, &apos;reload schema&apos;;</code>
+            </p>
           </div>
         ) : fila.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-10 text-gray-300">

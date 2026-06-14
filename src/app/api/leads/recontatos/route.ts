@@ -82,7 +82,10 @@ export async function GET(req: NextRequest) {
       .order("recontato_em", { ascending: true })
       .range(from, to)
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) {
+      console.error("[recontatos/fila_do_dia] supabase error:", error.message, "| hint:", error.hint ?? "—", "| code:", error.code ?? "—")
+      return NextResponse.json({ error: error.message, hint: error.hint }, { status: 500 })
+    }
     return NextResponse.json({ leads: data ?? [], total: count ?? 0, page, per_page })
   }
 
