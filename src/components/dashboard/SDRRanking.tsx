@@ -89,17 +89,17 @@ export function SDRRanking({ sdrs }: SDRRankingProps) {
                       style={{ width: `${pct}%` }}
                     />
                   </div>
-                  <span className="text-[10px] text-gray-400 shrink-0 tabular-nums text-right">
-                    {sdr.conversoes}<span className="text-gray-300">/{sdr.meta_dia} qualif.</span>
+                  <span className="text-[10px] text-gray-700 shrink-0 tabular-nums text-right">
+                    {sdr.conversoes}<span className="text-gray-600">/{sdr.meta_dia} qualif.</span>
                   </span>
                 </div>
               </div>
 
               {/* Status + TMA + Ocupação */}
               <div className="shrink-0 text-right hidden sm:block">
-                <div className="text-[10px] text-gray-400 leading-none">{statusLabel(sdr.status)}</div>
+                <div className="text-[10px] text-gray-700 leading-none">{statusLabel(sdr.status)}</div>
                 {sdr.tma_segundos > 0 && (
-                  <div className="text-[10px] text-gray-300 mt-0.5">TMA {formatSeconds(sdr.tma_segundos)}</div>
+                  <div className="text-[10px] text-gray-600 mt-0.5">TMA {formatSeconds(sdr.tma_segundos)}</div>
                 )}
                 {sdr.taxa_ocupacao !== undefined && (
                   <div className={cn(

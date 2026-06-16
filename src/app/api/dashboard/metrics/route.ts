@@ -370,7 +370,26 @@ async function saveResultadosDiscador(ligacoesItems: ArgusLigacaoItem[]) {
 function buildSdrQuality(items: ArgusTabulacaoItem[]) {
   type Entry = { tabulou: number; cliente_desligou: number; conversoes: number }
   const map = new Map<string, Entry>()
-  for (const item of items) {
+
+  // Argus emits one tabulação RECORD per event, not per call — an SDR who
+  // re-tabulates the same call (correction, callback follow-up, etc.) produces
+  // multiple records for one idLigacao. Counting raw records inflates tabulou
+  // past ligacoes_atendidas, which always clamps nao_tabulou to 0. Dedupe by
+  // call (keep the last/most-recent tabulação) before counting, same approach
+  // as createPendingRecords() above. Items without an idLigacao (rare/legacy
+  // shape) are kept as-is since there's nothing to dedupe them against.
+  const seen = new Set<string>()
+  const dedupedItems: ArgusTabulacaoItem[] = []
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i]
+    const id = String(item.ligacaoRelevante?.idLigacao ?? "")
+    if (!id) { dedupedItems.push(item); continue }
+    if (seen.has(id)) continue
+    seen.add(id)
+    dedupedItems.push(item)
+  }
+
+  for (const item of dedupedItems) {
     if ((item.origemTabulacao ?? "").toUpperCase().includes("DISCADOR")) continue
     const op = (item.usuarioOperador ?? "").toUpperCase().trim()
     if (!op || op === "DISCADOR") continue
