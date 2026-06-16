@@ -4,11 +4,32 @@
       "WebFetch(domain:creditum-portal.vercel.app)",
       "Bash(grep -v \"^$\")",
       "Bash(mkdir -p /workspaces/creditum-portal/supabase/migrations)",
-      "Bash(mkdir -p /workspaces/creditum-portal/src/app/api/listas/upload /workspaces/creditum-portal/src/app/api/listas/\\\\[id\\\\]/leads)"
+      "Bash(mkdir -p /workspaces/creditum-portal/src/app/api/listas/upload /workspaces/creditum-portal/src/app/api/listas/\\\\[id\\\\]/leads)",
+      "Bash(python3 -c \"from PIL import Image; img = Image.open\\('/workspaces/creditum-portal/public/logo-creditum.png'\\); print\\(img.size, img.mode\\)\")",
+      "Bash(identify /workspaces/creditum-portal/public/logo-creditum.png)",
+      "Bash(openssl rand *)",
+      "Bash(mkdir -p /workspaces/creditum-portal/src/app/api/cron/analyze)",
+      "Bash(mkdir -p /workspaces/creditum-portal/src/app/api/listas/unidades)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('historico_source:', d.get\\('historico_source','?'\\)\\); print\\('keys:', list\\(d.keys\\(\\)\\)[:10]\\)\")",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('scripts:', list\\(d.get\\('scripts',{}\\).keys\\(\\)\\)\\); print\\('devDeps vitest:', 'vitest' in d.get\\('devDependencies',{}\\)\\); print\\('deps vitest:', 'vitest' in d.get\\('dependencies',{}\\)\\)\")",
+      "Bash(npx vitest *)",
+      "Bash(npm test *)",
+      "Read(//home/codespace/.local/share/vercel/**)",
+      "Read(//home/codespace/.vercel/**)",
+      "Read(//home/codespace/**)",
+      "Bash(vercel whoami 2>&1 && \\\\ *)",
+      "Read(//home/**)",
+      "Bash(mkdir -p /workspaces/creditum-portal/docs/superpowers/plans)",
+      "Bash(mkdir -p /workspaces/creditum-portal/src/lib/qick /workspaces/creditum-portal/src/components/cockpit /workspaces/creditum-portal/src/app/api/quick/calls)"
     ],
     "additionalDirectories": [
       "/workspaces/creditum-portal/supabase",
-      "/workspaces/creditum-portal/src/app/api/listas/[id]"
+      "/workspaces/creditum-portal/src/app/api/listas/[id]",
+      "/workspaces/creditum-portal/src/app/api/cron",
+      "/workspaces/creditum-portal/src/app/api/listas",
+      "/workspaces/creditum-portal/docs/superpowers",
+      "/workspaces/creditum-portal/src/lib"
     ]
   }
 }
