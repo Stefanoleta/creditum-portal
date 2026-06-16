@@ -9,6 +9,7 @@ const MAX_RETRIES = 2
 
 export interface QickNormalizedCall {
   id: string
+  nome: string | null
   phone: string | null
   tabbingCode: string
   tabbingName: string
@@ -28,13 +29,17 @@ export interface QickFetchResult {
 function normalizeCall(raw: Record<string, unknown>): QickNormalizedCall {
   const id = String(raw.id ?? raw.call_id ?? raw.callId ?? "")
 
-  // Customer phone lives inside dynamicVariables (Olos discador fields), not top-level.
+  // Customer phone/name live inside dynamicVariables (Olos discador fields), not top-level.
   const dynVars = (raw.dynamicVariables as Record<string, unknown> | null | undefined) ?? {}
   const phone =
     typeof dynVars.olos_OriginalPhoneNumber === "string" ? dynVars.olos_OriginalPhoneNumber
     : typeof raw.phone === "string"       ? raw.phone
     : typeof raw.number === "string"      ? raw.number
     : typeof raw.destination === "string" ? raw.destination
+    : null
+  const nome =
+    typeof dynVars.olos_primeiro_nome === "string" && dynVars.olos_primeiro_nome ? dynVars.olos_primeiro_nome
+    : typeof dynVars.olos_nome === "string" && dynVars.olos_nome ? dynVars.olos_nome
     : null
 
   // Tabbing only exists once the call has been classified — absent (null) otherwise.
@@ -58,12 +63,13 @@ function normalizeCall(raw: Record<string, unknown>): QickNormalizedCall {
     : typeof raw.durationSeconds === "number"   ? raw.durationSeconds
     : null
 
-  return { id, phone, tabbingCode, tabbingName, createdAt, durationSeconds: duration }
+  return { id, nome, phone, tabbingCode, tabbingName, createdAt, durationSeconds: duration }
 }
 
 function normalizeMockCall(raw: QickRawCall): QickNormalizedCall {
   return {
     id: raw.id,
+    nome: raw.nome,
     phone: raw.phone,
     tabbingCode: raw.tabbing.code,
     tabbingName: raw.tabbing.name,

@@ -11,7 +11,9 @@ export async function GET() {
     const { calls, fonte } = await fetchQickCalls()
     const metrics = computeSamanthaMetrics(calls, fonte)
 
-    return NextResponse.json(metrics, {
+    // `calls` carries the per-lead detail (nome, phone, tabbing, data) consumed
+    // by the SDR I.A tab in /listas — the cockpit only reads the aggregate fields.
+    return NextResponse.json({ ...metrics, calls }, {
       headers: {
         "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60",
       },

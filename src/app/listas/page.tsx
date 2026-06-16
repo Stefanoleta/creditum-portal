@@ -3,9 +3,10 @@
 import Image from "next/image"
 import Link from "next/link"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { BarChart3, Microscope, LayoutList, List, Upload, X, ChevronRight, AlertTriangle, CheckCircle2, Clock, PhoneOff, Check, ArrowRightLeft, Thermometer, RefreshCw, Download, FileUp, Trash2, Ban, TrendingUp, Calendar, Phone } from "lucide-react"
+import { BarChart3, Microscope, LayoutList, List, Upload, X, ChevronRight, AlertTriangle, CheckCircle2, Clock, PhoneOff, Check, ArrowRightLeft, Thermometer, RefreshCw, Download, FileUp, Trash2, Ban, TrendingUp, Calendar, Phone, Bot } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { type ListaMeta, type LeadInput } from "@/lib/lista-parser"
+import { SamanthaLeads } from "@/components/listas/SamanthaLeads"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1460,7 +1461,7 @@ function TermometroTab() {
 
 export default function ListasPage() {
   // ── Tab
-  const [activeTab, setActiveTab] = useState<"listas" | "higienizacao" | "termometro" | "recontatos">("listas")
+  const [activeTab, setActiveTab] = useState<"listas" | "higienizacao" | "termometro" | "recontatos" | "sdria">("listas")
   const [higienizacaoCount, setHigienizacaoCount] = useState(0)
 
   // ── Upload state
@@ -1700,6 +1701,21 @@ export default function ListasPage() {
             <Clock className="w-3.5 h-3.5" />
             Recontatos
           </button>
+          <button
+            onClick={() => setActiveTab("sdria")}
+            className={cn(
+              "flex items-center gap-1.5 text-xs font-medium px-4 py-2 border-b-2 transition-colors -mb-px",
+              activeTab === "sdria"
+                ? "border-violet-500 text-violet-700"
+                : "border-transparent text-gray-400 hover:text-gray-600"
+            )}
+          >
+            <Bot className="w-3.5 h-3.5" />
+            SDR I.A
+            <span className="text-[9px] font-bold bg-violet-100 text-violet-700 rounded-full px-1.5 py-px uppercase">
+              I.A
+            </span>
+          </button>
         </div>
 
         {activeTab === "higienizacao" && (
@@ -1709,6 +1725,8 @@ export default function ListasPage() {
         {activeTab === "termometro" && <TermometroTab />}
 
         {activeTab === "recontatos" && <RecontatosTab />}
+
+        {activeTab === "sdria" && <SamanthaLeads />}
 
         {activeTab === "listas" && <>
 
