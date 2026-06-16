@@ -439,9 +439,26 @@ export async function GET() {
     const desempenhoItems = extractArray<ArgusDesempenhoItem>(rawDesempenho, [
       "desempenhosResumidos", "itens", "data", "relatorio", "agentes", "operadores",
     ])
-    const ligacoesItems = extractArray<ArgusLigacaoItem>(rawLigacoes, [
+    const ligacoesItemsRaw = extractArray<ArgusLigacaoItem>(rawLigacoes, [
       "ligacoesDetalhadas", "itens", "data", "ligacoes", "chamadas",
     ])
+
+    // Defensive client-side window — Argus's ultimosMinutos param above isn't
+    // reliably honored by ligacoesdetalhadas (observed in production: ~10.8k
+    // records returned vs. ~250 actually inside the requested window, inflating
+    // "Ligações/Contatos Hoje" with historical data). Re-filter here using the
+    // same 480min window and the same timestamp-field fallback chain used
+    // elsewhere in this route (buildHourlyChartFromCalls). Records with no
+    // parseable timestamp are dropped — safer to undercount than to let
+    // unknown-age records inflate "hoje" metrics.
+    const ULTIMOS_MINUTOS = 480
+    const windowStartMs = Date.now() - ULTIMOS_MINUTOS * 60 * 1000
+    const ligacoesItems = ligacoesItemsRaw.filter((item) => {
+      const raw = item.dataHoraLigacao ?? item.dataHora ?? item.horarioInicio ?? item.inicio
+      if (!raw) return false
+      const t = new Date(raw).getTime()
+      return !isNaN(t) && t >= windowStartMs
+    })
 
     // attended = calls where the lead picked up (resultadoLigacao "ATENDIMENTO")
     const totalAtendidas = ligacoesItems.filter((i) => i.resultadoLigacao?.toUpperCase() === "ATENDIMENTO").length
@@ -453,13 +470,13 @@ export async function GET() {
     const sdrs      = adaptSDRs(desempenhoItems, VENDAS_LIST)
     const liveCalls = adaptLiveCalls(ligacoesItems, VENDAS_LIST)
 
-    // totalDiscadas: prefer SDR realizadas sum (desempenhoresumido includes unanswered calls).
-    // ligacoesdetalhadas may only return attended calls in this Argus config,
-    // which makes length === totalAtendidas and produces taxa_contato=100%.
+    // totalDiscadas: prefer SDR realizadas sum (desempenhoresumido is a day-summary,
+    // already scoped correctly) — never fall back to a raw ligacoesItems count,
+    // which is exactly what let stale/historical records inflate this metric.
     const totalDiscadasFromSDR = sdrs.reduce((s, r) => s + r.ligacoes_realizadas, 0)
-    const totalDiscadas = totalDiscadasFromSDR > totalAtendidas
-      ? totalDiscadasFromSDR   // desempenho returned real discadas count
-      : ligacoesItems.length   // fallback: count all ligacoes records
+    const totalDiscadas = totalDiscadasFromSDR > 0
+      ? totalDiscadasFromSDR
+      : totalAtendidas
 
     const metrics = buildMetrics(sdrs, liveCalls, total_conversoes, totalDiscadas, totalAtendidas)
 
