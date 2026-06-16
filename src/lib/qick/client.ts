@@ -29,22 +29,28 @@ export interface QickFetchResult {
 function normalizeCall(raw: Record<string, unknown>): QickNormalizedCall {
   const id = String(raw.id ?? raw.call_id ?? raw.callId ?? "")
 
+  // Customer phone lives inside dynamicVariables (Olos discador fields), not top-level.
+  const dynVars = (raw.dynamicVariables as Record<string, unknown> | null | undefined) ?? {}
   const phone =
-    typeof raw.phone === "string"       ? raw.phone
-    : typeof raw.number === "string"    ? raw.number
+    typeof dynVars.olos_OriginalPhoneNumber === "string" ? dynVars.olos_OriginalPhoneNumber
+    : typeof raw.phone === "string"       ? raw.phone
+    : typeof raw.number === "string"      ? raw.number
     : typeof raw.destination === "string" ? raw.destination
     : null
 
-  const tab = raw.tabbing as Record<string, unknown> | null | undefined
+  // Tabbing only exists once the call has been classified — absent (null) otherwise.
+  const callTabbing = raw.callTabbing as Record<string, unknown> | null | undefined
+  const tabDv = (callTabbing?.dynamicVariables as Record<string, unknown> | null | undefined) ?? {}
+  const tabbingArray = Array.isArray(callTabbing?.tabbing) ? (callTabbing!.tabbing as unknown[]) : []
   const tabbingCode = String(
-    tab?.code ?? raw.tabbingCode ?? raw.tabbing_code ?? ""
+    tabDv.dispositionId ?? tabbingArray[0] ?? raw.tabbingCode ?? raw.tabbing_code ?? ""
   )
   const tabbingName = String(
-    tab?.name ?? raw.tabbingName ?? raw.tabbing_name ?? tabbingCode
+    tabDv.motivo ?? raw.tabbingName ?? raw.tabbing_name ?? tabbingCode
   )
 
   const createdAt = String(
-    raw.created_at ?? raw.createdAt ?? raw.date ?? new Date().toISOString()
+    raw.startTime ?? raw.created_at ?? raw.createdAt ?? raw.date ?? new Date().toISOString()
   )
 
   const duration =
