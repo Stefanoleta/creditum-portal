@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { Bot, RefreshCw, PhoneOff, CheckCircle2, VoicemailIcon } from "lucide-react"
 import { cn, formatSeconds } from "@/lib/utils"
 import type { QickNormalizedCall, QickFonte } from "@/lib/qick/client"
+import type { LeadMatch } from "@/app/api/listas/sdr-ia/match-leads/route"
 
 // Tabbing codes handled by this tab — kept local since this is the only
 // consumer that needs to bucket individual calls by code (the cockpit only
@@ -47,9 +48,9 @@ export function SamanthaLeads() {
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
 
-  // Cruzamento com a tabela `leads` do Portal — telefone -> já está em alguma
-  // lista (true) ou é lead novo (false). Ausência de chave = ainda resolvendo.
-  const [matchMap, setMatchMap] = useState<Map<string, boolean>>(new Map())
+  // Cruzamento com a tabela `leads` do Portal — telefone -> encontrado + unidade
+  // REAL (via join com listas). Ausência de chave = ainda resolvendo.
+  const [matchMap, setMatchMap] = useState<Map<string, LeadMatch>>(new Map())
 
   const load = useCallback(() => {
     setLoading(true)
@@ -88,7 +89,7 @@ export function SamanthaLeads() {
       body: JSON.stringify({ telefones }),
     })
       .then(r => r.json())
-      .then((d: { matches?: Record<string, boolean> }) => {
+      .then((d: { matches?: Record<string, LeadMatch> }) => {
         if (!d.matches) return
         setMatchMap(new Map(Object.entries(d.matches)))
       })
@@ -183,39 +184,58 @@ export function SamanthaLeads() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {engajados.map(c => (
-                  <tr key={c.id} className="bg-white hover:bg-gray-50/50">
-                    <td className="px-3 py-2 font-medium text-gray-800">{c.nome ?? "—"}</td>
-                    <td className="px-3 py-2 text-gray-500 tabular-nums">{c.phone ?? "—"}</td>
-                    <td className="px-3 py-2 text-gray-500">{c.unidade ?? "—"}</td>
-                    <td className="px-3 py-2 text-gray-500 tabular-nums">{fmtDataHora(c.createdAt)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-gray-400">
-                      {c.durationSeconds !== null ? formatSeconds(c.durationSeconds) : "—"}
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex flex-col items-start gap-1">
-                        <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide bg-violet-100 text-violet-700 rounded-full px-2 py-0.5 w-fit">
-                          <CheckCircle2 className="w-3 h-3" />
-                          Aguardando follow-up
-                        </span>
-                        {c.phone && matchMap.has(c.phone) && (
-                          matchMap.get(c.phone) ? (
-                            <span className="bg-green-50 border border-green-200 text-green-700 text-xs rounded-full px-2 py-0.5 w-fit">
-                              ✓ Na lista
-                            </span>
-                          ) : (
-                            <span
-                              className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded-full px-2 py-0.5 w-fit"
-                              title="Fora das listas do Portal"
-                            >
-                              ★ Lead novo
-                            </span>
-                          )
+                {engajados.map(c => {
+                  const match = c.phone ? matchMap.get(c.phone) : undefined
+                  // unidade REAL só conta quando o lead foi de fato encontrado
+                  // nas listas (join Supabase) — senão é só o nome da campanha
+                  // do discador (Qick), não confirmado.
+                  const unidadeReal = match?.encontrado ? match.unidade : undefined
+
+                  return (
+                    <tr key={c.id} className="bg-white hover:bg-gray-50/50">
+                      <td className="px-3 py-2 font-medium text-gray-800">{c.nome ?? "—"}</td>
+                      <td className="px-3 py-2 text-gray-500 tabular-nums">{c.phone ?? "—"}</td>
+                      <td className="px-3 py-2">
+                        {unidadeReal ? (
+                          <span className="text-gray-700 font-medium">{unidadeReal}</span>
+                        ) : (
+                          <span
+                            className="text-gray-400"
+                            title="Unidade da campanha Qick — não confirmada nas listas"
+                          >
+                            {c.unidade ? `${c.unidade} *` : "—"}
+                          </span>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-3 py-2 text-gray-500 tabular-nums">{fmtDataHora(c.createdAt)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-gray-400">
+                        {c.durationSeconds !== null ? formatSeconds(c.durationSeconds) : "—"}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide bg-violet-100 text-violet-700 rounded-full px-2 py-0.5 w-fit">
+                            <CheckCircle2 className="w-3 h-3" />
+                            Aguardando follow-up
+                          </span>
+                          {match && (
+                            match.encontrado ? (
+                              <span className="bg-green-50 border border-green-200 text-green-700 text-xs rounded-full px-2 py-0.5 w-fit">
+                                ✓ Na lista
+                              </span>
+                            ) : (
+                              <span
+                                className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded-full px-2 py-0.5 w-fit"
+                                title="Fora das listas do Portal"
+                              >
+                                ★ Lead novo
+                              </span>
+                            )
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

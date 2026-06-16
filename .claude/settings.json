@@ -22,7 +22,12 @@
       "Read(//home/**)",
       "Bash(mkdir -p /workspaces/creditum-portal/docs/superpowers/plans)",
       "Bash(mkdir -p /workspaces/creditum-portal/src/lib/qick /workspaces/creditum-portal/src/components/cockpit /workspaces/creditum-portal/src/app/api/quick/calls)",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Bash(awk -F= '{print \"length:\", length\\($2\\)}')",
+      "Read(//tmp/**)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('phones count:', len\\(d['telefones']\\)\\)\")",
+      "Bash(rm /tmp/phones.json)",
+      "Bash(awk -F= '{print $1, \"length:\", length\\($2\\)}')"
     ],
     "additionalDirectories": [
       "/workspaces/creditum-portal/supabase",
