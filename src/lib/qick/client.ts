@@ -95,18 +95,25 @@ function normalizeMockCall(raw: QickRawCall): QickNormalizedCall {
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
-// Samantha's tabbing classification runs with a lag — calls placed "today" often
-// have callTabbing: null for hours. A rolling 48h window keeps the cockpit
-// populated with already-classified calls instead of showing 100% "unknown".
-const SYNC_WINDOW_HOURS = 48
+// "Hoje" = calendar day in Brazil time (America/Sao_Paulo, UTC-3), not a
+// rolling window. A 48h rolling window was tried before to dodge Samantha's
+// tabbing lag (calls placed "today" often have callTabbing: null for hours),
+// but it silently mixed in a full extra calendar day — "Ligações Hoje" ended
+// up ~2x Qick's own dashboard count (720 vs. their 339). Scoping to the real
+// calendar day fixes the count; the trade-off is that "unknown" tabbing stays
+// high until Samantha catches up on today's calls — that's expected, not a bug.
+const BRAZIL_OFFSET_MS = -3 * 60 * 60 * 1000
 
-function recentWindowBounds(hours: number): { startDate: string; endDate: string } {
-  const endUtc   = new Date()
-  const startUtc = new Date(endUtc.getTime() - hours * 60 * 60 * 1000)
+function todayBrazilBounds(): { startDate: string; endDate: string } {
+  const nowUtc = Date.now()
+  const brazilNow      = new Date(nowUtc + BRAZIL_OFFSET_MS)
+  const brazilMidnight = new Date(brazilNow)
+  brazilMidnight.setHours(0, 0, 0, 0)
+  const startUtc = new Date(brazilMidnight.getTime() - BRAZIL_OFFSET_MS)
 
   return {
     startDate: startUtc.toISOString(),
-    endDate:   endUtc.toISOString(),
+    endDate:   new Date(nowUtc).toISOString(),
   }
 }
 
@@ -153,7 +160,7 @@ export async function fetchQickCalls(): Promise<QickFetchResult> {
   }
 
   try {
-    const { startDate, endDate } = recentWindowBounds(SYNC_WINDOW_HOURS)
+    const { startDate, endDate } = todayBrazilBounds()
     const allRaw: unknown[] = []
     let page = 1
     let hasMore = true
