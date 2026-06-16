@@ -147,6 +147,7 @@ export function SamanthaLeads() {
                 <tr className="bg-gray-50 text-gray-400 font-medium">
                   <th className="px-3 py-2.5 text-left">Nome</th>
                   <th className="px-3 py-2.5 text-left">Telefone</th>
+                  <th className="px-3 py-2.5 text-left">Unidade</th>
                   <th className="px-3 py-2.5 text-left">Data da ligação</th>
                   <th className="px-3 py-2.5 text-right">Duração</th>
                   <th className="px-3 py-2.5 text-left">Status</th>
@@ -157,6 +158,7 @@ export function SamanthaLeads() {
                   <tr key={c.id} className="bg-white hover:bg-gray-50/50">
                     <td className="px-3 py-2 font-medium text-gray-800">{c.nome ?? "—"}</td>
                     <td className="px-3 py-2 text-gray-500 tabular-nums">{c.phone ?? "—"}</td>
+                    <td className="px-3 py-2 text-gray-500">{c.unidade ?? "—"}</td>
                     <td className="px-3 py-2 text-gray-500 tabular-nums">{fmtDataHora(c.createdAt)}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-gray-400">
                       {c.durationSeconds !== null ? formatSeconds(c.durationSeconds) : "—"}

@@ -12,6 +12,7 @@ export interface QickRawCall {
   id: string
   nome: string
   phone: string
+  unidade: string
   tabbing: { code: string; name: string }
   created_at: string   // ISO UTC
   duration: number     // seconds
@@ -34,6 +35,8 @@ const NOMES = [
   "Ana", "Bruno", "Carla", "Diego", "Elaine", "Felipe", "Gabriela", "Henrique",
   "Isabela", "João",
 ]
+
+const UNIDADES = ["Carpina", "Belford Roxo", "João Pessoa", "Sumaré"]
 
 function lerp(min: number, max: number, t: number): number {
   return Math.round(min + (max - min) * t)
@@ -59,6 +62,7 @@ export function getMockCalls(): QickRawCall[] {
         id: `mock-${tab.code}-${i}`,
         nome: NOMES[(seq + i) % NOMES.length],
         phone: PHONES[(seq + i) % PHONES.length],
+        unidade: UNIDADES[(seq + i) % UNIDADES.length],
         tabbing: { code: tab.code, name: tab.name },
         created_at: callDate.toISOString(),
         duration,

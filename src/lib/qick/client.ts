@@ -2,6 +2,7 @@
 // TODO: validate actual tabbing codes with the Qick team before removing the mock.
 
 import { getMockCalls, type QickRawCall } from "./mock"
+import { normalizeUnidade } from "@/lib/lista-parser"
 
 const QICK_API = "https://api.qick.ai/call"
 const PAGE_LIMIT = 100
@@ -11,6 +12,7 @@ export interface QickNormalizedCall {
   id: string
   nome: string | null
   phone: string | null
+  unidade: string | null
   tabbingCode: string
   tabbingName: string
   createdAt: string      // ISO UTC
@@ -25,6 +27,17 @@ export interface QickFetchResult {
 }
 
 // ─── Normalisation ─────────────────────────────────────────────────────────────
+
+// Olos table name convention: CREDITUM_DISCADOR_<UNIDADE>_<TIPO>_<DDMM>
+// e.g. "CREDITUM_DISCADOR_CARPINA_INADI_1106" → unidade "Carpina".
+// Tables that don't follow the convention (e.g. "CREDITUM_TESTE_v2") yield null.
+function extractUnidadeFromTableName(tableName: unknown): string | null {
+  if (typeof tableName !== "string") return null
+  const parts = tableName.split("_")
+  if (parts.length < 5) return null
+  if (parts[0] !== "CREDITUM" || parts[1] !== "DISCADOR") return null
+  return normalizeUnidade(parts[2])
+}
 
 function normalizeCall(raw: Record<string, unknown>): QickNormalizedCall {
   const id = String(raw.id ?? raw.call_id ?? raw.callId ?? "")
@@ -41,6 +54,7 @@ function normalizeCall(raw: Record<string, unknown>): QickNormalizedCall {
     typeof dynVars.olos_primeiro_nome === "string" && dynVars.olos_primeiro_nome ? dynVars.olos_primeiro_nome
     : typeof dynVars.olos_nome === "string" && dynVars.olos_nome ? dynVars.olos_nome
     : null
+  const unidade = extractUnidadeFromTableName(dynVars.olos_TableName)
 
   // Tabbing only exists once the call has been classified — absent (null) otherwise.
   const callTabbing = raw.callTabbing as Record<string, unknown> | null | undefined
@@ -63,7 +77,7 @@ function normalizeCall(raw: Record<string, unknown>): QickNormalizedCall {
     : typeof raw.durationSeconds === "number"   ? raw.durationSeconds
     : null
 
-  return { id, nome, phone, tabbingCode, tabbingName, createdAt, durationSeconds: duration }
+  return { id, nome, phone, unidade, tabbingCode, tabbingName, createdAt, durationSeconds: duration }
 }
 
 function normalizeMockCall(raw: QickRawCall): QickNormalizedCall {
@@ -71,6 +85,7 @@ function normalizeMockCall(raw: QickRawCall): QickNormalizedCall {
     id: raw.id,
     nome: raw.nome,
     phone: raw.phone,
+    unidade: raw.unidade,
     tabbingCode: raw.tabbing.code,
     tabbingName: raw.tabbing.name,
     createdAt: raw.created_at,
