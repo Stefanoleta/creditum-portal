@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Bot, RefreshCw, PhoneOff, CheckCircle2, VoicemailIcon } from "lucide-react"
 import { cn, formatSeconds } from "@/lib/utils"
 import type { QickNormalizedCall, QickFonte } from "@/lib/qick/client"
@@ -47,6 +47,10 @@ export function SamanthaLeads() {
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
 
+  // Cruzamento com a tabela `leads` do Portal — telefone -> já está em alguma
+  // lista (true) ou é lead novo (false). Ausência de chave = ainda resolvendo.
+  const [matchMap, setMatchMap] = useState<Map<string, boolean>>(new Map())
+
   const load = useCallback(() => {
     setLoading(true)
     setError(null)
@@ -63,10 +67,35 @@ export function SamanthaLeads() {
 
   useEffect(() => { load() }, [load])
 
-  const engajados   = calls.filter(c => c.tabbingCode === COD_ENGAJADO).slice(0, 100)
+  const engajados   = useMemo(
+    () => calls.filter(c => c.tabbingCode === COD_ENGAJADO).slice(0, 100),
+    [calls]
+  )
   const naoPerturbe = calls.filter(c => c.tabbingCode === COD_NAO_PERTURBE)
   const jaResolveu  = calls.filter(c => c.tabbingCode === COD_JA_RESOLVEU)
   const ligacaoMuda = calls.filter(c => c.tabbingCode === COD_LIGACAO_MUDA)
+
+  // Cruza os engajados com a base de leads do Portal — não bloqueia a tabela:
+  // enquanto resolve, cada linha mostra só o badge "Aguardando follow-up".
+  useEffect(() => {
+    setMatchMap(new Map())
+    const telefones = engajados.map(c => c.phone).filter((p): p is string => !!p)
+    if (telefones.length === 0) return
+
+    fetch("/api/listas/sdr-ia/match-leads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ telefones }),
+    })
+      .then(r => r.json())
+      .then((d: { matches?: Record<string, boolean> }) => {
+        if (!d.matches) return
+        setMatchMap(new Map(Object.entries(d.matches)))
+      })
+      .catch(() => {
+        // Best-effort — segundo badge simplesmente não aparece, sem travar a UI.
+      })
+  }, [engajados])
 
   return (
     <div className="flex flex-col gap-4">
@@ -164,10 +193,26 @@ export function SamanthaLeads() {
                       {c.durationSeconds !== null ? formatSeconds(c.durationSeconds) : "—"}
                     </td>
                     <td className="px-3 py-2">
-                      <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide bg-violet-100 text-violet-700 rounded-full px-2 py-0.5 w-fit">
-                        <CheckCircle2 className="w-3 h-3" />
-                        Aguardando follow-up
-                      </span>
+                      <div className="flex flex-col items-start gap-1">
+                        <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide bg-violet-100 text-violet-700 rounded-full px-2 py-0.5 w-fit">
+                          <CheckCircle2 className="w-3 h-3" />
+                          Aguardando follow-up
+                        </span>
+                        {c.phone && matchMap.has(c.phone) && (
+                          matchMap.get(c.phone) ? (
+                            <span className="bg-green-50 border border-green-200 text-green-700 text-xs rounded-full px-2 py-0.5 w-fit">
+                              ✓ Na lista
+                            </span>
+                          ) : (
+                            <span
+                              className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded-full px-2 py-0.5 w-fit"
+                              title="Fora das listas do Portal"
+                            >
+                              ★ Lead novo
+                            </span>
+                          )
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
