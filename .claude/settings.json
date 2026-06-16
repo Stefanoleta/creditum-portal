@@ -21,7 +21,8 @@
       "Bash(vercel whoami 2>&1 && \\\\ *)",
       "Read(//home/**)",
       "Bash(mkdir -p /workspaces/creditum-portal/docs/superpowers/plans)",
-      "Bash(mkdir -p /workspaces/creditum-portal/src/lib/qick /workspaces/creditum-portal/src/components/cockpit /workspaces/creditum-portal/src/app/api/quick/calls)"
+      "Bash(mkdir -p /workspaces/creditum-portal/src/lib/qick /workspaces/creditum-portal/src/components/cockpit /workspaces/creditum-portal/src/app/api/quick/calls)",
+      "Bash(echo \"exit: $?\")"
     ],
     "additionalDirectories": [
       "/workspaces/creditum-portal/supabase",

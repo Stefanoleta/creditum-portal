@@ -1,4 +1,4 @@
-// Mock data for Samantha (Qick AI SDR) — used when QICK_API_KEY is absent.
+// Mock data for Samantha (Qick AI SDR) — used when QUICK_API_KEY is absent.
 // TODO: remove fallback to mock after validating live API in production.
 //
 // Distribution (150 calls, TMA ~2m30s):

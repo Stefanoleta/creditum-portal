@@ -1,5 +1,4 @@
-// Qick API client — server-side only (QICK_API_KEY must never reach the browser).
-// TODO: replace QICK_API_KEY with Creditum's real key once available.
+// Qick API client — server-side only (QUICK_API_KEY must never reach the browser).
 // TODO: validate actual tabbing codes with the Qick team before removing the mock.
 
 import { getMockCalls, type QickRawCall } from "./mock"
@@ -122,7 +121,7 @@ async function fetchPage(
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function fetchQickCalls(): Promise<QickFetchResult> {
-  const apiKey = process.env.QICK_API_KEY ?? ""
+  const apiKey = process.env.QUICK_API_KEY ?? ""
 
   // TODO: remove this fallback once the Creditum API key is configured in Vercel.
   if (!apiKey) {
