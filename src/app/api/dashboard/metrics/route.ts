@@ -460,8 +460,18 @@ export async function GET() {
       return !isNaN(t) && t >= windowStartMs
     })
 
+    // Scope to the same Vendas allowlist used everywhere else (sdrs, liveCalls).
+    // Without this, totalAtendidas below counted ATENDIMENTO calls from EVERY
+    // agent in ligacoesdetalhadas (other teams, DISCADOR, etc.) while
+    // totalDiscadas counted only Rafaella+Marcela — numerator and denominator
+    // from different populations, which is how taxa_contato hit 142.9%.
+    const ligacoesVendas = ligacoesItems.filter((item) => {
+      const nome = pickStr(item.usuarioOperador, item.nomeAgente, item.nome, item.agente)
+      return matchesAllowlist(nome, VENDAS_LIST)
+    })
+
     // attended = calls where the lead picked up (resultadoLigacao "ATENDIMENTO")
-    const totalAtendidas = ligacoesItems.filter((i) => i.resultadoLigacao?.toUpperCase() === "ATENDIMENTO").length
+    const totalAtendidas = ligacoesVendas.filter((i) => i.resultadoLigacao?.toUpperCase() === "ATENDIMENTO").length
 
     // Try tabulações independently — won't throw even if unavailable
     const { objections, occurrences, total_conversoes, tabulacoes_source, rawItems: tabulacaoItems } =
@@ -470,13 +480,14 @@ export async function GET() {
     const sdrs      = adaptSDRs(desempenhoItems, VENDAS_LIST)
     const liveCalls = adaptLiveCalls(ligacoesItems, VENDAS_LIST)
 
-    // totalDiscadas: prefer SDR realizadas sum (desempenhoresumido is a day-summary,
-    // already scoped correctly) — never fall back to a raw ligacoesItems count,
-    // which is exactly what let stale/historical records inflate this metric.
+    // totalDiscadas: same array, same window, same allowlist as totalAtendidas
+    // above — guarantees totalAtendidas <= totalDiscadas by construction
+    // (totalAtendidas is a .filter() subset of ligacoesVendas). Desempenho-based
+    // sum is only a fallback for when ligacoesdetalhadas itself is empty.
     const totalDiscadasFromSDR = sdrs.reduce((s, r) => s + r.ligacoes_realizadas, 0)
-    const totalDiscadas = totalDiscadasFromSDR > 0
-      ? totalDiscadasFromSDR
-      : totalAtendidas
+    const totalDiscadas = ligacoesVendas.length > 0
+      ? ligacoesVendas.length
+      : totalDiscadasFromSDR
 
     const metrics = buildMetrics(sdrs, liveCalls, total_conversoes, totalDiscadas, totalAtendidas)
 
