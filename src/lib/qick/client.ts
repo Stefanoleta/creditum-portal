@@ -6,7 +6,6 @@ import { getMockCalls, type QickRawCall } from "./mock"
 const QICK_API = "https://api.qick.ai/call"
 const PAGE_LIMIT = 100
 const MAX_RETRIES = 2
-const BRAZIL_OFFSET_MS = -3 * 60 * 60 * 1000 // UTC-3
 
 export interface QickNormalizedCall {
   id: string
@@ -75,16 +74,14 @@ function normalizeMockCall(raw: QickRawCall): QickNormalizedCall {
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
-function todayBrazilBounds(): { startDate: string; endDate: string } {
-  const nowUtc = Date.now()
-  // Brazil midnight UTC = Brazil 00:00 local
-  const brazilNow = new Date(nowUtc + BRAZIL_OFFSET_MS)
-  const brazilMidnight = new Date(brazilNow)
-  brazilMidnight.setHours(0, 0, 0, 0)
+// Samantha's tabbing classification runs with a lag — calls placed "today" often
+// have callTabbing: null for hours. A rolling 48h window keeps the cockpit
+// populated with already-classified calls instead of showing 100% "unknown".
+const SYNC_WINDOW_HOURS = 48
 
-  // Convert back to UTC for the API
-  const startUtc = new Date(brazilMidnight.getTime() - BRAZIL_OFFSET_MS)
-  const endUtc   = new Date(nowUtc)
+function recentWindowBounds(hours: number): { startDate: string; endDate: string } {
+  const endUtc   = new Date()
+  const startUtc = new Date(endUtc.getTime() - hours * 60 * 60 * 1000)
 
   return {
     startDate: startUtc.toISOString(),
@@ -135,7 +132,7 @@ export async function fetchQickCalls(): Promise<QickFetchResult> {
   }
 
   try {
-    const { startDate, endDate } = todayBrazilBounds()
+    const { startDate, endDate } = recentWindowBounds(SYNC_WINDOW_HOURS)
     const allRaw: unknown[] = []
     let page = 1
     let hasMore = true
