@@ -11,11 +11,11 @@ function pick<T>(...candidates: (T | undefined)[]): T | undefined {
   return candidates.find((v) => v !== undefined && v !== null)
 }
 
-function pickStr(...candidates: (string | undefined)[]): string {
+export function pickStr(...candidates: (string | undefined)[]): string {
   return candidates.find((v) => typeof v === "string" && v.trim() !== "") ?? ""
 }
 
-function pickNum(...candidates: (number | undefined)[]): number {
+export function pickNum(...candidates: (number | undefined)[]): number {
   return candidates.find((v) => typeof v === "number" && !isNaN(v)) ?? 0
 }
 
@@ -83,6 +83,9 @@ export function adaptSDRs(items: ArgusDesempenhoItem[], allowlist: string[] = DE
       const atendidas  = pickNum(item.qtdeAtendimentoTotal, item.qtdeAtendimentoAutomatico, item.qtdAtendidas, item.ligacoesAtendidas, item.totalAtendidas)
       // qtdDiscadas = total calls placed (including unanswered) — may or may not exist per Argus version
       const realizadas = pickNum(item.qtdDiscadas, item.totalLigacoes, item.ligacoesRealizadas) || atendidas
+      // desempenhoresumido never actually carries conversoes/qtdConversoes (see types/argus.ts
+      // comment) — this is always 0 in practice. Real per-agent count comes from
+      // tabulacoesdetalhadas and is patched in by the dashboard route (buildSdrQuality).
       const conversoes = pickNum(item.conversoes, item.qtdConversoes)
       const tma        = pickNum(item.tempoMedioAtendimento, item.tma)
       const tme        = pickNum(item.tempoMedioEspera, item.tme)
@@ -188,6 +191,22 @@ const OCCURRENCE_COLORS = [
   "bg-lime-500",
 ]
 
+// Conversion: covers common Argus naming variations.
+// Shared by adaptTabulacoes (system-wide total) and the per-SDR breakdown in
+// the dashboard route — keeps both counts using the exact same definition.
+export function isConversaoLabel(label: string): boolean {
+  const upper = label.toUpperCase()
+  return (
+    upper.includes("QUALIFICA") ||       // QUALIFICAÇÃO / QUALIFICACAO
+    upper.includes("PROPOSTA ENVIADA") ||
+    upper.includes("CONTRATO FECHADO") ||
+    upper.includes("FECHAMENTO") ||
+    upper.includes("PROPOSTA ACEITA") ||
+    upper.includes("VENDA") ||
+    upper === "SUCESSO"
+  )
+}
+
 export function adaptTabulacoes(items: ArgusTabulacaoItem[]): {
   objections: Objection[]
   occurrences: Occurrence[]
@@ -212,17 +231,7 @@ export function adaptTabulacoes(items: ArgusTabulacaoItem[]): {
 
     textCount.set(label, (textCount.get(label) ?? 0) + count)
 
-    // Conversion: covers common Argus naming variations
-    const upper = label.toUpperCase()
-    const isConversao =
-      upper.includes("QUALIFICA") ||       // QUALIFICAÇÃO / QUALIFICACAO
-      upper.includes("PROPOSTA ENVIADA") ||
-      upper.includes("CONTRATO FECHADO") ||
-      upper.includes("FECHAMENTO") ||
-      upper.includes("PROPOSTA ACEITA") ||
-      upper.includes("VENDA") ||
-      upper === "SUCESSO"
-    if (isConversao) total_conversoes += count
+    if (isConversaoLabel(label)) total_conversoes += count
   }
 
   const total = Array.from(textCount.values()).reduce((a, b) => a + b, 0) || 1

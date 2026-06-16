@@ -7,6 +7,9 @@ import {
   extractArray,
   getVendasAllowlist,
   matchesAllowlist,
+  isConversaoLabel,
+  pickStr,
+  pickNum,
 } from "@/lib/argus-adapter"
 import { generateMockDashboard } from "@/lib/mock-data"
 import { supabase, saveAnalysis } from "@/lib/supabase-server"
@@ -365,16 +368,23 @@ async function saveResultadosDiscador(ligacoesItems: ArgusLigacaoItem[]) {
 // ── Per-SDR quality metrics from tabulacoesdetalhadas ────────────────────────
 
 function buildSdrQuality(items: ArgusTabulacaoItem[]) {
-  type Entry = { tabulou: number; cliente_desligou: number }
+  type Entry = { tabulou: number; cliente_desligou: number; conversoes: number }
   const map = new Map<string, Entry>()
   for (const item of items) {
     if ((item.origemTabulacao ?? "").toUpperCase().includes("DISCADOR")) continue
     const op = (item.usuarioOperador ?? "").toUpperCase().trim()
     if (!op || op === "DISCADOR") continue
-    if (!map.has(op)) map.set(op, { tabulou: 0, cliente_desligou: 0 })
+    if (!map.has(op)) map.set(op, { tabulou: 0, cliente_desligou: 0, conversoes: 0 })
     const e = map.get(op)!
     e.tabulou++
     if ((item.tabulado ?? "").toUpperCase().includes("CLIENTE DESLIGOU")) e.cliente_desligou++
+    // desempenhoresumido never carries real conversões (see adaptSDRs comment) —
+    // this is the only accurate per-agent source, same definition as the dashboard total.
+    const label = pickStr(
+      (item as Record<string, unknown>).tabulacaoDesc as string | undefined,
+      item.tabulado, item.tabulacao, item.descricao, ""
+    )
+    if (isConversaoLabel(label)) e.conversoes += pickNum(item.quantidade, item.qtd, item.total) || 1
   }
   return map
 }
@@ -388,7 +398,7 @@ function lookupSdrQuality(name: string, map: ReturnType<typeof buildSdrQuality>)
       if (key.includes(firstName)) return val
     }
   }
-  return { tabulou: 0, cliente_desligou: 0 }
+  return { tabulou: 0, cliente_desligou: 0, conversoes: 0 }
 }
 
 export async function GET() {
@@ -446,6 +456,9 @@ export async function GET() {
       const total       = nao_tabulou + q.tabulou
       return {
         ...sdr,
+        // desempenhoresumido's conversoes is always 0 (field doesn't exist there) —
+        // override with the real per-agent count from tabulacoesdetalhadas.
+        conversoes:           q.conversoes,
         pct_nao_tabulou:      total     > 0 ? Math.round((nao_tabulou        / total)     * 1000) / 10 : 0,
         pct_cliente_desligou: q.tabulou > 0 ? Math.round((q.cliente_desligou / q.tabulou) * 1000) / 10 : 0,
       }
