@@ -229,7 +229,9 @@ export default function CockpitPage() {
         </div>
 
         {/* Row 3: Samantha — SDR I.A (Qick), dados separados dos SDRs humanos */}
-        <SamanthaSection />
+        <div className="col-span-12">
+          <SamanthaSection />
+        </div>
 
         {/* Row 4: Ocorrências — valores exatos do Argus, largura total */}
         <div className="col-span-12 bg-white rounded-lg shadow-sm px-6 py-5 flex flex-col gap-4">
