@@ -12,6 +12,7 @@ import { formatSeconds, formatPercent } from "@/lib/utils"
 import { cn } from "@/lib/utils"
 import { AlertCircle, BarChart3, Microscope, List } from "lucide-react"
 import type { SDR } from "@/types/dashboard"
+import { SamanthaSection } from "@/components/cockpit/SamanthaSection"
 
 function QualidadeBar({ label, value, amberAbove, redAbove }: {
   label: string; value: number; amberAbove: number; redAbove: number
@@ -227,7 +228,10 @@ export default function CockpitPage() {
           </div>
         </div>
 
-        {/* Row 3: Ocorrências — valores exatos do Argus, largura total */}
+        {/* Row 3: Samantha — SDR I.A (Qick), dados separados dos SDRs humanos */}
+        <SamanthaSection />
+
+        {/* Row 4: Ocorrências — valores exatos do Argus, largura total */}
         <div className="col-span-12 bg-white rounded-lg shadow-sm px-6 py-5 flex flex-col gap-4">
           <div className="flex items-center justify-between shrink-0">
             <h2 className="text-sm font-semibold text-gray-600">Ocorrências</h2>
