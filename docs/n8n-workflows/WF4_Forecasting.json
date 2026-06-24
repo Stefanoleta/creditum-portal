@@ -1,0 +1,153 @@
+{
+  "name": "WF4 — Forecasting",
+  "nodes": [
+    {
+      "id": "b4000001-0000-0000-0000-000000000001",
+      "name": "Schedule Weekdays 08h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [60, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1-5"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b4000001-0000-0000-0000-000000000002",
+      "name": "GET All Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.BITRIX_DOMAIN }}/rest/1/{{ $env.BITRIX_WEBHOOK }}/crm.lead.list.json",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "select": ["ID", "STATUS_ID", "UF_SEQ_DAY", "UF_WARMER_COUNT", "DATE_CREATE", "UF_LAST_CONTACT"],
+          "filter": {}
+        }
+      }
+    },
+    {
+      "id": "b4000001-0000-0000-0000-000000000003",
+      "name": "Compute Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "jsCode": "const leads = $input.first().json.result || [];\n\nconst byStatus = {};\nleads.forEach(l => {\n  const s = l.STATUS_ID || 'UNKNOWN';\n  byStatus[s] = (byStatus[s] || 0) + 1;\n});\n\nconst total    = leads.length;\nconst inSeq    = byStatus['IN_SEQUENCE'] || 0;\nconst closers  = byStatus['IN_PROCESS']  || 0;\nconst cold     = byStatus['COLD']        || 0;\nconst stealth  = byStatus['STEALTH']     || 0;\nconst inactive = byStatus['INACTIVE']    || 0;\n\n// Taxa de conversão SDR→Closer\nconst convRate = total > 0 ? ((closers / total) * 100).toFixed(1) : 0;\n\n// Leads respondendo (UF_WARMER_COUNT > 0)\nconst responderam = leads.filter(l => parseInt(l.UF_WARMER_COUNT || '0') > 0).length;\nconst respRate = inSeq > 0 ? ((responderam / inSeq) * 100).toFixed(1) : 0;\n\nconst metrics = {\n  total, in_sequence: inSeq, closers, cold, stealth, inactive,\n  taxa_conversao_pct: convRate,\n  taxa_resposta_pct: respRate,\n  by_status: byStatus,\n  data_hora: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })\n};\n\nreturn [{ json: metrics }];"
+      }
+    },
+    {
+      "id": "b4000001-0000-0000-0000-000000000004",
+      "name": "AI Forecast",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 300,
+          "messages": [{
+            "role": "user",
+            "content": "=Dados de hoje ({{ $json.data_hora }}):\nTotal leads: {{ $json.total }}\nEm sequência: {{ $json.in_sequence }}\nCom closer: {{ $json.closers }}\nFrios: {{ $json.cold }} | Stealth: {{ $json.stealth }}\nTaxa resposta: {{ $json.taxa_resposta_pct }}%\nTaxa conversão SDR→Closer: {{ $json.taxa_conversao_pct }}%\n\nRetorne APENAS JSON válido:\n{\n  \"fechamentos_estimados_semana\": <número inteiro>,\n  \"gargalo_principal\": \"<max 8 palavras>\",\n  \"acao_prioritaria\": \"<max 10 palavras>\",\n  \"alerta\": \"<string ou null>\"\n}"
+          }]
+        }
+      }
+    },
+    {
+      "id": "b4000001-0000-0000-0000-000000000005",
+      "name": "Parse Forecast",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 300],
+      "parameters": {
+        "jsCode": "const rawText = $input.first().json.content?.[0]?.text?.trim() || '{}';\nlet forecast = {};\ntry {\n  const match = rawText.match(/\\{[\\s\\S]*\\}/);\n  forecast = match ? JSON.parse(match[0]) : {};\n} catch(e) {\n  forecast = { fechamentos_estimados_semana: 0, gargalo_principal: 'Análise indisponível', acao_prioritaria: 'Revisar dados', alerta: e.message };\n}\nconst metrics = $('Compute Metrics').first().json;\nreturn [{ json: { ...metrics, forecast } }];"
+      }
+    },
+    {
+      "id": "b4000001-0000-0000-0000-000000000006",
+      "name": "Post Bitrix Feed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1060, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.BITRIX_DOMAIN }}/rest/1/{{ $env.BITRIX_WEBHOOK }}/log.blogpost.add.json",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "POST_TITLE": "=📊 Forecast Creditum — {{ $json.data_hora }}",
+          "POST_MESSAGE": "=**Situação atual:**\n✅ Em sequência: {{ $json.in_sequence }}\n🎯 Com closer: {{ $json.closers }}\n❄️ Frios: {{ $json.cold }}\n\n**IA prevê:** {{ $json.forecast.fechamentos_estimados_semana }} fechamentos esta semana\n⚠️ Gargalo: {{ $json.forecast.gargalo_principal }}\n🚀 Ação: {{ $json.forecast.acao_prioritaria }}\n{{ $json.forecast.alerta ? '🔴 Alerta: ' + $json.forecast.alerta : '' }}"
+        }
+      }
+    },
+    {
+      "id": "b4000001-0000-0000-0000-000000000007",
+      "name": "WA to Stefano",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1260, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v19.0/{{ $env.PHONE_NUMBER_ID }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $env.WA_TOKEN }}" }]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "messaging_product": "whatsapp",
+          "to": "={{ $env.STEFANO_PHONE }}",
+          "type": "text",
+          "text": {
+            "body": "=📊 *Forecast Creditum — {{ $json.data_hora }}*\n\nLeads em seq: {{ $json.in_sequence }} | Closers: {{ $json.closers }}\nTaxa resp: {{ $json.taxa_resposta_pct }}% | Conv: {{ $json.taxa_conversao_pct }}%\n\n🎯 IA prevê *{{ $json.forecast.fechamentos_estimados_semana }} fechamentos* esta semana\n⚠️ {{ $json.forecast.gargalo_principal }}\n🚀 {{ $json.forecast.acao_prioritaria }}"
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Weekdays 08h": {
+      "main": [[{ "node": "GET All Leads", "type": "main", "index": 0 }]]
+    },
+    "GET All Leads": {
+      "main": [[{ "node": "Compute Metrics", "type": "main", "index": 0 }]]
+    },
+    "Compute Metrics": {
+      "main": [[{ "node": "AI Forecast", "type": "main", "index": 0 }]]
+    },
+    "AI Forecast": {
+      "main": [[{ "node": "Parse Forecast", "type": "main", "index": 0 }]]
+    },
+    "Parse Forecast": {
+      "main": [[{ "node": "Post Bitrix Feed", "type": "main", "index": 0 }]]
+    },
+    "Post Bitrix Feed": {
+      "main": [[{ "node": "WA to Stefano", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "tags": ["sales-os-v2"]
+}

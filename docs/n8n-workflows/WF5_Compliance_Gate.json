@@ -1,0 +1,33 @@
+{
+  "name": "WF5 — Compliance Gate",
+  "nodes": [
+    {
+      "id": "a1b2c3d4-0001-0001-0001-000000000001",
+      "name": "Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {}
+    },
+    {
+      "id": "a1b2c3d4-0001-0001-0001-000000000002",
+      "name": "Compliance Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst leadId = input.lead_id;\nconst phone  = input.phone;\nconst optOut = input.opt_out === true || input.opt_out === 'true';\n\nif (optOut) {\n  return [{ json: { pass: false, reason: 'optout', lead_id: leadId, phone } }];\n}\n\n// Horário comercial: 08:00–20:00, excluindo domingo (0)\nconst now = new Date();\nconst spTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));\nconst hour = spTime.getHours();\nconst weekday = spTime.getDay(); // 0=Dom, 6=Sab\n\nif (weekday === 0 || hour < 8 || hour >= 20) {\n  return [{ json: { pass: false, reason: 'horario', lead_id: leadId, phone } }];\n}\n\nreturn [{ json: { pass: true, reason: '', lead_id: leadId, phone } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Trigger": {
+      "main": [[{ "node": "Compliance Check", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": ["sales-os-v2", "sub-workflow"]
+}

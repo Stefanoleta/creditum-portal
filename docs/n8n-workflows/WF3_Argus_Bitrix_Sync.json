@@ -1,0 +1,268 @@
+{
+  "name": "WF3 — Argus → Bitrix Sync",
+  "nodes": [
+    {
+      "id": "b3000001-0000-0000-0000-000000000001",
+      "name": "Schedule 30min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [60, 300],
+      "parameters": {
+        "rule": { "interval": [{ "field": "minutes", "minutesInterval": 30 }] }
+      }
+    },
+    {
+      "id": "b3000001-0000-0000-0000-000000000002",
+      "name": "GET Argus Ligacoes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://argus.app.br/apiargus/ligacoesdetalhadas",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Token-Signature", "value": "={{ $env.ARGUS_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": { "ultimosMinutos": 35 }
+      }
+    },
+    {
+      "id": "b3000001-0000-0000-0000-000000000003",
+      "name": "Extract Calls Array",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst calls = raw.ligacoesDetalhadas || raw.itens || raw.data || (Array.isArray(raw) ? raw : []);\nreturn calls.map(c => ({ json: c }));"
+      }
+    },
+    {
+      "id": "b3000001-0000-0000-0000-000000000004",
+      "name": "Split In Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [660, 300],
+      "parameters": { "batchSize": 10, "options": {} }
+    },
+    {
+      "id": "b3000001-0000-0000-0000-000000000005",
+      "name": "IF Atendida e Longa",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [860, 300],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.resultadoLigacao?.toUpperCase() }}",
+              "rightValue": "ATENDIMENTO",
+              "operator": { "type": "string", "operation": "equals" }
+            },
+            {
+              "leftValue": "={{ $json.tempoSegundos || $json.duracao || 0 }}",
+              "rightValue": 30,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "b3000001-0000-0000-0000-000000000006",
+      "name": "Skip Short Call",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1060, 480],
+      "parameters": {}
+    },
+    {
+      "id": "b3000001-0000-0000-0000-000000000007",
+      "name": "GET Lead by Phone",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1060, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.BITRIX_DOMAIN }}/rest/1/{{ $env.BITRIX_WEBHOOK }}/crm.lead.list.json",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "filter": { "PHONE": "={{ $json.telefone || $json.numero || $json.numeroDiscado }}" },
+          "select": ["ID", "PHONE", "STATUS_ID", "ASSIGNED_BY_ID"]
+        }
+      }
+    },
+    {
+      "id": "b3000001-0000-0000-0000-000000000008",
+      "name": "IF Lead Exists",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1260, 300],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.result?.length }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "b3000001-0000-0000-0000-000000000009",
+      "name": "Create Lead Argus",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1460, 480],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.BITRIX_DOMAIN }}/rest/1/{{ $env.BITRIX_WEBHOOK }}/crm.lead.add.json",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "FIELDS": {
+            "TITLE": "=Lead Argus — {{ $('Extract Calls Array').first().json.telefone || 'sem número' }}",
+            "PHONE": [{ "VALUE": "={{ $('Extract Calls Array').first().json.telefone }}", "VALUE_TYPE": "WORK" }],
+            "STATUS_ID": "NEW",
+            "SOURCE_ID": "CALL",
+            "COMMENTS": "Criado automaticamente via sincronização Argus"
+          }
+        }
+      }
+    },
+    {
+      "id": "b3000001-0000-0000-0000-000000000010",
+      "name": "Add Call Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1460, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.BITRIX_DOMAIN }}/rest/1/{{ $env.BITRIX_WEBHOOK }}/crm.activity.add.json",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "fields": {
+            "OWNER_TYPE_ID": "1",
+            "OWNER_ID": "={{ $json.result?.[0]?.ID }}",
+            "TYPE_ID": "2",
+            "SUBJECT": "=Ligação Argus — {{ $('Extract Calls Array').first().json.resultadoLigacao }}",
+            "DESCRIPTION": "=Tabulação: {{ $('Extract Calls Array').first().json.tabulacao }}\nDuração: {{ $('Extract Calls Array').first().json.tempoSegundos }}s\nOperador: {{ $('Extract Calls Array').first().json.usuarioOperador }}",
+            "COMPLETED": "Y",
+            "DIRECTION": "2"
+          }
+        }
+      }
+    },
+    {
+      "id": "b3000001-0000-0000-0000-000000000011",
+      "name": "IF Interesse Confirmado",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1660, 300],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $('Extract Calls Array').first().json.tabulacao?.toUpperCase() }}",
+              "rightValue": "INTERESSE CONFIRMADO",
+              "operator": { "type": "string", "operation": "contains" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "b3000001-0000-0000-0000-000000000012",
+      "name": "Move to CLOSER",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1860, 240],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.BITRIX_DOMAIN }}/rest/1/{{ $env.BITRIX_WEBHOOK }}/crm.lead.update.json",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "ID": "={{ $('GET Lead by Phone').first().json.result?.[0]?.ID }}",
+          "FIELDS": { "STATUS_ID": "IN_PROCESS" }
+        }
+      }
+    },
+    {
+      "id": "b3000001-0000-0000-0000-000000000013",
+      "name": "Loop Back",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2060, 300],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Schedule 30min": {
+      "main": [[{ "node": "GET Argus Ligacoes", "type": "main", "index": 0 }]]
+    },
+    "GET Argus Ligacoes": {
+      "main": [[{ "node": "Extract Calls Array", "type": "main", "index": 0 }]]
+    },
+    "Extract Calls Array": {
+      "main": [[{ "node": "Split In Batches", "type": "main", "index": 0 }]]
+    },
+    "Split In Batches": {
+      "main": [
+        [{ "node": "IF Atendida e Longa", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "IF Atendida e Longa": {
+      "main": [
+        [{ "node": "GET Lead by Phone", "type": "main", "index": 0 }],
+        [{ "node": "Skip Short Call", "type": "main", "index": 0 }]
+      ]
+    },
+    "Skip Short Call": {
+      "main": [[{ "node": "Split In Batches", "type": "main", "index": 0 }]]
+    },
+    "GET Lead by Phone": {
+      "main": [[{ "node": "IF Lead Exists", "type": "main", "index": 0 }]]
+    },
+    "IF Lead Exists": {
+      "main": [
+        [{ "node": "Add Call Activity", "type": "main", "index": 0 }],
+        [{ "node": "Create Lead Argus", "type": "main", "index": 0 }]
+      ]
+    },
+    "Create Lead Argus": {
+      "main": [[{ "node": "Loop Back", "type": "main", "index": 0 }]]
+    },
+    "Add Call Activity": {
+      "main": [[{ "node": "IF Interesse Confirmado", "type": "main", "index": 0 }]]
+    },
+    "IF Interesse Confirmado": {
+      "main": [
+        [{ "node": "Move to CLOSER", "type": "main", "index": 0 }],
+        [{ "node": "Loop Back", "type": "main", "index": 0 }]
+      ]
+    },
+    "Move to CLOSER": {
+      "main": [[{ "node": "Loop Back", "type": "main", "index": 0 }]]
+    },
+    "Loop Back": {
+      "main": [[{ "node": "Split In Batches", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "tags": ["sales-os-v2"]
+}

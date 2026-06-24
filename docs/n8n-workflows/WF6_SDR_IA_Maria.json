@@ -1,0 +1,441 @@
+{
+  "name": "WF6 — SDR IA Maria de Lourdes",
+  "nodes": [
+    {
+      "id": "b6000001-0000-0000-0000-000000000001",
+      "name": "Webhook WA SDR",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [60, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wa-sdr",
+        "responseMode": "immediately",
+        "responseData": "allEntries"
+      }
+    },
+    {
+      "id": "b6000001-0000-0000-0000-000000000002",
+      "name": "Extract Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\nconst msg  = body.entry?.[0]?.changes?.[0]?.value;\nconst message = msg?.messages?.[0];\nconst phone   = message?.from || '';\nconst text    = message?.text?.body || message?.button?.text || message?.interactive?.button_reply?.title || '';\nif (!phone || phone === process.env.BOT_PHONE) {\n  return [{ json: { _skip: true } }];\n}\nreturn [{ json: { phone, text, wa_msg_id: message?.id, timestamp: Date.now() } }];"
+      }
+    },
+    {
+      "id": "b6000001-0000-0000-0000-000000000003",
+      "name": "IF Should Process",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json._skip }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "notTrue" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "b6000001-0000-0000-0000-000000000004",
+      "name": "GET Lead + Conversation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.BITRIX_DOMAIN }}/rest/1/{{ $env.BITRIX_WEBHOOK }}/crm.lead.list.json",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "filter": { "PHONE": "={{ $json.phone }}" },
+          "select": ["ID", "PHONE", "UF_WARMER_COUNT", "UF_LAST_LEAD_MSG", "UF_INTENT", "UF_SEQ_PAUSED", "STATUS_ID", "UF_HYGIENE_STATUS"]
+        }
+      }
+    },
+    {
+      "id": "b6000001-0000-0000-0000-000000000005",
+      "name": "Merge Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 300],
+      "parameters": {
+        "jsCode": "const msgData  = $('Extract Message').first().json;\nconst leadData = $input.first().json.result?.[0] || {};\n\nreturn [{ json: {\n  phone:         msgData.phone,\n  text:          msgData.text,\n  wa_msg_id:     msgData.wa_msg_id,\n  lead_id:       leadData.ID || null,\n  warm_count:    parseInt(leadData.UF_WARMER_COUNT || '0'),\n  last_intent:   leadData.UF_INTENT || '',\n  seq_paused:    leadData.UF_SEQ_PAUSED === 'Y',\n  hygiene:       leadData.UF_HYGIENE_STATUS || '',\n  lead_status:   leadData.STATUS_ID || 'UNKNOWN'\n} }];"
+      }
+    },
+    {
+      "id": "b6000001-0000-0000-0000-000000000006",
+      "name": "Subagente 1 — Intent Classifier",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1060, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "max_tokens": 20,
+          "system": "Você é Maria de Lourdes, especialista da Creditum.\nCLASSIFICADOR: analise a mensagem e retorne APENAS o código de intenção, sem mais texto.",
+          "messages": [{
+            "role": "user",
+            "content": "=Mensagem: \"{{ $json.text }}\"\n\nCódigos possíveis:\nINTERESSE_CONFIRMADO | CURIOSIDADE | OBJECAO_PRECO | OBJECAO_TEMPO | OBJECAO_DESCONFIANCA | SEM_INTERESSE | JA_QUITOU | NUMERO_ERRADO | OPTOUT | SAUDACAO | RESPOSTA_POSITIVA | INDEFINIDO\n\nCódigo:"
+          }]
+        }
+      }
+    },
+    {
+      "id": "b6000001-0000-0000-0000-000000000007",
+      "name": "Extract Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1260, 300],
+      "parameters": {
+        "jsCode": "const intentRaw = $input.first().json.content?.[0]?.text?.trim().toUpperCase() || 'INDEFINIDO';\nconst validCodes = ['INTERESSE_CONFIRMADO','CURIOSIDADE','OBJECAO_PRECO','OBJECAO_TEMPO','OBJECAO_DESCONFIANCA','SEM_INTERESSE','JA_QUITOU','NUMERO_ERRADO','OPTOUT','SAUDACAO','RESPOSTA_POSITIVA','INDEFINIDO'];\nconst intent = validCodes.find(c => intentRaw.includes(c)) || 'INDEFINIDO';\nconst ctx = $('Merge Context').first().json;\nreturn [{ json: { ...ctx, intent } }];"
+      }
+    },
+    {
+      "id": "b6000001-0000-0000-0000-000000000008",
+      "name": "Update UF_INTENT Bitrix",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1460, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.BITRIX_DOMAIN }}/rest/1/{{ $env.BITRIX_WEBHOOK }}/crm.lead.update.json",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "ID": "={{ $json.lead_id }}",
+          "FIELDS": { "UF_INTENT": "={{ $json.intent }}", "UF_LAST_LEAD_MSG": "={{ $now.toISO() }}" }
+        }
+      }
+    },
+    {
+      "id": "b6000001-0000-0000-0000-000000000009",
+      "name": "Switch Intent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1660, 300],
+      "parameters": {
+        "mode": "expression",
+        "output": "={{ $json.intent }}",
+        "rules": {
+          "values": [
+            { "outputKey": "handoff", "conditions": { "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "INTERESSE_CONFIRMADO", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" } },
+            { "outputKey": "objection", "conditions": { "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "OBJECAO_", "operator": { "type": "string", "operation": "startsWith" } }], "combinator": "and" } },
+            { "outputKey": "cold", "conditions": { "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "SEM_INTERESSE", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" } },
+            { "outputKey": "optout", "conditions": { "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "OPTOUT", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" } },
+            { "outputKey": "invalid", "conditions": { "conditions": [{ "leftValue": "={{ ['NUMERO_ERRADO','JA_QUITOU'].includes($json.intent) }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true" } }], "combinator": "and" } }
+          ]
+        },
+        "fallbackOutput": "last"
+      }
+    },
+    {
+      "id": "b6000001-0000-0000-0000-000000000010",
+      "name": "Subagente 2 — Objection Handler",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1860, 480],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 200,
+          "system": "Você é Maria de Lourdes, especialista da Creditum.\nPODE: redução de até 50% na parcela, plano financeiro do curso, CCB regulamentada, sem cancelar o curso, nomes dos parceiros (Grau Técnico MedCof Medway Medcel Estratégia MED Aristo).\nNÃO PODE: dívida (use parcelas do curso), valor exato de parcela reduzida, taxa de juros, garantia de aprovação, sem consulta SPC.\nMáximo 4 linhas por mensagem. Uma pergunta por vez.",
+          "messages": [{
+            "role": "user",
+            "content": "=Objeção do lead ({{ $json.intent }}): \"{{ $json.text }}\"\nEsta é a tentativa {{ ($json.warm_count || 0) + 1 }} de 2.\n{{ $json.warm_count >= 1 ? 'Se não convencer, encerre com gentileza.' : '' }}\nResponda a objeção de forma humana e empática."
+          }]
+        }
+      }
+    },
+    {
+      "id": "b6000001-0000-0000-0000-000000000011",
+      "name": "Subagente 3 — Warmer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1860, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 200,
+          "system": "Você é Maria de Lourdes, especialista da Creditum.\nPODE: redução de até 50% na parcela, plano financeiro do curso, CCB regulamentada, sem cancelar o curso.\nNÃO PODE: dívida (use parcelas do curso), valor exato, taxa de juros, garantia de aprovação.\nMáximo 4 linhas. Uma pergunta por vez.",
+          "messages": [{
+            "role": "user",
+            "content": "=Mensagem do lead: \"{{ $json.text }}\"\nwarm_count: {{ $json.warm_count }}\n\nRegras por warm_count:\n0 → apresenta o principal benefício (redução de parcela)\n1 → reforça com cenário específico do aluno\n2 → faz pergunta de transição para simulação\n3+ → prepare handoff para especialista humano\n\nEscreva a resposta:"
+          }]
+        }
+      }
+    },
+    {
+      "id": "b6000001-0000-0000-0000-000000000012",
+      "name": "Subagente 4 — Handoff Trigger",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1860, 120],
+      "parameters": {
+        "jsCode": "const ctx = $input.first().json;\nconst closers = ['CLOSER_1', 'CLOSER_2', 'CLOSER_3'];\nconst closer  = closers[Math.floor(Date.now() / 1000) % closers.length];\n\nconst briefing = {\n  lead_id:       ctx.lead_id,\n  phone:         ctx.phone,\n  intent:        ctx.intent,\n  warm_count:    ctx.warm_count,\n  ultimo_texto:  ctx.text,\n  closer_id:     closer,\n  timestamp:     new Date().toISOString()\n};\n\nreturn [{ json: { ...ctx, briefing, closer_id: closer } }];"
+      }
+    },
+    {
+      "id": "b6000001-0000-0000-0000-000000000013",
+      "name": "Log Handoff Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2060, 120],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sdr_ia_handoffs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "lead_id":             "={{ $json.lead_id }}",
+          "phone":               "={{ $json.phone }}",
+          "closer_notified":     false,
+          "briefing_json":       "={{ $json.briefing }}",
+          "warm_count_at_handoff": "={{ $json.warm_count }}",
+          "prioridade":          "=alta"
+        }
+      }
+    },
+    {
+      "id": "b6000001-0000-0000-0000-000000000014",
+      "name": "Notify Closer + Pause",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2260, 120],
+      "parameters": {
+        "jsCode": "// Notifica closer via Bitrix IM e pausa sequência\nconst ctx = $input.first().json;\n\n// Bitrix: Add activity (não move pipeline)\nawait this.helpers.httpRequest({\n  method: 'POST',\n  url: `https://${process.env.BITRIX_DOMAIN}/rest/1/${process.env.BITRIX_WEBHOOK}/crm.activity.add.json`,\n  body: JSON.stringify({\n    fields: {\n      OWNER_TYPE_ID: '1', OWNER_ID: ctx.lead_id,\n      TYPE_ID: '12', SUBJECT: '🎯 Lead qualificado — Handoff SDR IA',\n      DESCRIPTION: `Intent: ${ctx.intent}\\nWarm: ${ctx.warm_count}\\nCloser: ${ctx.closer_id}\\nÚltima msg: ${ctx.text}`,\n      RESPONSIBLE_ID: ctx.closer_id, COMPLETED: 'N'\n    }\n  }),\n  headers: { 'Content-Type': 'application/json' }\n});\n\n// Bitrix: Pausar sequência\nawait this.helpers.httpRequest({\n  method: 'POST',\n  url: `https://${process.env.BITRIX_DOMAIN}/rest/1/${process.env.BITRIX_WEBHOOK}/crm.lead.update.json`,\n  body: JSON.stringify({ ID: ctx.lead_id, FIELDS: { UF_SEQ_PAUSED: 'Y' } }),\n  headers: { 'Content-Type': 'application/json' }\n});\n\nreturn [{ json: { ...ctx, handoff_done: true } }];"
+      }
+    },
+    {
+      "id": "b6000001-0000-0000-0000-000000000015",
+      "name": "Set Lead COLD",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1860, 660],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.BITRIX_DOMAIN }}/rest/1/{{ $env.BITRIX_WEBHOOK }}/crm.lead.update.json",
+        "sendBody": true,
+        "contentType": "json",
+        "body": { "ID": "={{ $json.lead_id }}", "FIELDS": { "STATUS_ID": "COLD" } }
+      }
+    },
+    {
+      "id": "b6000001-0000-0000-0000-000000000016",
+      "name": "Set OPTOUT",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1860, 760],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.BITRIX_DOMAIN }}/rest/1/{{ $env.BITRIX_WEBHOOK }}/crm.lead.update.json",
+        "sendBody": true,
+        "contentType": "json",
+        "body": { "ID": "={{ $json.lead_id }}", "FIELDS": { "STATUS_ID": "OPTOUT", "UF_SEQ_PAUSED": "Y", "UF_HYGIENE_STATUS": "optout" } }
+      }
+    },
+    {
+      "id": "b6000001-0000-0000-0000-000000000017",
+      "name": "Set INACTIVE or INVALID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1860, 860],
+      "parameters": {
+        "jsCode": "const ctx = $input.first().json;\nconst status = ctx.intent === 'JA_QUITOU' ? 'INACTIVE' : 'INVALID';\n\nawait this.helpers.httpRequest({\n  method: 'POST',\n  url: `https://${process.env.BITRIX_DOMAIN}/rest/1/${process.env.BITRIX_WEBHOOK}/crm.lead.update.json`,\n  body: JSON.stringify({ ID: ctx.lead_id, FIELDS: { STATUS_ID: status, UF_HYGIENE_STATUS: status.toLowerCase() } }),\n  headers: { 'Content-Type': 'application/json' }\n});\n\nreturn [{ json: { ...ctx, final_status: status } }];"
+      }
+    },
+    {
+      "id": "b6000001-0000-0000-0000-000000000018",
+      "name": "Extract Response Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2060, 380],
+      "parameters": {
+        "jsCode": "// Pega o texto do subagente mais recente (warmer ou objection)\nconst sources = ['Subagente 2 — Objection Handler', 'Subagente 3 — Warmer'];\nlet aiText = '';\nfor (const src of sources) {\n  try {\n    const t = $(src).first().json.content?.[0]?.text?.trim();\n    if (t) { aiText = t; break; }\n  } catch(e) {}\n}\nconst ctx = $('Extract Intent').first().json;\nreturn [{ json: { ...ctx, ai_response: aiText } }];"
+      }
+    },
+    {
+      "id": "b6000001-0000-0000-0000-000000000019",
+      "name": "Send WA Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2260, 380],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v19.0/{{ $env.PHONE_NUMBER_ID }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $env.WA_TOKEN }}" }]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "messaging_product": "whatsapp",
+          "to": "={{ $json.phone }}",
+          "type": "text",
+          "text": { "body": "={{ $json.ai_response }}" }
+        }
+      }
+    },
+    {
+      "id": "b6000001-0000-0000-0000-000000000020",
+      "name": "Log Conversation Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2460, 380],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sdr_ia_conversations",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "lead_id":     "={{ $json.lead_id }}",
+          "phone":       "={{ $json.phone }}",
+          "message_in":  "={{ $json.text }}",
+          "intent_code": "={{ $json.intent }}",
+          "message_out": "={{ $json.ai_response }}",
+          "subagent_used": "=warmer_or_objection",
+          "warm_count":  "={{ $json.warm_count }}"
+        }
+      }
+    },
+    {
+      "id": "b6000001-0000-0000-0000-000000000021",
+      "name": "Increment Warm Count",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2660, 380],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.BITRIX_DOMAIN }}/rest/1/{{ $env.BITRIX_WEBHOOK }}/crm.lead.update.json",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "ID": "={{ $json.lead_id }}",
+          "FIELDS": { "UF_WARMER_COUNT": "={{ ($json.warm_count || 0) + 1 }}" }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook WA SDR": {
+      "main": [[{ "node": "Extract Message", "type": "main", "index": 0 }]]
+    },
+    "Extract Message": {
+      "main": [[{ "node": "IF Should Process", "type": "main", "index": 0 }]]
+    },
+    "IF Should Process": {
+      "main": [
+        [{ "node": "GET Lead + Conversation", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "GET Lead + Conversation": {
+      "main": [[{ "node": "Merge Context", "type": "main", "index": 0 }]]
+    },
+    "Merge Context": {
+      "main": [[{ "node": "Subagente 1 — Intent Classifier", "type": "main", "index": 0 }]]
+    },
+    "Subagente 1 — Intent Classifier": {
+      "main": [[{ "node": "Extract Intent", "type": "main", "index": 0 }]]
+    },
+    "Extract Intent": {
+      "main": [[{ "node": "Update UF_INTENT Bitrix", "type": "main", "index": 0 }]]
+    },
+    "Update UF_INTENT Bitrix": {
+      "main": [[{ "node": "Switch Intent", "type": "main", "index": 0 }]]
+    },
+    "Switch Intent": {
+      "main": [
+        [{ "node": "Subagente 4 — Handoff Trigger", "type": "main", "index": 0 }],
+        [{ "node": "Subagente 2 — Objection Handler", "type": "main", "index": 0 }],
+        [{ "node": "Set Lead COLD", "type": "main", "index": 0 }],
+        [{ "node": "Set OPTOUT", "type": "main", "index": 0 }],
+        [{ "node": "Set INACTIVE or INVALID", "type": "main", "index": 0 }],
+        [{ "node": "Subagente 3 — Warmer", "type": "main", "index": 0 }]
+      ]
+    },
+    "Subagente 4 — Handoff Trigger": {
+      "main": [[{ "node": "Log Handoff Supabase", "type": "main", "index": 0 }]]
+    },
+    "Log Handoff Supabase": {
+      "main": [[{ "node": "Notify Closer + Pause", "type": "main", "index": 0 }]]
+    },
+    "Subagente 2 — Objection Handler": {
+      "main": [[{ "node": "Extract Response Text", "type": "main", "index": 0 }]]
+    },
+    "Subagente 3 — Warmer": {
+      "main": [[{ "node": "Extract Response Text", "type": "main", "index": 0 }]]
+    },
+    "Extract Response Text": {
+      "main": [[{ "node": "Send WA Response", "type": "main", "index": 0 }]]
+    },
+    "Send WA Response": {
+      "main": [[{ "node": "Log Conversation Supabase", "type": "main", "index": 0 }]]
+    },
+    "Log Conversation Supabase": {
+      "main": [[{ "node": "Increment Warm Count", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": ["sales-os-v2", "inativo"]
+}

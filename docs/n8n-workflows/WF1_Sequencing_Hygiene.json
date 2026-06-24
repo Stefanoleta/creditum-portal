@@ -1,0 +1,382 @@
+{
+  "name": "WF1 — Sequencing + Hygiene",
+  "nodes": [
+    {
+      "id": "b1000001-0000-0000-0000-000000000001",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [60, 300],
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hoursInterval": 4 }] }
+      }
+    },
+    {
+      "id": "b1000001-0000-0000-0000-000000000002",
+      "name": "GET Leads Bitrix",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.BITRIX_DOMAIN }}/rest/1/{{ $env.BITRIX_WEBHOOK }}/crm.lead.list.json",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "filter": { "STATUS_ID": ["NEW", "IN_SEQUENCE", "STEALTH"] },
+          "select": ["ID", "PHONE", "UF_SEQ_DAY", "UF_LAST_CONTACT", "UF_SEQ_PAUSED", "UF_HYGIENE_STATUS", "UF_WARMER_COUNT", "STATUS_ID"]
+        }
+      }
+    },
+    {
+      "id": "b1000001-0000-0000-0000-000000000003",
+      "name": "Limit Daily",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "jsCode": "const leads = $input.first().json.result || [];\nconst limit = parseInt($env.DAILY_LIMIT || '150');\n// Shuffle para rotação justa e cortar no limite diário\nconst shuffled = leads.sort(() => Math.random() - 0.5);\nreturn shuffled.slice(0, limit).map(l => ({ json: l }));"
+      }
+    },
+    {
+      "id": "b1000001-0000-0000-0000-000000000004",
+      "name": "Split In Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [660, 300],
+      "parameters": { "batchSize": 1, "options": {} }
+    },
+    {
+      "id": "b1000001-0000-0000-0000-000000000005",
+      "name": "Compliance Gate WF5",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [860, 300],
+      "parameters": {
+        "workflowId": "={{ $env.COMPLIANCE_WF_ID }}",
+        "workflowInputs": {
+          "values": [
+            { "name": "lead_id", "value": "={{ $json.ID }}" },
+            { "name": "phone", "value": "={{ $json.PHONE[0].VALUE }}" },
+            { "name": "opt_out", "value": "={{ $json.UF_HYGIENE_STATUS === 'optout' }}" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b1000001-0000-0000-0000-000000000006",
+      "name": "IF Pass",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1060, 300],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "leftValue": "={{ $json.pass }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true" } }],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "b1000001-0000-0000-0000-000000000007",
+      "name": "Skip Lead",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1060, 480],
+      "parameters": {}
+    },
+    {
+      "id": "b1000001-0000-0000-0000-000000000008",
+      "name": "Get Lead Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1260, 300],
+      "parameters": {
+        "jsCode": "// Recupera contexto do lead original (antes do WF5)\nconst leadData = $('Split In Batches').first().json;\nreturn [{ json: { ...leadData, compliance: $input.first().json } }];"
+      }
+    },
+    {
+      "id": "b1000001-0000-0000-0000-000000000009",
+      "name": "Switch SEQ DAY",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1460, 300],
+      "parameters": {
+        "mode": "expression",
+        "output": "={{ $json.UF_SEQ_DAY }}",
+        "rules": {
+          "values": [
+            { "outputKey": "0", "conditions": { "conditions": [{ "leftValue": "={{ $json.UF_SEQ_DAY }}", "rightValue": 0, "operator": { "type": "number", "operation": "equals" } }], "combinator": "and" } },
+            { "outputKey": "5", "conditions": { "conditions": [{ "leftValue": "={{ $json.UF_SEQ_DAY }}", "rightValue": 5, "operator": { "type": "number", "operation": "equals" } }], "combinator": "and" } },
+            { "outputKey": "10", "conditions": { "conditions": [{ "leftValue": "={{ $json.UF_SEQ_DAY }}", "rightValue": 10, "operator": { "type": "number", "operation": "equals" } }], "combinator": "and" } },
+            { "outputKey": "15", "conditions": { "conditions": [{ "leftValue": "={{ $json.UF_SEQ_DAY }}", "rightValue": 15, "operator": { "type": "number", "operation": "equals" } }], "combinator": "and" } },
+            { "outputKey": "20", "conditions": { "conditions": [{ "leftValue": "={{ $json.UF_SEQ_DAY }}", "rightValue": 20, "operator": { "type": "number", "operation": "gte" } }], "combinator": "and" } }
+          ]
+        },
+        "fallbackOutput": "none"
+      }
+    },
+    {
+      "id": "b1000001-0000-0000-0000-000000000010",
+      "name": "Send WA Template",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1660, 300],
+      "parameters": {
+        "jsCode": "// Determina template por dia de sequência e envia via WhatsApp Cloud API\nconst day = $json.UF_SEQ_DAY;\nconst templateMap = { 0: 'creditum_seq_t1', 5: 'creditum_seq_t2', 10: 'creditum_seq_t3', 15: 'creditum_seq_t4', 20: 'creditum_seq_stealth' };\nconst templateName = templateMap[day] || 'creditum_seq_t1';\nconst phone = $json.PHONE?.[0]?.VALUE || $json.PHONE;\n\nconst resp = await this.helpers.httpRequest({\n  method: 'POST',\n  url: `https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`,\n  headers: {\n    'Authorization': `Bearer ${process.env.WA_TOKEN}`,\n    'Content-Type': 'application/json'\n  },\n  body: JSON.stringify({\n    messaging_product: 'whatsapp',\n    to: phone.replace(/\\D/g, ''),\n    type: 'template',\n    template: { name: templateName, language: { code: 'pt_BR' } }\n  })\n});\n\nreturn [{ json: { ...items[0].json, wa_response: resp, wa_error: resp?.error || null, template_sent: templateName } }];"
+      }
+    },
+    {
+      "id": "b1000001-0000-0000-0000-000000000011",
+      "name": "IF WA Error",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1860, 300],
+      "parameters": {
+        "conditions": {
+          "conditions": [{ "leftValue": "={{ $json.wa_error }}", "rightValue": "", "operator": { "type": "string", "operation": "isNotEmpty" } }],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "b1000001-0000-0000-0000-000000000012",
+      "name": "Mark INVALID",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2060, 180],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.BITRIX_DOMAIN }}/rest/1/{{ $env.BITRIX_WEBHOOK }}/crm.lead.update.json",
+        "sendBody": true,
+        "contentType": "json",
+        "body": { "ID": "={{ $json.ID }}", "FIELDS": { "STATUS_ID": "INVALID", "UF_HYGIENE_STATUS": "invalid" } }
+      }
+    },
+    {
+      "id": "b1000001-0000-0000-0000-000000000013",
+      "name": "IF Day 20 Hygiene",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2060, 400],
+      "parameters": {
+        "conditions": {
+          "conditions": [{ "leftValue": "={{ $json.UF_SEQ_DAY }}", "rightValue": 20, "operator": { "type": "number", "operation": "gte" } }],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "b1000001-0000-0000-0000-000000000014",
+      "name": "AI Hygiene Decision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2260, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "max_tokens": 10,
+          "messages": [{ "role": "user", "content": "=Lead: dia={{ $json.UF_SEQ_DAY }} | status={{ $json.STATUS_ID }} | higiene={{ $json.UF_HYGIENE_STATUS }}\nClassifique: cold | stealth | invalid\nApenas a palavra." }]
+        }
+      }
+    },
+    {
+      "id": "b1000001-0000-0000-0000-000000000015",
+      "name": "Extract AI Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2460, 300],
+      "parameters": {
+        "jsCode": "const aiResult = $input.first().json.content?.[0]?.text?.trim().toLowerCase() || 'cold';\nconst leadData = $('IF WA Error').first().json;\nreturn [{ json: { ...leadData, hygiene_result: aiResult } }];"
+      }
+    },
+    {
+      "id": "b1000001-0000-0000-0000-000000000016",
+      "name": "Switch Hygiene Result",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [2660, 300],
+      "parameters": {
+        "mode": "expression",
+        "output": "={{ $json.hygiene_result }}",
+        "rules": {
+          "values": [
+            { "outputKey": "cold", "conditions": { "conditions": [{ "leftValue": "={{ $json.hygiene_result }}", "rightValue": "cold", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" } },
+            { "outputKey": "stealth", "conditions": { "conditions": [{ "leftValue": "={{ $json.hygiene_result }}", "rightValue": "stealth", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" } },
+            { "outputKey": "invalid", "conditions": { "conditions": [{ "leftValue": "={{ $json.hygiene_result }}", "rightValue": "invalid", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" } }
+          ]
+        },
+        "fallbackOutput": "none"
+      }
+    },
+    {
+      "id": "b1000001-0000-0000-0000-000000000017",
+      "name": "Set COLD",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2860, 180],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.BITRIX_DOMAIN }}/rest/1/{{ $env.BITRIX_WEBHOOK }}/crm.lead.update.json",
+        "sendBody": true,
+        "contentType": "json",
+        "body": { "ID": "={{ $json.ID }}", "FIELDS": { "STATUS_ID": "COLD" } }
+      }
+    },
+    {
+      "id": "b1000001-0000-0000-0000-000000000018",
+      "name": "Set STEALTH",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2860, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.BITRIX_DOMAIN }}/rest/1/{{ $env.BITRIX_WEBHOOK }}/crm.lead.update.json",
+        "sendBody": true,
+        "contentType": "json",
+        "body": { "ID": "={{ $json.ID }}", "FIELDS": { "STATUS_ID": "STEALTH", "UF_SEQ_DAY": 20 } }
+      }
+    },
+    {
+      "id": "b1000001-0000-0000-0000-000000000019",
+      "name": "Set INACTIVE",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2860, 420],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.BITRIX_DOMAIN }}/rest/1/{{ $env.BITRIX_WEBHOOK }}/crm.lead.update.json",
+        "sendBody": true,
+        "contentType": "json",
+        "body": { "ID": "={{ $json.ID }}", "FIELDS": { "STATUS_ID": "INACTIVE", "UF_HYGIENE_STATUS": "invalid" } }
+      }
+    },
+    {
+      "id": "b1000001-0000-0000-0000-000000000020",
+      "name": "Advance Sequence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2060, 540],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.BITRIX_DOMAIN }}/rest/1/{{ $env.BITRIX_WEBHOOK }}/crm.lead.update.json",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "ID": "={{ $json.ID }}",
+          "FIELDS": {
+            "STATUS_ID": "IN_SEQUENCE",
+            "UF_SEQ_DAY": "={{ $json.UF_SEQ_DAY + 1 }}",
+            "UF_LAST_CONTACT": "={{ $now.toISO() }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "b1000001-0000-0000-0000-000000000021",
+      "name": "Loop Back",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [3060, 300],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [[{ "node": "GET Leads Bitrix", "type": "main", "index": 0 }]]
+    },
+    "GET Leads Bitrix": {
+      "main": [[{ "node": "Limit Daily", "type": "main", "index": 0 }]]
+    },
+    "Limit Daily": {
+      "main": [[{ "node": "Split In Batches", "type": "main", "index": 0 }]]
+    },
+    "Split In Batches": {
+      "main": [
+        [{ "node": "Compliance Gate WF5", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Compliance Gate WF5": {
+      "main": [[{ "node": "IF Pass", "type": "main", "index": 0 }]]
+    },
+    "IF Pass": {
+      "main": [
+        [{ "node": "Get Lead Context", "type": "main", "index": 0 }],
+        [{ "node": "Skip Lead", "type": "main", "index": 0 }]
+      ]
+    },
+    "Skip Lead": {
+      "main": [[{ "node": "Split In Batches", "type": "main", "index": 0 }]]
+    },
+    "Get Lead Context": {
+      "main": [[{ "node": "Switch SEQ DAY", "type": "main", "index": 0 }]]
+    },
+    "Switch SEQ DAY": {
+      "main": [
+        [{ "node": "Send WA Template", "type": "main", "index": 0 }],
+        [{ "node": "Send WA Template", "type": "main", "index": 0 }],
+        [{ "node": "Send WA Template", "type": "main", "index": 0 }],
+        [{ "node": "Send WA Template", "type": "main", "index": 0 }],
+        [{ "node": "Send WA Template", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send WA Template": {
+      "main": [[{ "node": "IF WA Error", "type": "main", "index": 0 }]]
+    },
+    "IF WA Error": {
+      "main": [
+        [{ "node": "Mark INVALID", "type": "main", "index": 0 }],
+        [{ "node": "IF Day 20 Hygiene", "type": "main", "index": 0 }]
+      ]
+    },
+    "Mark INVALID": {
+      "main": [[{ "node": "Loop Back", "type": "main", "index": 0 }]]
+    },
+    "IF Day 20 Hygiene": {
+      "main": [
+        [{ "node": "AI Hygiene Decision", "type": "main", "index": 0 }],
+        [{ "node": "Advance Sequence", "type": "main", "index": 0 }]
+      ]
+    },
+    "AI Hygiene Decision": {
+      "main": [[{ "node": "Extract AI Result", "type": "main", "index": 0 }]]
+    },
+    "Extract AI Result": {
+      "main": [[{ "node": "Switch Hygiene Result", "type": "main", "index": 0 }]]
+    },
+    "Switch Hygiene Result": {
+      "main": [
+        [{ "node": "Set COLD", "type": "main", "index": 0 }],
+        [{ "node": "Set STEALTH", "type": "main", "index": 0 }],
+        [{ "node": "Set INACTIVE", "type": "main", "index": 0 }]
+      ]
+    },
+    "Set COLD":    { "main": [[{ "node": "Loop Back", "type": "main", "index": 0 }]] },
+    "Set STEALTH": { "main": [[{ "node": "Loop Back", "type": "main", "index": 0 }]] },
+    "Set INACTIVE":{ "main": [[{ "node": "Loop Back", "type": "main", "index": 0 }]] },
+    "Advance Sequence": { "main": [[{ "node": "Loop Back", "type": "main", "index": 0 }]] },
+    "Loop Back": {
+      "main": [[{ "node": "Split In Batches", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none"
+  },
+  "tags": ["sales-os-v2"]
+}

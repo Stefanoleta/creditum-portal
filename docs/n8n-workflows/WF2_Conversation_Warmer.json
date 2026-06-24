@@ -1,0 +1,368 @@
+{
+  "name": "WF2 — Conversation Warmer",
+  "nodes": [
+    {
+      "id": "b2000001-0000-0000-0000-000000000001",
+      "name": "Webhook WA Incoming",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [60, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wa-incoming",
+        "responseMode": "immediately",
+        "responseData": "allEntries"
+      }
+    },
+    {
+      "id": "b2000001-0000-0000-0000-000000000002",
+      "name": "IF Not Bot Echo",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from }}",
+              "rightValue": "={{ $env.BOT_PHONE }}",
+              "operator": { "type": "string", "operation": "notEquals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "b2000001-0000-0000-0000-000000000003",
+      "name": "Ignore Echo",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [460, 480],
+      "parameters": {}
+    },
+    {
+      "id": "b2000001-0000-0000-0000-000000000004",
+      "name": "Extract Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\nconst msg = body.entry?.[0]?.changes?.[0]?.value;\nconst message = msg?.messages?.[0];\nconst from = message?.from || '';\nconst text = message?.text?.body || message?.button?.text || '';\nreturn [{ json: { phone: from, last_message: text, wa_msg_id: message?.id, timestamp: message?.timestamp } }];"
+      }
+    },
+    {
+      "id": "b2000001-0000-0000-0000-000000000005",
+      "name": "Compliance Gate WF5",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [660, 300],
+      "parameters": {
+        "workflowId": "={{ $env.COMPLIANCE_WF_ID }}",
+        "workflowInputs": {
+          "values": [
+            { "name": "lead_id", "value": "=will-fetch" },
+            { "name": "phone", "value": "={{ $json.phone }}" },
+            { "name": "opt_out", "value": false }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b2000001-0000-0000-0000-000000000006",
+      "name": "IF Compliance Pass",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [860, 300],
+      "parameters": {
+        "conditions": {
+          "conditions": [{ "leftValue": "={{ $json.pass }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true" } }],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "b2000001-0000-0000-0000-000000000007",
+      "name": "GET Lead by Phone",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1060, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.BITRIX_DOMAIN }}/rest/1/{{ $env.BITRIX_WEBHOOK }}/crm.lead.list.json",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "filter": { "PHONE": "={{ $('Extract Message').first().json.phone }}" },
+          "select": ["ID", "PHONE", "UF_WARMER_COUNT", "UF_LAST_LEAD_MSG", "STATUS_ID", "UF_SEQ_PAUSED"]
+        }
+      }
+    },
+    {
+      "id": "b2000001-0000-0000-0000-000000000008",
+      "name": "Set UF_LAST_LEAD_MSG",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1260, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.BITRIX_DOMAIN }}/rest/1/{{ $env.BITRIX_WEBHOOK }}/crm.lead.update.json",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "ID": "={{ $json.result[0].ID }}",
+          "FIELDS": { "UF_LAST_LEAD_MSG": "={{ $now.toISO() }}" }
+        }
+      }
+    },
+    {
+      "id": "b2000001-0000-0000-0000-000000000009",
+      "name": "Wait 5 min",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1460, 300],
+      "parameters": { "resume": "timeInterval", "amount": 5, "unit": "minutes" }
+    },
+    {
+      "id": "b2000001-0000-0000-0000-000000000010",
+      "name": "Warmer Loop Counter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1660, 300],
+      "parameters": {
+        "jsCode": "// Mantém contador de iterações do loop\nconst leadData = $('GET Lead by Phone').first().json.result?.[0] || {};\nconst msgData  = $('Extract Message').first().json;\nlet iteration  = $input.first().json._iteration || 0;\nreturn [{ json: { ...leadData, ...msgData, _iteration: iteration, warmer_count: parseInt(leadData.UF_WARMER_COUNT || '0') } }];"
+      }
+    },
+    {
+      "id": "b2000001-0000-0000-0000-000000000011",
+      "name": "IF Human Replied",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1860, 300],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "check-last-msg",
+              "leftValue": "={{ $json.UF_LAST_LEAD_MSG }}",
+              "rightValue": "={{ $now.minus({ minutes: 5 }).toISO() }}",
+              "operator": { "type": "dateTime", "operation": "after" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "b2000001-0000-0000-0000-000000000012",
+      "name": "IF Max Warmers",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2060, 420],
+      "parameters": {
+        "conditions": {
+          "conditions": [{ "leftValue": "={{ $json.warmer_count }}", "rightValue": 3, "operator": { "type": "number", "operation": "gte" } }],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "b2000001-0000-0000-0000-000000000013",
+      "name": "Add Task Aguardando",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2260, 360],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.BITRIX_DOMAIN }}/rest/1/{{ $env.BITRIX_WEBHOOK }}/tasks.task.add.json",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "fields": {
+            "TITLE": "=⚠️ Lead aguardando resposta — {{ $json.phone }}",
+            "DESCRIPTION": "Lead respondeu no WA e aguarda atendimento humano. Warmer máx atingido.",
+            "PRIORITY": "2"
+          }
+        }
+      }
+    },
+    {
+      "id": "b2000001-0000-0000-0000-000000000014",
+      "name": "AI Holding Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2260, 540],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 120,
+          "system": "Você é Maria de Lourdes, especialista da Creditum. Máximo 1 linha. Tom humano informal. Não mencione produto. Não prometa prazo. Apenas o texto.",
+          "messages": [{ "role": "user", "content": "=Última mensagem do lead: {{ $json.last_message }}\n1 linha de resposta para manter engajamento enquanto um especialista não atende." }]
+        }
+      }
+    },
+    {
+      "id": "b2000001-0000-0000-0000-000000000015",
+      "name": "Send WA Holding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2460, 540],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v19.0/{{ $env.PHONE_NUMBER_ID }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $env.WA_TOKEN }}" }]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "messaging_product": "whatsapp",
+          "to": "={{ $json.phone }}",
+          "type": "text",
+          "text": { "body": "={{ $('AI Holding Message').first().json.content?.[0]?.text?.trim() }}" }
+        }
+      }
+    },
+    {
+      "id": "b2000001-0000-0000-0000-000000000016",
+      "name": "Update Warmer Count",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2660, 540],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.BITRIX_DOMAIN }}/rest/1/{{ $env.BITRIX_WEBHOOK }}/crm.lead.update.json",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "ID": "={{ $json.ID }}",
+          "FIELDS": { "UF_WARMER_COUNT": "={{ $json.warmer_count + 1 }}" }
+        }
+      }
+    },
+    {
+      "id": "b2000001-0000-0000-0000-000000000017",
+      "name": "Notify Responsible",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2860, 540],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.BITRIX_DOMAIN }}/rest/1/{{ $env.BITRIX_WEBHOOK }}/im.message.add.json",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "DIALOG_ID": "={{ $json.ASSIGNED_BY_ID }}",
+          "MESSAGE": "=💬 Lead {{ $json.phone }} respondeu no WA. Holding #{{ $json.warmer_count + 1 }} enviado. Responda em breve."
+        }
+      }
+    },
+    {
+      "id": "b2000001-0000-0000-0000-000000000018",
+      "name": "Wait 10 min",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [3060, 540],
+      "parameters": { "resume": "timeInterval", "amount": 10, "unit": "minutes" }
+    },
+    {
+      "id": "b2000001-0000-0000-0000-000000000019",
+      "name": "Increment Iteration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3260, 540],
+      "parameters": {
+        "jsCode": "const current = $input.first().json;\nreturn [{ json: { ...current, _iteration: (current._iteration || 0) + 1 } }];"
+      }
+    },
+    {
+      "id": "b2000001-0000-0000-0000-000000000020",
+      "name": "End Warmer",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2060, 300],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Webhook WA Incoming": {
+      "main": [[{ "node": "IF Not Bot Echo", "type": "main", "index": 0 }]]
+    },
+    "IF Not Bot Echo": {
+      "main": [
+        [{ "node": "Extract Message", "type": "main", "index": 0 }],
+        [{ "node": "Ignore Echo", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract Message": {
+      "main": [[{ "node": "Compliance Gate WF5", "type": "main", "index": 0 }]]
+    },
+    "Compliance Gate WF5": {
+      "main": [[{ "node": "IF Compliance Pass", "type": "main", "index": 0 }]]
+    },
+    "IF Compliance Pass": {
+      "main": [
+        [{ "node": "GET Lead by Phone", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "GET Lead by Phone": {
+      "main": [[{ "node": "Set UF_LAST_LEAD_MSG", "type": "main", "index": 0 }]]
+    },
+    "Set UF_LAST_LEAD_MSG": {
+      "main": [[{ "node": "Wait 5 min", "type": "main", "index": 0 }]]
+    },
+    "Wait 5 min": {
+      "main": [[{ "node": "Warmer Loop Counter", "type": "main", "index": 0 }]]
+    },
+    "Warmer Loop Counter": {
+      "main": [[{ "node": "IF Human Replied", "type": "main", "index": 0 }]]
+    },
+    "IF Human Replied": {
+      "main": [
+        [{ "node": "End Warmer", "type": "main", "index": 0 }],
+        [{ "node": "IF Max Warmers", "type": "main", "index": 0 }]
+      ]
+    },
+    "IF Max Warmers": {
+      "main": [
+        [{ "node": "Add Task Aguardando", "type": "main", "index": 0 }],
+        [{ "node": "AI Holding Message", "type": "main", "index": 0 }]
+      ]
+    },
+    "AI Holding Message": {
+      "main": [[{ "node": "Send WA Holding", "type": "main", "index": 0 }]]
+    },
+    "Send WA Holding": {
+      "main": [[{ "node": "Update Warmer Count", "type": "main", "index": 0 }]]
+    },
+    "Update Warmer Count": {
+      "main": [[{ "node": "Notify Responsible", "type": "main", "index": 0 }]]
+    },
+    "Notify Responsible": {
+      "main": [[{ "node": "Wait 10 min", "type": "main", "index": 0 }]]
+    },
+    "Wait 10 min": {
+      "main": [[{ "node": "Increment Iteration", "type": "main", "index": 0 }]]
+    },
+    "Increment Iteration": {
+      "main": [[{ "node": "Warmer Loop Counter", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "tags": ["sales-os-v2"]
+}
