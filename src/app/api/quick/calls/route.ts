@@ -2,20 +2,18 @@ import { NextResponse } from "next/server"
 import { fetchQickCalls } from "@/lib/qick/client"
 import { computeSamanthaMetrics } from "@/lib/qick/metrics"
 
-// Cache 5 minutes at the CDN / ISR layer.
-// The component also re-fetches every 5 min client-side for live updates.
-export const revalidate = 300
+// Sem cache — dados em tempo real da Qick
+export const dynamic = "force-dynamic"
+export const revalidate = 0
 
 export async function GET() {
   try {
     const { calls, fonte } = await fetchQickCalls()
     const metrics = computeSamanthaMetrics(calls, fonte)
 
-    // `calls` carries the per-lead detail (nome, phone, tabbing, data) consumed
-    // by the SDR I.A tab in /listas — the cockpit only reads the aggregate fields.
     return NextResponse.json({ ...metrics, calls }, {
       headers: {
-        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60",
+        "Cache-Control": "no-store, no-cache, must-revalidate",
       },
     })
   } catch {
