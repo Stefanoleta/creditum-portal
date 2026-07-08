@@ -1,0 +1,196 @@
+{
+  "skill": "wizard-conectar",
+  "version": "1.0",
+  "description": "4 cenários cobrindo: caminho completo, parcial (Brave já existe), aluno só quer Brave, .env já commitado por engano",
+  "scenarios": [
+    {
+      "id": "caminho-completo",
+      "name": "Aluno conecta as 3 integrações",
+      "description": "Estado limpo. Aluno gera Brave + GitHub, instala Chromium, ativa backup.",
+      "setup": {
+        "env_state": ".env só com OPENAI_API_KEY",
+        "memory_flags": {
+          "autonomia_liberada": true,
+          "workspace_organizado": true,
+          "onboarding_current_step": 5
+        }
+      },
+      "interaction_flow": [
+        {
+          "user": "[despachado]",
+          "expected_agent_behavior": [
+            "checa autonomia_liberada=true (ok)",
+            "Princípio 11 — lê .env, detecta Brave/GitHub ausentes",
+            "narra promessa (Brave + GitHub + Chromium opcional)",
+            "começa por Brave"
+          ]
+        },
+        {
+          "user": "BSAkXXXXXXXX",
+          "expected_agent_behavior": [
+            "valida via curl Brave Search API (200)",
+            "backup do .env (Princípio 1)",
+            "salva BRAVE_SEARCH_API_KEY",
+            "passa pra GitHub Token"
+          ]
+        },
+        {
+          "user": "ghp_XXXXXXXX",
+          "expected_agent_behavior": [
+            "valida via curl GitHub user API (200)",
+            "extrai username",
+            "salva GITHUB_TOKEN",
+            "pergunta sobre Chromium"
+          ]
+        },
+        {
+          "user": "instala",
+          "expected_agent_behavior": [
+            "explica que browser já vem incluído no Managed (não precisa instalar)",
+            "valida com openclaw browser status",
+            "confirma disponível"
+          ],
+          "must_not": [
+            "inventar comando 'openclaw browser install chromium' (não existe)",
+            "pedir aluno colar comando no terminal (não há comando pra colar)"
+          ]
+        },
+        {
+          "user": "[browser disponível confirmado]",
+          "expected_agent_behavior": [
+            "ativa backup-workspace-github (despacha skill)",
+            "espera skill terminar",
+            "confirma 4 conectados",
+            "pergunta-âncora"
+          ]
+        },
+        {
+          "user": "revogo a chave e gero nova",
+          "expected_agent_behavior": [
+            "valida resposta",
+            "menciona aula D2",
+            "marca conectado=true, brave/github/chromium/backup todos true",
+            "atualiza onboarding_current_step=6"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "BRAVE_SEARCH_API_KEY + GITHUB_TOKEN no .env validados",
+        "Chromium instalado",
+        "backup-workspace-github ativo (cron criado, push feito)",
+        "conectado=true",
+        "onboarding_current_step=6",
+        ".env no .gitignore"
+      ]
+    },
+    {
+      "id": "parcial-brave-ja-existe",
+      "name": "Aluno já tem BRAVE_SEARCH_API_KEY no .env",
+      "description": "Princípio 11 detecta e pula pedido de Brave. Pede só GitHub.",
+      "setup": {
+        "env_state": ".env tem BRAVE_SEARCH_API_KEY válida (testada)",
+        "memory_flags": {
+          "autonomia_liberada": true
+        }
+      },
+      "interaction_flow": [
+        {
+          "user": "[despachado]",
+          "expected_agent_behavior": [
+            "lê .env, acha Brave + valida",
+            "narra '✓ Achei Brave já configurada, validei, OK'",
+            "pula direto pra pedido de GitHub Token",
+            "NÃO pede Brave nova"
+          ],
+          "must_not": [
+            "pedir aluno gerar Brave nova",
+            "duplicar BRAVE_SEARCH_API_KEY no .env"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "Brave NÃO foi pedida (Princípio 11 funcionou)",
+        "GitHub foi pedido normalmente",
+        "Brave key original preservada"
+      ]
+    },
+    {
+      "id": "so-quer-brave",
+      "name": "Aluno topa só Brave, GitHub depois",
+      "description": "Aluno não quer GitHub agora. Wizard avisa do tradeoff e respeita.",
+      "setup": {
+        "env_state": ".env limpo",
+        "memory_flags": {}
+      },
+      "interaction_flow": [
+        {
+          "user": "[após Brave configurada]",
+          "expected_agent_behavior": ["pede GitHub Token"]
+        },
+        {
+          "user": "github fica pra depois, pode pular",
+          "expected_agent_behavior": [
+            "explica tradeoff (sem backup automático, depende só do snapshot do Managed)",
+            "respeita escolha",
+            "marca github_token_active=false, backup_active=false",
+            "pula Chromium também (ou pergunta?)",
+            "pergunta-âncora",
+            "confirma que pode reativar com 'ativa github' depois"
+          ],
+          "must_not": [
+            "insistir em GitHub depois de aluno ter declinado claramente"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "Brave ativa, GitHub e backup pendentes",
+        "aluno foi informado do tradeoff",
+        "conectado=true (parcial — só Brave) em MEMORY"
+      ]
+    },
+    {
+      "id": "env-commitado-deteccao-defensiva",
+      "name": "Workspace tem .env commitado por engano antes do passo 5",
+      "description": "Antes de salvar GITHUB_TOKEN, wizard verifica histórico git e alerta se .env vazou.",
+      "setup": {
+        "env_state": ".env tem chaves antigas E foi commitado em algum momento",
+        "memory_flags": {
+          "autonomia_liberada": true
+        }
+      },
+      "interaction_flow": [
+        {
+          "user": "[despachado, após Brave OK]",
+          "expected_agent_behavior": ["pede GitHub Token"]
+        },
+        {
+          "user": "ghp_XXXXX",
+          "expected_agent_behavior": [
+            "ANTES de salvar, roda `git log -- .env` no workspace",
+            "detecta que .env aparece em commits anteriores",
+            "ALERTA crítico: '.env foi commitado em {N} commits anteriores. Suas chaves OpenAI/Brave podem estar públicas no histórico.'",
+            "instrui aluno a revogar IMEDIATAMENTE OPENAI_API_KEY e BRAVE_SEARCH_API_KEY no console de cada provider",
+            "instrui sobre git filter-branch ou BFG repo cleaner",
+            "NÃO salva o GITHUB_TOKEN até aluno confirmar entendimento do risco"
+          ],
+          "must_not": [
+            "salvar token e seguir como se nada (chaves antigas continuam vazadas)"
+          ]
+        },
+        {
+          "user": "entendi, revoguei as chaves antigas, gerei novas, tô limpo",
+          "expected_agent_behavior": [
+            "salva GITHUB_TOKEN",
+            "garante .env no .gitignore",
+            "segue fluxo normal (Chromium + backup)"
+          ]
+        }
+      ],
+      "success_criteria": [
+        ".env vazado foi detectado ANTES de adicionar mais chaves",
+        "aluno foi alertado e tomou ação corretiva",
+        "GITHUB_TOKEN salvo só após aluno confirmar limpeza"
+      ]
+    }
+  ]
+}

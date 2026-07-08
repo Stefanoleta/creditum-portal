@@ -1,0 +1,195 @@
+{
+  "skill": "wizard-whisper-quick",
+  "version": "1.0",
+  "description": "4 cenários cobrindo: chave nova, chave existente válida, chave existente inválida, aluno pula",
+  "scenarios": [
+    {
+      "id": "chave-nova-fluxo-completo",
+      "name": "Aluno sem chave configura do zero",
+      "description": "Caminho feliz: aluno chega ao passo 0 sem nada no .env, gera chave, valida, manda áudio, smoke test passa.",
+      "setup": {
+        "env_state": ".env vazio ou sem OPENAI_API_KEY",
+        "memory_flags": {},
+        "canal": "telegram"
+      },
+      "interaction_flow": [
+        {
+          "user": "[despachado pela onboarding-checklist como passo 0]",
+          "expected_agent_behavior": [
+            "executa Princípio 11 — lê .env, não acha OPENAI_API_KEY",
+            "narra promessa do passo (5min, áudio destrava mobile)",
+            "explica que é opcional",
+            "espera resposta antes de prosseguir"
+          ],
+          "must_not": [
+            "pular detecção e ir direto pra pedir chave",
+            "começar a configurar sem aluno topar"
+          ]
+        },
+        {
+          "user": "topo, vamo nessa",
+          "expected_agent_behavior": [
+            "instrui aluno a abrir platform.openai.com/api-keys",
+            "passa nome sugerido pra chave (openclaw-{agente})",
+            "avisa que chave aparece UMA vez só",
+            "espera aluno colar a chave"
+          ]
+        },
+        {
+          "user": "sk-proj-abc123xyz...",
+          "expected_agent_behavior": [
+            "valida com curl à api.openai.com/v1/models",
+            "recebe 200 OK",
+            "faz backup do .env atual (Princípio 1)",
+            "salva como OPENAI_API_KEY no .env",
+            "confirma .env no .gitignore",
+            "pede smoke test (aluno mandar áudio)"
+          ],
+          "must_not": [
+            "salvar a chave sem validar com call de teste",
+            "expor a chave no log/output"
+          ]
+        },
+        {
+          "user": "[áudio: 'tô testando']",
+          "expected_agent_behavior": [
+            "transcreve via Whisper API",
+            "mostra texto transcrito",
+            "valida que ficou correto",
+            "marca whisper_configured=true em MEMORY.md",
+            "atualiza onboarding_current_step=1",
+            "menciona aula A0 + grupo @cursoopenclaw",
+            "devolve controle pra onboarding-checklist"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "OPENAI_API_KEY no .env validada",
+        ".env no .gitignore",
+        "whisper_configured=true em MEMORY.md",
+        "onboarding_current_step=1",
+        "smoke test áudio passou (transcrição mostrada)",
+        "aula A0 mencionada"
+      ]
+    },
+    {
+      "id": "chave-ja-existe-valida",
+      "name": "Aluno já tem OPENAI_API_KEY no .env (cenário workspace parcial)",
+      "description": "Aluno fez passo manualmente em sessão anterior, ou seguiu aula A0 antes do kit. Princípio 11 deve detectar e pular pedido.",
+      "setup": {
+        "env_state": "OPENAI_API_KEY=sk-proj-xxx (válida)",
+        "memory_flags": {},
+        "canal": "telegram"
+      },
+      "interaction_flow": [
+        {
+          "user": "[despachado pela onboarding-checklist como passo 0]",
+          "expected_agent_behavior": [
+            "lê .env, acha OPENAI_API_KEY",
+            "valida com curl à api.openai.com/v1/models",
+            "recebe 200 OK",
+            "narra '✓ Detectei que sua chave OpenAI já está configurada... validei agora, funcionando'",
+            "NÃO pede nova chave",
+            "vai direto pro smoke test"
+          ],
+          "must_not": [
+            "pedir aluno gerar chave nova",
+            "fazer backup ou modificar .env",
+            "marcar passo como done sem smoke test"
+          ]
+        },
+        {
+          "user": "[áudio]",
+          "expected_agent_behavior": [
+            "transcreve, mostra, marca passo como feito",
+            "narra que pulou pedir chave (Princípio 11)"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "wizard NÃO pediu chave nova",
+        "validação foi feita silenciosamente",
+        "smoke test rodou normalmente",
+        "whisper_configured=true em MEMORY.md"
+      ]
+    },
+    {
+      "id": "chave-existente-invalida",
+      "name": "Chave no .env existe mas tá quebrada",
+      "description": "Aluno tem chave de outra conta, revogada, ou copy-paste truncado. Wizard detecta no validate e pede nova.",
+      "setup": {
+        "env_state": "OPENAI_API_KEY=sk-proj-OLDREVOGADA",
+        "memory_flags": {},
+        "canal": "telegram"
+      },
+      "interaction_flow": [
+        {
+          "user": "[despachado pela onboarding-checklist]",
+          "expected_agent_behavior": [
+            "lê .env, acha chave",
+            "valida com curl, recebe 401",
+            "explica erro específico ('autenticação falhou — chave provavelmente revogada/expirada/incompleta')",
+            "pede nova chave",
+            "NÃO sobrescreve a antiga sem confirmação"
+          ],
+          "must_not": [
+            "narrar 'achei chave' como se fosse válida",
+            "ignorar erro 401 e seguir"
+          ]
+        },
+        {
+          "user": "sk-proj-NOVACHAVE...",
+          "expected_agent_behavior": [
+            "valida nova chave (200 OK)",
+            "backup do .env (Princípio 1)",
+            "substitui OPENAI_API_KEY (não duplica)",
+            "smoke test"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "chave antiga foi substituída (não duplicada)",
+        "backup do .env foi feito antes",
+        "smoke test rodou com chave nova"
+      ]
+    },
+    {
+      "id": "aluno-pula",
+      "name": "Aluno pula passo 0",
+      "description": "Aluno não tem cartão OpenAI ou não quer agora. Wizard deve aceitar sem fricção.",
+      "setup": {
+        "env_state": ".env vazio",
+        "memory_flags": {},
+        "canal": "telegram"
+      },
+      "interaction_flow": [
+        {
+          "user": "[despachado pela onboarding-checklist]",
+          "expected_agent_behavior": [
+            "narra promessa + opção de pular",
+            "espera resposta"
+          ]
+        },
+        {
+          "user": "pulo",
+          "expected_agent_behavior": [
+            "marca whisper_skipped=true em MEMORY.md",
+            "explica que aluno pode reativar com 'configura whisper'",
+            "menciona que passo 5 (Conectar) também faz isso",
+            "atualiza onboarding_current_step=1",
+            "devolve controle pra onboarding-checklist sem fricção"
+          ],
+          "must_not": [
+            "insistir, perguntar 'tem certeza?', tentar convencer",
+            "marcar whisper_configured=true"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "whisper_skipped=true",
+        "onboarding_current_step=1",
+        "aluno informado de como reativar depois"
+      ]
+    }
+  ]
+}

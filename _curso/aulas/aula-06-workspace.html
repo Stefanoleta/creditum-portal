@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A6 — Workspace + MAPAs distribuídos · Mini-Curso OpenClaw</title>
+<meta name="description" content="Material complementar da Aula 6 — workspace canônico do agente em 4 pastas + MAPAs distribuídos (Princípio 12) + audit mensal pra escalar sem virar bagunça.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Fraunces:ital,wght@1,400;1,500;1,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="_shared/tokens.css">
+</head>
+
+<body>
+
+<div class="wrap">
+
+  <!-- ========================= HEADER ========================= -->
+
+  <header class="aula-header">
+    <div class="aula-header-brand">Mini-Curso <span class="accent">OpenClaw</span></div>
+    <div class="aula-header-meta">Aula 06 · Modular</div>
+  </header>
+
+  <!-- ========================= HERO ========================= -->
+
+  <section class="hero">
+    <div class="hero-meta">
+      <span class="hero-meta-item">⏱ <strong>10 min</strong></span>
+      <span class="hero-meta-item">📚 <strong>Modular</strong></span>
+      <span class="hero-meta-item">🎯 <strong>Estrutura viva</strong></span>
+    </div>
+
+    <h1>
+      Workspace +
+      <em>MAPAs distribuídos.</em>
+    </h1>
+
+    <p class="hero-sub">
+      Em <em>10min</em> você entende como seu agente se organiza por dentro — e por que
+      <strong>organização e mapas</strong> são o que permitem ele escalar com você. Sem MAPA,
+      improvisa e vira bagunça em 1 semana. Com MAPA, escala em produção.
+    </p>
+  </section>
+
+  <!-- ========================= A-HA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">A-ha desta aula</span>
+    <div class="aha-card">
+      <span class="label">A-ha entregue</span>
+      <p class="quote">"Mapas mantêm ele afiado. Eu audito uma vez por mês."</p>
+    </div>
+
+    <p>
+      Tranquilidade estrutural + responsabilidade leve. Aluno PME para de pensar <em>"vou ter
+      que arrumar onde guardar 50 coisas"</em> e entende que kit traz estrutura, agente respeita,
+      e ele só faz audit mensal de 5min.
+    </p>
+  </section>
+
+  <!-- ========================= PRE-FLIGHT ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Pre-flight check</span>
+    <h2>Antes de <em>apertar play.</em></h2>
+
+    <p>
+      A6 é modular, mas tem dependência leve: você precisa do workspace já provisionado pelo
+      kit (A3). Sem isso, não tem o que mostrar.
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Starter Kit aplicado</strong> (A3) — workspace inicial criado, MAPA.md raiz e 4 MAPAs locais populados</p>
+      <p><span class="check">✓</span> <strong>Identidade aprofundada</strong> (A5 — recomendado) — agente já tem SOUL+IDENTITY+USER decentes pra decidir bem onde guardar coisa</p>
+      <p><span class="check">✓</span> <strong>Telegram conectado</strong> (A1) — demo do Bloco 5 acontece no Telegram em paralelo com IDE/GitHub aberto</p>
+      <p><span class="check">✓</span> <strong>10min sem interrupção</strong> — aula é técnica mas não pesada; o aprofundamento dos MAPAs merece atenção</p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Não rodou o Starter Kit?</strong> Volta na A3. Sem workspace inicial provisionado,
+        a A6 fica abstrata — você precisa ver as 4 pastas reais pra entender o conceito.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= ESTRUTURA DA AULA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Estrutura da aula em vídeo</span>
+    <h2>O que você vai aprender em <em>6 blocos.</em></h2>
+
+    <p>
+      Princípio transversal (continuado de A5): <strong>Telegram aberto em paralelo</strong>.
+      Bruno joga coisas pro agente, aluno vê agente organizando arquivos no workspace ao vivo.
+    </p>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-time">⏱ 1.5 min</div>
+        <div class="card-title">Bloco 1 — Por que workspace organizado</div>
+        <p class="card-desc">
+          Tese: organização do workspace = capacidade de escalar. Sem orientação, agente cria
+          documentos soltos, inventa pasta, cresce desordenado. Solução: <strong>4 pastas raiz +
+          MAPAs distribuídos</strong>. Mapas é o que faz agente "achar as coisas".
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 3 min</div>
+        <div class="card-title">Bloco 2 — Anatomia do workspace canônico</div>
+        <p class="card-desc">
+          Coração da aula. Visual: árvore do workspace da Amora real (sanitizada). Bruno narra os
+          4 grupos: <code>content/</code> · <code>memory/</code> · <code>skills/</code> ·
+          <code>archive/</code>. <strong>Princípio 12 — Mapas distribuídos</strong> introduzido.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 2 min</div>
+        <div class="card-title">Bloco 3 — 1 pasta = 1 propósito + memory/ é território do agente</div>
+        <p class="card-desc">
+          Cada pasta tem 1 função clara — não é "diversos" / "outros" / "notas". <strong>memory/
+          é território DO AGENTE</strong> — você não mexe ali. Daily notes em
+          <code>memory/YYYY-MM-DD.md</code> (padrão OpenClaw).
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1 min</div>
+        <div class="card-title">Bloco 4 — Archive: onde joga as coisas pra trás</div>
+        <p class="card-desc">
+          <code>archive/YYYY-MM/</code> flat por mês. <strong>Nunca deletar — sempre arquivar.</strong>
+          Histórico é vantagem competitiva. Recap A2: snapshots automáticos como rede de segurança.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 2 min</div>
+        <div class="card-title">Bloco 5 — Demo: agente organizando ao vivo</div>
+        <p class="card-desc">
+          A-ha da aula. Aluno pede <em>"registra que tive call com Cayo sobre Hub"</em> no
+          Telegram. Agente decide onde guardar consultando MAPAs — atualiza <strong>3 arquivos
+          diferentes em ~30s</strong>. <em>"Você falou. Ele organizou."</em>
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 0.5 min</div>
+        <div class="card-title">Bloco 6 — Recap + amarração A7</div>
+        <p class="card-desc">
+          Recap dos 4 grupos · MAPAs · 1 pasta = 1 propósito · território do agente · archive ·
+          audit. Amarração: <em>"Workspace é a estante. A7 é sobre como ele LEMBRA do que tá
+          nessa estante."</em>
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ========================= ANATOMIA WORKSPACE ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aprofundamento do Bloco 2</span>
+    <h2>Anatomia do workspace <em>canônico.</em></h2>
+
+    <p>
+      Cada agente OpenClaw nasce com a mesma estrutura. Kit (A3) provisiona. Agente respeita.
+      Você audita 1 vez por mês. <strong>Você NÃO customiza no day 1.</strong>
+    </p>
+
+    <h3>Árvore canônica</h3>
+
+    <pre><code>amora-workspace/
+├── SOUL.md · IDENTITY.md · AGENTS.md · USER.md  ← identidade (recap A5)
+├── MAPA.md          ← lista as 4 pastas + onde encontrar cada coisa
+├── content/         ← coisas que ele CRIA (posts, drafts, materiais)
+│   └── MAPA.md      ← documenta a si mesma (Princípio 12)
+├── memory/          ← coisas pra LEMBRAR (decisões, pendências, dailies)
+│   ├── MAPA.md
+│   ├── 2026-05-02.md   ← daily note SOLTA na raiz (padrão OpenClaw)
+│   ├── context/        ← pessoas, negócios, decisões
+│   └── projects/       ← 1 arquivo por projeto
+├── skills/          ← capacidades modulares (gancho A8)
+│   └── MAPA.md
+├── archive/         ← onde joga as coisas pra trás
+│   └── MAPA.md
+└── .env             ← credenciais (recap kit A3)</code></pre>
+
+    <h3>Os 4 grupos · um a um</h3>
+
+    <div class="item-icon">
+      <div class="item-icon-box">1</div>
+      <div class="item-icon-content">
+        <h3><code>content/</code> — coisas que ele CRIA pra você</h3>
+        <p>
+          Posts, drafts, materiais, briefings. Quando você pede <em>"cria post sobre X"</em>,
+          ele salva aqui. Resultado: tudo que ele produz mora num lugar só, fácil de encontrar
+          e de versionar com você.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">2</div>
+      <div class="item-icon-content">
+        <h3><code>memory/</code> — coisas pra LEMBRAR</h3>
+        <p>
+          Decisões, pendências, contexto, daily notes do dia. <strong>Território do agente</strong>
+          (Bloco 3). Resultado: persistência real — agente lembra do que rolou ontem e mês passado
+          sem você repetir.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">3</div>
+      <div class="item-icon-content">
+        <h3><code>skills/</code> — capacidades modulares</h3>
+        <p>
+          Cada skill é uma habilidade que ele pode invocar (carrossel, análise, audit, etc.). A8
+          cobre profundo (criar suas próprias). Resultado: agente cresce em capacidade modular
+          sem inflar o prompt principal.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">4</div>
+      <div class="item-icon-content">
+        <h3><code>archive/</code> — onde joga as coisas pra trás</h3>
+        <p>
+          Lixo / coisas obsoletas / pendências fechadas / projetos encerrados. Bloco 4 cobre.
+          Resultado: workspace ativo fica limpo, mas histórico continua acessível pra contexto
+          futuro.
+        </p>
+      </div>
+    </div>
+
+    <h3>Resumo das 4 pastas em uma tabela</h3>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Pasta</th>
+          <th>O que mora aqui</th>
+          <th>Quem mexe</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong><code>content/</code></strong></td>
+          <td>Posts, drafts, materiais que ele CRIA</td>
+          <td>Agente cria · você revisa</td>
+        </tr>
+        <tr>
+          <td><strong><code>memory/</code></strong></td>
+          <td>Decisões, pendências, contexto, dailies</td>
+          <td>Só o agente</td>
+        </tr>
+        <tr>
+          <td><strong><code>skills/</code></strong></td>
+          <td>Capacidades modulares (cobertura A8)</td>
+          <td>Agente curado · você cria custom</td>
+        </tr>
+        <tr>
+          <td><strong><code>archive/</code></strong></td>
+          <td>Coisas obsoletas / fechadas / encerradas</td>
+          <td>Agente arquiva · você nunca deleta</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ========================= MAPAS DISTRIBUÍDOS ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Princípio 12 · Mapas distribuídos</span>
+    <h2>Por que <em>cada pasta documenta a si mesma.</em></h2>
+
+    <p>
+      Conceito mais novo da aula. Aluno PME provavelmente nunca viu isso. <strong>MAPAs
+      distribuídos = cada pasta tem um <code>MAPA.md</code> local que documenta o que vive ali
+      dentro</strong>. Quando agente precisa decidir onde guardar algo, ele lê o MAPA da pasta-pai
+      e encontra rota.
+    </p>
+
+    <h3>Por que NÃO um TOOLS.md monolítico</h3>
+
+    <p>
+      Tentação inicial é fazer 1 arquivo central que liste tudo. Quebra rápido por 2 motivos:
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Cresce sem controle.</strong> Em 3 meses tem 800 linhas, ninguém atualiza, vira mentira oficial</p>
+      <p><span class="check">✓</span> <strong>Lock-in cognitivo.</strong> Agente carrega 800 linhas no contexto pra cada decisão — desperdício de janela e custo</p>
+      <p><span class="check">✓</span> <strong>Sem domínio.</strong> Edição de um pedaço afeta tudo — uma mudança bobinha gera conflito ou bagunça noutro lugar</p>
+    </div>
+
+    <h3>O que MAPAs distribuídos resolvem</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Cada parte sabe de si.</strong> <code>memory/MAPA.md</code> documenta só <code>memory/</code> · <code>content/MAPA.md</code> só <code>content/</code></p>
+      <p><span class="check">✓</span> <strong>Carrega só o que precisa.</strong> Agente vai salvar coisa em content? Lê só <code>content/MAPA.md</code> · economia de janela</p>
+      <p><span class="check">✓</span> <strong>Manutenção localizada.</strong> Atualização de uma pasta não afeta as outras</p>
+      <p><span class="check">✓</span> <strong>Audit é leitura paralela.</strong> Cada pasta-MAPA é independente — fácil revisar</p>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Citação do princípio</strong> (skill <code>wizard-workspace</code> do kit):
+        <em>"Sem MAPA, agente improvisa e vira bagunça em 1 semana."</em> Não é exagero. É padrão
+        observado em workspaces sem mapa.
+      </p>
+    </div>
+
+    <h3>Estrutura de um MAPA.md típico</h3>
+
+    <p>
+      Cada MAPA local segue formato simples (kit já gera versão base). Exemplo de
+      <code>memory/MAPA.md</code>:
+    </p>
+
+    <pre><code># MAPA — memory/
+
+Território do agente. Aluno NÃO mexe aqui manualmente.
+
+## O que mora aqui
+
+- `YYYY-MM-DD.md` — daily notes soltas na raiz (padrão OpenClaw)
+- `context/people/` — 1 arquivo por pessoa relevante
+- `context/business/` — 1 arquivo por negócio
+- `context/decisoes/YYYY-MM.md` — decisões do mês
+- `context/pendencias.md` — lista viva de pendências
+- `projects/_index.md` — master de projetos ativos
+- `projects/{nome}.md` — 1 arquivo por projeto
+
+## Onde guardar coisa nova
+
+- Decisão tomada hoje → `context/decisoes/2026-05.md`
+- Pessoa nova → `context/people/{nome}.md`
+- Projeto novo → `projects/{nome}.md` + atualiza `_index.md`
+- Daily note → `YYYY-MM-DD.md` na raiz
+
+## Regras
+
+- Daily notes ficam SOLTAS na raiz (não em subpasta sessions/)
+- Antes de criar pasta nova, verifica se já existe propósito similar
+- Pendência fechada vai pra archive/ (não delete)</code></pre>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Você não precisa decorar isso.</strong> Kit gera os 4 MAPAs populados. Agente lê
+        e respeita. Você só audita 1x/mês — em 5min você confere se MAPA bate com realidade da
+        pasta.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= MEMORY TERRITÓRIO ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aprofundamento do Bloco 3</span>
+    <h2>memory/ é território do <em>agente.</em></h2>
+
+    <p>
+      Princípio que pode ser contraintuitivo: aluno acha que <em>"é meu workspace, posso mexer em
+      tudo"</em>. Pode — mas em <code>memory/</code> você atrapalha mais do que ajuda. Razão:
+      <strong>memory é o cérebro persistente do agente</strong>. Você criar pasta aleatória ali
+      bagunça os MAPAs e quebra busca semântica (cobertura A7).
+    </p>
+
+    <h3>Anti-padrão clássico</h3>
+
+    <div class="callout callout-danger">
+      <p>
+        Aluno cria <code>memory/notas-importantes/</code> aleatório porque "preciso de um lugar
+        pra anotar coisa". Resultado: vira lixeira que ninguém olha. Agente não documenta o que
+        não tem MAPA. <strong>Em 2 semanas, ninguém lembra o que tá lá.</strong>
+      </p>
+    </div>
+
+    <h3>Padrão correto</h3>
+
+    <p>
+      Quando você precisar de pasta nova, <strong>conversa com o agente</strong>. Ele decide onde
+      encaixa baseado no MAPA da pasta-pai. Se já existe propósito similar (ex: "decisões"), ele
+      reusa. Se é novo, ele cria + atualiza MAPA + commita.
+    </p>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt · pedir pasta nova</span>
+        <span class="prompt-card-where">cola no Telegram</span>
+      </div>
+      <div class="prompt-card-body">Preciso guardar [TIPO DE COISA] de forma recorrente.
+
+Antes de criar pasta nova:
+1. Lê o MAPA das pastas existentes (memory/, content/, etc.)
+2. Verifica se já existe propósito similar onde encaixa
+3. Se não existir, propõe pasta nova + onde ela vive + atualiza MAPA
+4. Me mostra plano antes de criar — eu confirmo ou ajusto
+
+Princípio 11: detecta antes de criar. Não improvisa estrutura.</div>
+      <div class="prompt-card-tip">
+        💡 Use sempre que sentir vontade de "abrir uma pasta pra isso". Em 80% dos casos já tem
+        propósito similar e o agente reusa.
+      </div>
+    </div>
+
+    <h3>O que mora em memory/ hoje</h3>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Subpasta</th>
+          <th>Conteúdo</th>
+          <th>Quem mexe</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong><code>memory/</code> raiz</strong></td>
+          <td>Daily notes <code>YYYY-MM-DD.md</code> (padrão OpenClaw, soltas)</td>
+          <td>Só agente</td>
+        </tr>
+        <tr>
+          <td><strong><code>memory/context/</code></strong></td>
+          <td>People, business, decisões, pendências</td>
+          <td>Só agente · você lê quando consulta</td>
+        </tr>
+        <tr>
+          <td><strong><code>memory/projects/</code></strong></td>
+          <td>1 arquivo por projeto + <code>_index.md</code></td>
+          <td>Agente atualiza · você consulta</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-tip">
+      <p>
+        <em>Frase do Bruno:</em> <strong>"Você não mexe em memory/. Pergunta a ele onde tá X. Ele
+        lê o MAPA, te responde."</strong> Resistência inicial é normal. Em 2 semanas você confia.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= ARCHIVE ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Aprofundamento do Bloco 4</span>
+    <h2>Archive — <em>nunca deletar, sempre arquivar.</em></h2>
+
+    <p>
+      Princípio absoluto. Pode ser contraintuitivo pra leigo (<em>"se tá obsoleto pra que
+      guardar?"</em>) — mas tem razão prática forte.
+    </p>
+
+    <h3>Estrutura simples</h3>
+
+    <pre><code>archive/
+├── 2026-04/
+│   ├── projeto-X-encerrado.md
+│   ├── decisao-revertida.md
+│   └── pendencia-fechada-Y.md
+├── 2026-05/
+│   └── ...
+└── MAPA.md</code></pre>
+
+    <p>
+      <strong>Flat por mês.</strong> Sem subpastas profundas. Sem taxonomia complexa. Agente
+      arquiva, fica lá, busca semântica acha quando precisa.
+    </p>
+
+    <h3>O que vai pra archive</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Pendência fechada</strong> — sai de <code>pendencias.md</code> · vai pra <code>archive/2026-05/</code></p>
+      <p><span class="check">✓</span> <strong>Projeto encerrado</strong> — arquivo de <code>projects/X.md</code> migra pra archive</p>
+      <p><span class="check">✓</span> <strong>Decisão obsoleta ou revertida</strong> — não some, vira contexto histórico</p>
+      <p><span class="check">✓</span> <strong>Daily notes muito antigas</strong> — depois de N dias (default 14) saem da raiz, viram archive</p>
+      <p><span class="check">✓</span> <strong>Drafts abandonados</strong> — em vez de deletar, arquiva</p>
+    </div>
+
+    <h3>Por que NÃO deletar</h3>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Agente pode precisar consultar histórico depois pra contexto.</strong> Cenário
+        real: 6 meses depois você pergunta <em>"a gente já tentou X uma vez?"</em> · agente busca
+        em archive · acha decisão revertida · responde com data + raciocínio. Sem archive, ele
+        não tem como saber. <em>Histórico é vantagem competitiva. Não joga fora — arquiva.</em>
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Recap A2:</strong> snapshots automáticos do OpenClaw garantem recuperação mesmo
+        se algo se perder. Archive é organização ativa · snapshot é rede de segurança passiva.
+        Os dois trabalham juntos.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= AUDIT MENSAL ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Manutenção</span>
+    <h2>Audit mensal — <em>5 minutos por mês.</em></h2>
+
+    <p>
+      Workspace é estrutura <strong>viva</strong>. Cresce com uso. Sem manutenção, MAPAs
+      desencontram da realidade · pendências fechadas não migram · daily notes antigas inflam a
+      raiz. Audit mensal mantém afiado.
+    </p>
+
+    <h3>O que aluno faz no audit</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Pede o report.</strong> <em>"olha o workspace, vê como tá. Lista o que tá fora dos MAPAs · pendências fechadas que não migraram pro archive · daily notes antigas pra arquivar."</em></p>
+      <p><span class="check">✓</span> <strong>Aprova as mudanças.</strong> Agente propõe lista de arquivamento · você confirma em massa</p>
+      <p><span class="check">✓</span> <strong>Atualiza MAPA se preciso.</strong> Se surgiu propósito novo de pasta, MAPA da pasta-pai ganha entrada</p>
+      <p><span class="check">✓</span> <strong>Tempo total: 5 minutos.</strong> Não é tarefa pesada. É escovação de dente.</p>
+    </div>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt · audit mensal do workspace</span>
+        <span class="prompt-card-where">cola no Telegram (1x por mês)</span>
+      </div>
+      <div class="prompt-card-body">Roda audit do workspace. Olha:
+
+1. Pendências em pendencias.md que tão fechadas — propõe arquivar
+2. Projetos em projects/ que tão encerrados — propõe migrar pra archive
+3. Daily notes na raiz de memory/ com mais de 14 dias — propõe arquivar
+4. Pastas/arquivos que NÃO estão documentados em nenhum MAPA — lista
+5. MAPAs que descreveram coisas que não existem mais — lista
+6. Decisões em decisoes/ que foram revertidas/obsoletas — propõe arquivar
+
+Me devolve plano em lista. Eu aprovo em massa.
+Princípio: archive em vez de delete. Sempre.</div>
+      <div class="prompt-card-tip">
+        💡 Roda 1x por mês. Pode até virar cron (A9) — agente faz audit automático e te manda
+        relatório.
+      </div>
+    </div>
+
+    <div class="callout callout-success">
+      <p>
+        <strong>Resultado do audit:</strong> workspace volta pra estado limpo, MAPAs alinhados
+        com realidade, archive crescendo de forma organizada. Tempo investido: 5min/mês. ROI:
+        agente afiado pelos próximos 30 dias.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= DEMO A-HA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Bloco 5 · Demo a-ha</span>
+    <h2>Agente organizando <em>ao vivo.</em></h2>
+
+    <p>
+      Demo concreto que entrega o a-ha. No Telegram, aluno manda 1 frase. Agente organiza em
+      &lt;30 segundos editando 3 arquivos diferentes — consultando MAPAs pra decidir onde cada
+      coisa vive.
+    </p>
+
+    <h3>Cenário</h3>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt · 1 frase, 3 arquivos editados</span>
+        <span class="prompt-card-where">Telegram</span>
+      </div>
+      <div class="prompt-card-body">registra que tive call com Cayo hoje sobre o launch
+do Hub. Ele pediu pra revisar VSL até quinta.</div>
+      <div class="prompt-card-tip">
+        💡 Agente decide sozinho onde guardar 3 coisas que você falou numa frase.
+      </div>
+    </div>
+
+    <h3>O que o agente faz nos próximos 30 segundos</h3>
+
+    <div class="item-icon">
+      <div class="item-icon-box">1</div>
+      <div class="item-icon-content">
+        <h3>Atualiza <code>memory/context/people/cayo.md</code></h3>
+        <p>
+          Adiciona última interação ("call hoje sobre launch do Hub") + data. Mantém histórico
+          relacional do Cayo no perfil dele.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">2</div>
+      <div class="item-icon-content">
+        <h3>Cria entrada em <code>memory/2026-05-02.md</code></h3>
+        <p>
+          Daily note do dia (solta na raiz, padrão OpenClaw). Registra o evento bruto: <em>"call
+          com Cayo · launch Hub · revisar VSL até quinta"</em>.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">3</div>
+      <div class="item-icon-content">
+        <h3>Adiciona pendência em <code>memory/context/pendencias.md</code></h3>
+        <p>
+          Item novo: <em>"revisar VSL do Hub · prazo quinta · pedido pelo Cayo"</em>. Tag de
+          projeto pra filtrar depois.
+        </p>
+      </div>
+    </div>
+
+    <h3>Como ele decidiu onde guardar cada coisa</h3>
+
+    <p>
+      Não foi mágica · não foi prompt complexo. Foi o agente <strong>lendo os MAPAs</strong>:
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <code>memory/context/MAPA.md</code> diz <em>"última interação por pessoa em <code>people/{nome}.md</code>"</em> → atualiza Cayo</p>
+      <p><span class="check">✓</span> <code>memory/MAPA.md</code> diz <em>"daily note solta na raiz como YYYY-MM-DD.md"</em> → cria 2026-05-02.md</p>
+      <p><span class="check">✓</span> <code>memory/context/MAPA.md</code> diz <em>"pendências em <code>pendencias.md</code> com tag de projeto"</em> → adiciona item</p>
+    </div>
+
+    <div class="aha-card">
+      <span class="label">Frase do momento</span>
+      <p class="quote">"Ele decidiu sozinho onde guardar 3 coisas que eu falei numa frase. Eu não pensei nisso uma vez. Os MAPAs guiaram ele."</p>
+    </div>
+
+    <div class="callout callout-success">
+      <p>
+        <strong>A-ha emocional:</strong> aluno PME entende que workspace organizado + MAPAs =
+        <em>delegação real</em>. Você fala. Ele organiza. Não precisa lembrar onde tá — pergunta
+        a ele.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= TROUBLESHOOTING ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Travou? Antes de pedir ajuda</span>
+    <h2>Top <em>problemas comuns da A6.</em></h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Sintoma</th>
+          <th>Causa provável</th>
+          <th>Ação</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Agente cria pasta nova sem perguntar</td>
+          <td>Não consultou MAPA antes (Princípio 11 não respeitado)</td>
+          <td>Pede explicitamente: <em>"antes de criar, lê MAPA da pasta-pai e me mostra plano"</em></td>
+        </tr>
+        <tr>
+          <td>MAPA descreve coisa que não existe mais</td>
+          <td>Pasta foi removida, MAPA não atualizou</td>
+          <td>Roda audit mensal (prompt na seção acima)</td>
+        </tr>
+        <tr>
+          <td>Daily notes em subpasta sessions/</td>
+          <td>Estrutura legada — padrão OpenClaw é solta na raiz</td>
+          <td>Pede: <em>"migra dailies de sessions/ pra raiz de memory/, atualiza MAPA"</em></td>
+        </tr>
+        <tr>
+          <td>Pendência fechada continua em pendencias.md</td>
+          <td>Agente não migrou pra archive</td>
+          <td>Audit mensal · ou manual: <em>"essa pendência fechou — arquiva em archive/2026-MM/"</em></td>
+        </tr>
+        <tr>
+          <td>archive cresce demais e fica bagunçado</td>
+          <td>Sem subpasta por mês ou taxonomia profunda</td>
+          <td>Estrutura é flat por mês (<code>archive/YYYY-MM/</code>). Não complica.</td>
+        </tr>
+        <tr>
+          <td>Agente "perde" arquivo</td>
+          <td>Ele salvou em lugar diferente do MAPA</td>
+          <td>Pergunta: <em>"onde você guardou X?"</em>. Ele lê e responde. Atualiza MAPA se preciso.</td>
+        </tr>
+        <tr>
+          <td>Você sente que precisa "customizar a estrutura"</td>
+          <td>Bias do day 1 — geralmente é resistência, não necessidade real</td>
+          <td>Deixa como kit veio nos primeiros 30 dias. Customização real vem com uso, não com plano</td>
+        </tr>
+        <tr>
+          <td>Aluno mexeu em memory/ manualmente · agente confuso</td>
+          <td>Mudança fora do MAPA quebrou expectativa</td>
+          <td>Pede pro agente: <em>"olha o que mudou em memory/ e atualiza MAPA pra refletir"</em></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Cheatsheet completo:</strong> <a href="../INDICE.md">workspace-do-seu-agente.md</a> —
+        árvore canônica · MAPAs distribuídos · 1 pasta = 1 propósito · archive em vez de delete ·
+        audit mensal · quando criar pasta nova.
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Não conseguiu resolver com a tabela acima?</strong> Joga screenshot da estrutura
+        no <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">grupo Telegram do
+        curso</a>. openclawzinho responde em &lt;30 segundos · humanos em &lt;5 minutos.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= FRASE-MÃE ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Frase-mãe da A6</span>
+    <h2>Pra colar na <em>geladeira.</em></h2>
+
+    <blockquote>
+      <p>
+        <strong>"Workspace organizado = capacidade de escalar. Mapas em cada pasta = agente
+        achando as coisas. Audit mensal = ele afiado pro próximo mês."</strong>
+      </p>
+      <p>
+        4 pastas raiz · MAPAs distribuídos (Princípio 12) · 1 pasta = 1 propósito · memory/ é
+        território do agente · archive em vez de delete · 5min de audit por mês.
+      </p>
+    </blockquote>
+  </section>
+
+  <!-- ========================= CTA PRÓXIMA ========================= -->
+
+  <section class="sec">
+    <div class="cta-card">
+      <h3>Próximo passo: <em>A7 — Memória + higiene de contexto</em></h3>
+      <p>
+        15 minutos · modular · workspace é a estante. A próxima aula é sobre como ele
+        <strong>LEMBRA</strong> do que tá nessa estante quando você fala com ele — e como você
+        evita encher o contexto dele com lixo. 3 tipos de memória (boot · sessão · semântica) ·
+        <code>/new</code> · <code>/compact</code> · <em>"salve antes de limpar"</em>.
+      </p>
+      <a href="aula-07-memoria.html" class="cta-button">→ Ir pra Aula 7</a>
+    </div>
+  </section>
+
+  <!-- ========================= FOOTER ========================= -->
+
+  <footer class="aula-footer">
+
+    <div class="aula-footer-block">
+      <h4>Travou? Tá no grupo do curso</h4>
+      <p>
+        Comunidade Telegram do curso —
+        <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">t.me/cursoopenclaw</a>
+        — suporte 24/7 (openclawzinho bot + Bruno e equipe presente).
+        Dúvida sobre essa aula, problemas de setup, ou quer compartilhar como aplicou
+        no seu negócio: bora trocar lá.
+      </p>
+    </div>
+
+    <div class="aula-footer-block">
+      <h4>Próximo nível: Pixel AI Hub</h4>
+      <p>
+        Aplicar agente pra empresa toda — equipe, governance, escala?
+        <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=material&utm_campaign=v1" target="_blank" rel="noopener">Pixel AI Hub</a>:
+        segundo cérebro corporativo, comunidade de empreendedores, +50 skills enterprise,
+        encontros mensais ao vivo. Vagas mensais limitadas.
+      </p>
+    </div>
+
+    <div class="aula-footer-credit">
+      Mini-Curso OpenClaw 2026 · Material complementar à gravação · Atualizações conforme kit evolui<br>
+      <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=footer-credit" target="_blank" rel="noopener">Bruno Okamoto · Pixel Educação</a>
+    </div>
+
+  </footer>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,174 @@
+{
+  "skill": "wizard-workspace",
+  "version": "1.0",
+  "description": "4 cenários cobrindo: criação completa, parcial, sem yolo (avisa fricção), MAPA monolítico tentado",
+  "scenarios": [
+    {
+      "id": "criacao-completa",
+      "name": "Caminho feliz",
+      "description": "Aluno chega no passo 4 com workspace vazio + autonomia liberada. Cria estrutura inteira.",
+      "setup": {
+        "workspace_state": "vazio",
+        "memory_flags": {
+          "autonomia_liberada": true,
+          "exec_policy": "yolo",
+          "onboarding_current_step": 4
+        }
+      },
+      "interaction_flow": [
+        {
+          "user": "[despachado]",
+          "expected_agent_behavior": [
+            "checa autonomia_liberada=true (ok, sem aviso)",
+            "executa Princípio 11 — detecta workspace vazio",
+            "narra promessa (4 pastas + MAPA + 4 mapas locais)",
+            "explica Princípio 12 brevemente",
+            "espera confirmação"
+          ]
+        },
+        {
+          "user": "vai",
+          "expected_agent_behavior": [
+            "Princípio 10 — workspace vazio, pula backup global",
+            "cria 4 pastas + subpastas com mkdir -p",
+            "cria MAPA.md raiz (substitui placeholders {NOME_AGENTE}, {NOME_USER}, {DATA})",
+            "cria 4 mapas locais inline",
+            "cria skills/_registry.md e skills/operacional/_registry.md",
+            "confirma criação",
+            "roda pergunta-âncora"
+          ],
+          "must_not": [
+            "criar TOOLS.md monolítico (Princípio 12 proíbe)",
+            "criar arquivos sem aluno confirmar",
+            "esquecer skills/_registry.md"
+          ]
+        },
+        {
+          "user": "post em content/drafts, decisão em memory/decisoes",
+          "expected_agent_behavior": [
+            "valida resposta correta",
+            "menciona Aula 6",
+            "marca workspace_organizado=true",
+            "atualiza onboarding_current_step=5"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "MAPA.md raiz criado",
+        "4 pastas + 4 mapas locais criados",
+        "skills/_registry.md e operacional/_registry.md criados",
+        "workspace_organizado=true",
+        "onboarding_current_step=5",
+        "JAMAIS criou TOOLS.md monolítico"
+      ]
+    },
+    {
+      "id": "parcial-content-existe",
+      "name": "Aluno já tem content/ com drafts",
+      "description": "Aluno criou content/ manual antes. Wizard cria só o que falta.",
+      "setup": {
+        "workspace_state": "content/drafts existe com 2 arquivos",
+        "memory_flags": {
+          "autonomia_liberada": true
+        }
+      },
+      "interaction_flow": [
+        {
+          "user": "[despachado]",
+          "expected_agent_behavior": [
+            "detecta content/ ✓, memory/ ⏳, skills/ ⏳, archive/ ⏳",
+            "narra estado parcial",
+            "Princípio 10 — workspace tem conteúdo, faz backup global",
+            "cria SÓ memory/, skills/, archive/ + mapas",
+            "cria MAPA.md raiz (referenciando todas as 4 pastas)",
+            "verifica se content/MAPA.md existe; se não, cria"
+          ],
+          "must_not": [
+            "tocar nos arquivos existentes em content/drafts/",
+            "sobrescrever conteúdo de pastas existentes"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "content/drafts originais intactos",
+        "memory + skills + archive criados",
+        "backup global em ~/backups/",
+        "MAPA.md raiz coerente com a estrutura final"
+      ]
+    },
+    {
+      "id": "sem-autonomia-avisa",
+      "name": "Aluno tentou pular passo 3 e veio pro 4",
+      "description": "Sem yolo, fricção é certa. Wizard avisa e oferece volta pro 3.",
+      "setup": {
+        "workspace_state": "vazio",
+        "memory_flags": {
+          "autonomia_liberada": false,
+          "exec_policy": "ask"
+        }
+      },
+      "interaction_flow": [
+        {
+          "user": "[despachado]",
+          "expected_agent_behavior": [
+            "detecta autonomia_liberada=false",
+            "avisa sobre fricção (~10 confirmações)",
+            "oferece a) voltar pro 3, b) seguir com fricção",
+            "espera escolha do aluno"
+          ],
+          "must_not": [
+            "começar wizard ignorando dependência"
+          ]
+        },
+        {
+          "user": "a",
+          "expected_agent_behavior": [
+            "redespacha wizard-autonomia (passo 3)",
+            "marca passo 4 como pendente"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "aluno foi avisado da dependência",
+        "se escolheu (a), wizard-autonomia foi disparado novamente"
+      ]
+    },
+    {
+      "id": "aluno-quer-tools-monolitico",
+      "name": "Aluno pede TOOLS.md monolítico",
+      "description": "Aluno pediu 'cria um TOOLS.md com tudo'. Wizard recusa elegante e explica Princípio 12.",
+      "setup": {
+        "workspace_state": "vazio",
+        "memory_flags": {
+          "autonomia_liberada": true
+        }
+      },
+      "interaction_flow": [
+        {
+          "user": "[despachado]",
+          "expected_agent_behavior": ["narra promessa, explica Princípio 12"]
+        },
+        {
+          "user": "prefiro um TOOLS.md monolítico com tudo, vai ser mais fácil de ler",
+          "expected_agent_behavior": [
+            "explica problema com agregadores (cresce sem controle, duplica info, fica desatualizado)",
+            "oferece alternativa: comando 'status' que faz query agregada on-demand lendo os mapas locais",
+            "NÃO cria TOOLS.md monolítico mesmo aluno pedindo"
+          ],
+          "must_not": [
+            "criar TOOLS.md (Princípio 12 é lei)"
+          ]
+        },
+        {
+          "user": "ok, segue com mapas distribuídos",
+          "expected_agent_behavior": ["cria estrutura padrão"]
+        }
+      ],
+      "success_criteria": [
+        "TOOLS.md monolítico NÃO foi criado",
+        "Princípio 12 aplicado mesmo sob pressão",
+        "alternativa (comando status) foi oferecida"
+      ]
+    }
+  ]
+}

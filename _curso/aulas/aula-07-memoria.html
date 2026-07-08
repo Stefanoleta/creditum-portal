@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A7 — Memória + higiene de contexto · Mini-Curso OpenClaw</title>
+<meta name="description" content="Material complementar da Aula 7 — 3 tipos de memória do agente (boot · sessão · semântica) + comandos de higiene (/new · /compact · /status) + princípio 'salve antes de limpar'.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Fraunces:ital,wght@1,400;1,500;1,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="_shared/tokens.css">
+</head>
+
+<body>
+
+<div class="wrap">
+
+  <!-- ========================= HEADER ========================= -->
+
+  <header class="aula-header">
+    <div class="aula-header-brand">Mini-Curso <span class="accent">OpenClaw</span></div>
+    <div class="aula-header-meta">Aula 07 · Modular</div>
+  </header>
+
+  <!-- ========================= HERO ========================= -->
+
+  <section class="hero">
+    <div class="hero-meta">
+      <span class="hero-meta-item">⏱ <strong>15 min</strong></span>
+      <span class="hero-meta-item">📚 <strong>Modular</strong></span>
+      <span class="hero-meta-item">🎯 <strong>A-ha #5</strong></span>
+    </div>
+
+    <h1>
+      Memória +
+      <em>higiene de contexto.</em>
+    </h1>
+
+    <p class="hero-sub">
+      Em <em>15min</em> você entende como seu agente lembra de tudo — daily notes automáticas,
+      memória semântica que busca por <em>significado</em>, e como você ajuda ele a manter
+      organizado pra escalar com você. <strong>Memória sem higiene = agente lerdo. Higiene sem
+      memória = começar do zero todo dia.</strong>
+    </p>
+  </section>
+
+  <!-- ========================= A-HA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">A-ha desta aula</span>
+    <div class="aha-card">
+      <span class="label">A-ha #5 entregue</span>
+      <p class="quote">"Ele lembra de mim e das decisões."</p>
+    </div>
+
+    <p>
+      Persistência real. Aluno PME para de pensar <em>"começar do zero todo dia"</em> e entende
+      que workspace + 3 tipos de memória = agente com história contínua. Não é mágica · é
+      <strong>arquitetura</strong>.
+    </p>
+  </section>
+
+  <!-- ========================= PRE-FLIGHT ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Pre-flight check</span>
+    <h2>Antes de <em>apertar play.</em></h2>
+
+    <p>
+      A7 é modular, mas tem dependência crítica: memória semântica só roda se você configurou a
+      OpenAI API key na A1. Sem isso, metade da aula vira teoria sem prática.
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>OpenAI API key configurada</strong> (A1 Fase A) — embeddings rodam ali · sem ela, memória semântica não funciona</p>
+      <p><span class="check">✓</span> <strong>Workspace + MAPAs</strong> (A6) — daily notes em <code>memory/YYYY-MM-DD.md</code>, MAPAs orientam organização</p>
+      <p><span class="check">✓</span> <strong>Identidade aprofundada</strong> (A5) — agente vai consultar SOUL+IDENTITY+USER no boot</p>
+      <p><span class="check">✓</span> <strong>15min sem interrupção</strong> — 3 conceitos técnicos (boot · semântica · higiene) merecem atenção</p>
+      <p><span class="check">✓</span> <strong>Telegram aberto</strong> — Bruno demonstra "esquecer e lembrar" ao vivo no Bloco 6</p>
+    </div>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>Não configurou API key na A1?</strong> Volta lá. Memória semântica é o que faz o
+        agente buscar por <em>significado</em> em vez de palavra exata — sem ela, ele responde
+        só com daily notes recentes (48h) e MEMORY.md, perde busca histórica.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= ESTRUTURA DA AULA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Estrutura da aula em vídeo</span>
+    <h2>O que você vai aprender em <em>7 blocos.</em></h2>
+
+    <p>
+      Princípio transversal (continuado de A5+A6): <strong>Telegram aberto em paralelo</strong>.
+      Bruno demonstra "esquecer e lembrar" ao vivo — sessão zerada, agente respondendo com
+      contexto preciso.
+    </p>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-time">⏱ 3 min</div>
+        <div class="card-title">Bloco 1 — Mecânica concreta primeiro</div>
+        <p class="card-desc">
+          Sem teoria de saída. Daily notes em <code>memory/YYYY-MM-DD.md</code> · salvamento
+          direcionado <em>"salva isso importante"</em> · <strong>Memory Flush</strong> antes da
+          compactação · confiabilidade real <strong>~70%</strong>. Por isso você ajuda salvando
+          manual quando importa.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 2.5 min</div>
+        <div class="card-title">Bloco 2 — 3 tipos de memória</div>
+        <p class="card-desc">
+          <strong>Padrão (boot)</strong> — agente acorda lendo MEMORY.md + dailies 48h + MAPAs.
+          <strong>Sessão</strong> — chat atual. <strong>Semântica</strong> — busca por significado
+          (auto-ativa com API key da A1).
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 2 min</div>
+        <div class="card-title">Bloco 3 — Sessão + sintomas + sessions.json</div>
+        <p class="card-desc">
+          Janela 200k tokens. Sintomas de saturação: lento · alucinação · perde contexto. Causa
+          comum: muitos tópicos no Telegram. Tip: <code>/status</code> ao vivo. Path real:
+          <code>~/.openclaw/agents/&lt;id&gt;/sessions/sessions.json</code>.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 2.5 min</div>
+        <div class="card-title">Bloco 4 — Memória semântica</div>
+        <p class="card-desc">
+          Busca por <strong>significado</strong>, não palavra. Auto-ativada com API key da A1.
+          Comandos manuais Tier 2: <code>openclaw memory status</code> · <code>search</code> ·
+          <code>index --force</code>. Custo: centavos por indexação completa.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 2.5 min</div>
+        <div class="card-title">Bloco 5 — Higiene + comparação Claude Code</div>
+        <p class="card-desc">
+          Coração da aula. Aluno vindo do Claude reconhece tudo. Comandos nativos:
+          <code>/compact</code> · <code>/new</code> · <code>/reset</code> · <code>/status</code>.
+          Princípio absoluto: <strong>"salve antes de limpar"</strong>.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1.5 min</div>
+        <div class="card-title">Bloco 6 — Demo: ele lembra (a-ha)</div>
+        <p class="card-desc">
+          Sessão zerada (chat novo). Aluno pergunta sobre decisão antiga · Aurora responde com
+          contexto preciso citando data + raciocínio. <em>"Você fala uma vez, ele lembra pra
+          sempre."</em>
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1 min</div>
+        <div class="card-title">Bloco 7 — Recap + amarração A8</div>
+        <p class="card-desc">
+          Recap dos 3 tipos · Memory Flush 70% · comandos nativos · "salve antes de limpar".
+          Amarração: <em>"Memória ele tem. Próxima aula é Skills (A8) — capacidades modulares."</em>
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ========================= MECÂNICA ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aprofundamento do Bloco 1</span>
+    <h2>Mecânica primeiro — <em>como ele escreve.</em></h2>
+
+    <p>
+      Antes de teoria. Como agente OpenClaw <strong>escreve memória</strong> no day a day —
+      e onde você participa.
+    </p>
+
+    <h3>Daily notes — fluxo automático</h3>
+
+    <p>
+      Toda atividade significativa do dia é capturada em <code>memory/YYYY-MM-DD.md</code>.
+      Markdown puro, padrão OpenClaw. Solta na raiz de <code>memory/</code> (recap A6, não em
+      <code>sessions/</code>).
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Quando agente escreve:</strong> ao longo da conversa, no final do dia, ou quando você pede explicitamente</p>
+      <p><span class="check">✓</span> <strong>O que captura:</strong> decisões, calls, pendências, contexto novo, resultados de tarefas executadas</p>
+      <p><span class="check">✓</span> <strong>Formato:</strong> bullet points + timestamp · não enche linguiça · captura essência</p>
+      <p><span class="check">✓</span> <strong>Quem lê depois:</strong> próprio agente no boot do dia seguinte · você quando consulta</p>
+    </div>
+
+    <h3>Salvamento direcionado — quando você ajuda</h3>
+
+    <p>
+      Você pode pedir explicitamente que ele salve algo importante. E pode <strong>direcionar
+      onde</strong>:
+    </p>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt · salvamento direcionado</span>
+        <span class="prompt-card-where">cola no Telegram</span>
+      </div>
+      <div class="prompt-card-body">salva isso importante: [DECISÃO / CONTEXTO]
+
+Salva tanto na daily note de hoje quanto no lugar
+estruturado que faz sentido (ex: pasta do projeto,
+context/decisoes/, ou context/people/{nome}.md
+se for sobre alguém específico).
+
+Me mostra onde você salvou.</div>
+      <div class="prompt-card-tip">
+        💡 Use sempre que decidir algo que você vai querer consultar daqui a 3 meses. Frase-âncora:
+        <em>"se eu vou perguntar isso de novo, salva."</em>
+      </div>
+    </div>
+
+    <h3>Memory Flush — feature nativa OpenClaw</h3>
+
+    <p>
+      Conceito técnico importante: antes da compactação automática disparar, agente faz um
+      <strong>"silent memory flush"</strong> — tenta salvar nas pastas certas antes de comprimir.
+      Documentado em
+      <a href="https://docs.openclaw.ai/concepts/compaction" target="_blank" rel="noopener">docs.openclaw.ai/concepts/compaction</a>.
+    </p>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>Confiabilidade real (estimativa Bruno):</strong> ~<strong>70%</strong> das vezes
+        funciona limpo. Compactação às vezes mata o salvamento — token budget acaba antes do
+        flush completar. <strong>Por isso você ajuda salvando manual quando o assunto importa.
+        Não confia 100% no flush automático.</strong>
+      </p>
+    </div>
+
+    <div class="aha-card">
+      <span class="label">Frase do Bloco 1</span>
+      <p class="quote">"Memória do agente é simples: ele escreve toda hora. Você ajuda quando importa."</p>
+    </div>
+  </section>
+
+  <!-- ========================= 3 TIPOS DE MEMÓRIA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Aprofundamento do Bloco 2</span>
+    <h2>3 tipos de memória <em>trabalhando juntos.</em></h2>
+
+    <p>
+      Agente OpenClaw tem 3 sistemas de memória que conversam entre si. Cada um cobre coisa
+      diferente. Não substituem — complementam.
+    </p>
+
+    <h3>Tabela comparativa</h3>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Tipo</th>
+          <th>O que cobre</th>
+          <th>Quando ativa</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>1. Padrão (boot)</strong></td>
+          <td>MEMORY.md (long-term) + daily notes 48h + MAPAs</td>
+          <td>Toda nova sessão · automático</td>
+        </tr>
+        <tr>
+          <td><strong>2. Sessão</strong></td>
+          <td>Chat atual no Telegram/Gateway</td>
+          <td>Enquanto você conversa · janela 200k tokens</td>
+        </tr>
+        <tr>
+          <td><strong>3. Semântica</strong></td>
+          <td>Busca por significado no workspace inteiro</td>
+          <td>Quando você pergunta · usa embeddings (API key A1)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>1. Memória padrão · <em>como ele acorda</em></h3>
+
+    <p>
+      Quando agente "acorda" numa nova sessão (você abre o Telegram, manda mensagem nova depois
+      de horas/dias), ele <strong>automaticamente</strong>:
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Lê <code>MEMORY.md</code></strong> — long-term self-knowledge (recap A6)</p>
+      <p><span class="check">✓</span> <strong>Lê daily notes de hoje + ontem</strong> — 48h de contexto (padrão OpenClaw)</p>
+      <p><span class="check">✓</span> <strong>Carrega MAPAs do workspace</strong> — sabe onde tá cada tipo de coisa (Princípio 12, recap A6)</p>
+      <p><span class="check">✓</span> <strong>Resultado:</strong> ele acorda já sabendo de tudo que tá rolando — não começa do zero</p>
+    </div>
+
+    <h3>2. Memória de sessão · <em>chat atual</em></h3>
+
+    <p>
+      Janela do contexto da conversa em curso. Tem limite — 200k tokens com GPT-5.5 (~150 páginas
+      de texto). Cobre Bloco 3 abaixo.
+    </p>
+
+    <h3>3. Memória semântica · <em>busca por significado</em></h3>
+
+    <p>
+      O sistema mais poderoso. Cobre Bloco 4 abaixo. <strong>Já vem ativada quando você
+      configurou OpenAI API key em A1</strong> — não precisa skill nova nem setup adicional.
+    </p>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Por que precisava da API key na A1:</strong> embeddings (vetores numéricos que
+        representam significado) rodam via OpenAI direto. OAuth da Fase B cobre raciocínio · API
+        key da Fase A cobre Whisper + DALL-E + <strong>embeddings da memória semântica</strong>.
+        Cada credencial tem papel específico.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= HOT.MD ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aprofundamento extra · contexto quente</span>
+    <h2><code>memory/hot.md</code> — o <em>resumo do agora.</em></h2>
+
+    <p>
+      Os 3 tipos cobrem boot, sessão e busca histórica. Mas tem uma quarta peça que vive
+      na raiz de <code>memory/</code> e merece nome próprio: <code>hot.md</code>. Pensa nele
+      como a <strong>tela inicial do agente</strong> — snapshot do que importa <em>agora</em>,
+      atualizado o tempo todo, lido em toda sessão.
+    </p>
+
+    <h3>O que tem dentro</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Top prioridades da semana</strong> — 3-5 itens que precisam de atenção real</p>
+      <p><span class="check">✓</span> <strong>Negociações ativas</strong> — quem tá pendurado, último toque, próximo passo</p>
+      <p><span class="check">✓</span> <strong>Decisões recentes</strong> — o que foi fechado nos últimos 7-14 dias</p>
+      <p><span class="check">✓</span> <strong>Métricas-chave</strong> — números do mês que importam (receita, alunos, eventos)</p>
+      <p><span class="check">✓</span> <strong>Prazos críticos</strong> — eventos com data próxima que não podem passar</p>
+    </div>
+
+    <h3>Quem mantém</h3>
+
+    <p>
+      <code>hot.md</code> é <strong>auto-gerenciado</strong>. O agente atualiza no fluxo
+      normal: quando você decide algo importante, surgem prioridades novas, ou um prazo se
+      aproxima — ele edita. Você empurra atualização explícita com a skill
+      <code>/salve</code> (cola final de sessão · agente lê o que aconteceu e atualiza
+      pendências, decisões, prazos, hot). Você não escreve <code>hot.md</code> à mão.
+    </p>
+
+    <h3>Função 1 · <em>boot context</em></h3>
+
+    <p>
+      Toda nova sessão, agente lê <code>hot.md</code> junto com MEMORY.md e dailies.
+      Diferença: MEMORY.md é durável (auto-conhecimento que muda devagar), dailies são
+      cronologia (o que aconteceu), <code>hot.md</code> é <strong>estado atual</strong>
+      (o que importa agora). Ele entra no flow já sabendo o que tá quente — não precisa
+      perguntar "no que a gente tava?".
+    </p>
+
+    <h3>Função 2 · <em>combustível do heartbeat</em></h3>
+
+    <p>
+      Aqui é onde <code>hot.md</code> conecta com A9. Heartbeat (mecanismo de
+      proatividade · poll periódico) consulta <code>hot.md</code> a cada batida pra
+      decidir <strong>o que vigiar</strong>. Sem <code>hot.md</code>, heartbeat fica
+      perdido — checa coisa genérica que não importa pra você nessa semana.
+    </p>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Exemplo concreto:</strong> você fechou contrato com a Furia, prazo do
+        primeiro entregável é <em>22/04</em>. Skill <code>/salve</code> roda · agente
+        atualiza <code>hot.md</code> com <em>"prazo crítico Furia 22/04"</em>. A cada
+        heartbeat (a cada 30min), agente lê <code>hot.md</code> · vê o prazo · checa se
+        passou ou tá próximo · te avisa só se valer interromper. Sem <code>hot.md</code>,
+        heartbeat não saberia que esse prazo existia.
+      </p>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Distinção importante (recap A3):</strong> <code>HEARTBEAT.md</code> (raiz do
+        workspace) é a <strong>configuração</strong> do mecanismo — poll period, checks
+        rotacionáveis, quiet hours. <code>memory/hot.md</code> é o <strong>contexto</strong>
+        que esse mecanismo consulta. HEARTBEAT.md = COMO ele vigia. hot.md = O QUE ele
+        vigia. <strong>A9 cobre o mecanismo · essa seção cobre o contexto.</strong>
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= MEMÓRIA DE SESSÃO ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aprofundamento do Bloco 3</span>
+    <h2>Sessão · sintomas + <em>sessions.json.</em></h2>
+
+    <p>
+      Memória de sessão é o chat atual. Janela enorme (200k tokens GPT-5.5 ≈ 150 páginas), mas
+      finita. Quando enche, surgem <strong>sintomas de saturação</strong>:
+    </p>
+
+    <h3>Sintomas de contexto saturado</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Agente lento</strong> — demora pra responder, parece "pensando demais"</p>
+      <p><span class="check">✓</span> <strong>Não responde</strong> — trava no meio, pula, ou retorna erro</p>
+      <p><span class="check">✓</span> <strong>Alucina</strong> — inventa contexto que não existiu, mistura conversas</p>
+      <p><span class="check">✓</span> <strong>Perde contexto antigo</strong> — esquece o que foi falado há 30min</p>
+    </div>
+
+    <h3>Causa comum (amarração A4)</h3>
+
+    <p>
+      Em 90% dos casos: <strong>muitos tópicos no Telegram com o mesmo agente</strong>. Cada
+      tópico cria um arquivo de transcript separado. Soma fica grande, contexto satura.
+    </p>
+
+    <pre><code>~/.openclaw/agents/&lt;agentId&gt;/sessions/
+├── sessions.json                              ← mapa de todas as sessões
+├── &lt;sessionId&gt;.jsonl                          ← transcript da sessão
+└── &lt;sessionId&gt;-topic-&lt;threadId&gt;.jsonl         ← 1 arquivo por tópico</code></pre>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Reforça regra A4:</strong> máximo <strong>3-4 tópicos</strong> por agente no
+        Telegram. Mais que isso, sessão satura rápido. Tópicos por tema (não por dia, não por
+        humor) são a divisão saudável.
+      </p>
+    </div>
+
+    <h3>Tip prático ao vivo — diagnóstico</h3>
+
+    <p>
+      Se agente fica lento, pede pra ele rodar diagnóstico:
+    </p>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt · diagnóstico de contexto</span>
+        <span class="prompt-card-where">cola no Telegram</span>
+      </div>
+      <div class="prompt-card-body">roda /status e me diz como tá o uso de contexto.
+
+Se tá perto do limite (>70%), me sugere:
+1. O que vale salvar antes de compactar
+2. Se vale começar nova sessão (/new) ou compactar (/compact)
+3. Se algum tópico tá inflando demais</div>
+      <div class="prompt-card-tip">
+        💡 Use sempre que sentir lentidão. Em 80% dos casos a resposta é "vai precisar de /new
+        em breve, salva isso e isso antes".
+      </div>
+    </div>
+
+    <p>
+      Quer ver o tamanho físico? Pede:
+    </p>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt · ver tamanho do session store</span>
+        <span class="prompt-card-where">cola no Telegram</span>
+      </div>
+      <div class="prompt-card-body">olha o tamanho do sessions.json em
+~/.openclaw/agents/&lt;id&gt;/sessions/ e me diz se tá grande.
+
+Lista também os arquivos -topic-*.jsonl ordenados
+por tamanho — quero ver se algum tópico tá inflando.</div>
+      <div class="prompt-card-tip">
+        💡 Path correto: <code>sessions.json</code> (plural). Cada tópico do Telegram vira arquivo
+        separado <code>&lt;sessionId&gt;-topic-&lt;threadId&gt;.jsonl</code>.
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Higiene = não esquecer de compactar + começar nova sessão.</strong> Bloco 5 cobre
+        os comandos exatos. Princípio: salve antes de limpar (sempre).
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= MEMÓRIA SEMÂNTICA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Aprofundamento do Bloco 4</span>
+    <h2>Memória semântica — <em>busca por significado.</em></h2>
+
+    <p>
+      Sistema que faz o agente buscar pelo <strong>significado</strong> do que você perguntou,
+      não pela palavra exata. Você pergunta "lembra do que decidimos sobre WhatsApp?" e ele acha
+      <code>decisoes/2026-04.md</code> mesmo que o arquivo não tenha a palavra "WhatsApp" no
+      nome.
+    </p>
+
+    <h3>Como funciona (alto nível)</h3>
+
+    <div class="item-icon">
+      <div class="item-icon-box">1</div>
+      <div class="item-icon-content">
+        <h3>Indexação contínua</h3>
+        <p>
+          Agente roda embeddings de cada arquivo do workspace (memory, content, archive) e guarda
+          os vetores. OpenAI API key da A1 cobre.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">2</div>
+      <div class="item-icon-content">
+        <h3>Você pergunta com significado</h3>
+        <p>
+          <em>"o que decidimos sobre comunidade?"</em> · agente vetoriza a pergunta e busca os
+          arquivos com vetores próximos.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">3</div>
+      <div class="item-icon-content">
+        <h3>Retorna resultados ranqueados</h3>
+        <p>
+          Top arquivos por proximidade semântica. Agente lê os mais relevantes, sintetiza
+          resposta com data + raciocínio + próximos passos.
+        </p>
+      </div>
+    </div>
+
+    <h3>Demo concreto</h3>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt · busca semântica</span>
+        <span class="prompt-card-where">cola no Telegram</span>
+      </div>
+      <div class="prompt-card-body">lembra do que decidimos sobre WhatsApp?
+
+Faz busca semântica no workspace, não busca por
+palavra exata. Me responde com:
+1. Data da decisão
+2. Raciocínio (por que decidimos isso)
+3. Onde tá registrado (arquivo)
+4. Se mudou desde então</div>
+      <div class="prompt-card-tip">
+        💡 Funciona pra qualquer pergunta sobre passado: pessoas, projetos, decisões, contexto.
+        Quanto mais específico você for, melhor a busca acha.
+      </div>
+    </div>
+
+    <h3>Comandos manuais (Tier 2)</h3>
+
+    <p>
+      Pra power users e debug. Agente faz tudo automaticamente — você roda manual só se quiser
+      debug ou índice forçado:
+    </p>
+
+    <div class="terminal-card">
+      <div class="terminal-card-header">
+        <span class="terminal-card-label">Terminal Managed</span>
+        <span class="terminal-card-where">comandos Tier 2</span>
+      </div>
+      <div class="terminal-card-body"><span class="prompt-symbol">$</span>openclaw memory status
+<span class="comment"># estado do índice · quantos arquivos · última atualização</span>
+
+<span class="prompt-symbol">$</span>openclaw memory search "query"
+<span class="comment"># busca semântica · retorna arquivos ranqueados</span>
+
+<span class="prompt-symbol">$</span>openclaw memory index --force
+<span class="comment"># reindexar workspace inteiro · custa centavos</span></div>
+      <div class="terminal-card-tip">
+        ▶ Use <code>--force</code> só quando suspeita que índice tá desatualizado (ex: você
+        moveu muitos arquivos manualmente · improvável no fluxo normal).
+      </div>
+    </div>
+
+    <h3>Custo</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Indexação completa:</strong> centavos pra workspace típico (poucos MB de markdown)</p>
+      <p><span class="check">✓</span> <strong>Busca individual:</strong> fração de centavo (1 query semântica ≈ R$ 0,01-0,02)</p>
+      <p><span class="check">✓</span> <strong>Reindexação automática:</strong> agente faz incremental (só arquivos modificados)</p>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <em>Princípio:</em> <strong>"Sempre que você pesquisar sobre alguém, empresa, projeto —
+        peça com detalhes. Quanto mais específico, melhor a busca semântica acha."</strong>
+        Pergunta vaga = resposta vaga. Pergunta detalhada = resposta cirúrgica.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= HIGIENE COMPARAÇÃO CLAUDE ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aprofundamento do Bloco 5</span>
+    <h2>Higiene de contexto — <em>Claude Code vs OpenClaw.</em></h2>
+
+    <p>
+      Coração da aula. Aluno que veio do Claude Code reconhece quase tudo — OpenClaw seguiu padrão
+      similar. Pra quem não veio, é introdução natural.
+    </p>
+
+    <div class="callout callout-info">
+      <p>
+        <em>Aviso de abertura:</em> <strong>"Se você usa Claude Code, vai reconhecer quase tudo.
+        OpenClaw seguiu padrão similar."</strong> Comandos com mesma cara, comportamento próximo,
+        bonus em alguns casos.
+      </p>
+    </div>
+
+    <h3>Comparação lado a lado</h3>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Movimento</th>
+          <th>Claude Code</th>
+          <th>OpenClaw</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Compactar contexto</strong></td>
+          <td><code>/compact</code></td>
+          <td><code>/compact Focus on [tema]</code> (igual + flag de foco)</td>
+        </tr>
+        <tr>
+          <td><strong>Nova sessão</strong></td>
+          <td><code>/new</code></td>
+          <td><code>/new</code> ou <code>/reset</code></td>
+        </tr>
+        <tr>
+          <td><strong>Trocar modelo na nova</strong></td>
+          <td>—</td>
+          <td><code>/new &lt;model&gt;</code> (bônus OpenClaw)</td>
+        </tr>
+        <tr>
+          <td><strong>Ver estado</strong></td>
+          <td><code>/status</code></td>
+          <td><code>/status</code> (igual)</td>
+        </tr>
+        <tr>
+          <td><strong>Salvar antes de limpar</strong></td>
+          <td><code>/salvar</code> (skill)</td>
+          <td>Comando natural: <em>"salva tudo importante e esquece o resto"</em></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Princípios da higiene OpenClaw</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Princípio absoluto (recap A0):</strong> <em>"Salve antes de limpar."</em> Memory Flush automático ajuda mas não é 100%</p>
+      <p><span class="check">✓</span> <strong>Auto-compaction ON por default</strong> — dispara quando contexto enche ou modelo retorna context-overflow</p>
+      <p><span class="check">✓</span> <strong>Comando natural cobre 80% dos casos</strong> — você não decora atalho · pede pro agente em português</p>
+      <p><span class="check">✓</span> <strong>Quando mudar de assunto:</strong> dá <code>/new</code> pra começar limpo. Antes disso, salve</p>
+    </div>
+
+    <h3>Comando natural — o jeito OpenClaw</h3>
+
+    <p>
+      Você não precisa decorar slash commands. Pede em português:
+    </p>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt · salvar antes de limpar (natural)</span>
+        <span class="prompt-card-where">cola no Telegram antes de /new</span>
+      </div>
+      <div class="prompt-card-body">salva tudo importante dessa conversa e esquece o resto.
+
+Em específico, quero garantir que vai pra memória persistente:
+1. Decisões que tomamos (com data + raciocínio)
+2. Pendências novas que surgiram
+3. Contexto sobre pessoas/projetos que valha guardar
+4. Próximos passos definidos
+
+Depois eu vou abrir nova sessão pra mudar de assunto.</div>
+      <div class="prompt-card-tip">
+        💡 Frase-âncora pra memorizar: <em>"salve antes de limpar"</em>. Sempre que for dar
+        <code>/new</code>, roda esse prompt antes.
+      </div>
+    </div>
+
+    <h3>Comandos slash · referência rápida</h3>
+
+    <div class="terminal-card">
+      <div class="terminal-card-header">
+        <span class="terminal-card-label">Slash commands no Telegram</span>
+        <span class="terminal-card-where">manda direto na conversa</span>
+      </div>
+      <div class="terminal-card-body"><span class="prompt-symbol">/</span>status
+<span class="comment"># mostra uso de contexto, sessão atual, modelo ativo</span>
+
+<span class="prompt-symbol">/</span>compact Focus on [tema]
+<span class="comment"># compacta contexto mantendo foco em tema específico</span>
+
+<span class="prompt-symbol">/</span>new
+<span class="comment"># nova sessão limpa</span>
+
+<span class="prompt-symbol">/</span>new gpt-5.5
+<span class="comment"># nova sessão trocando modelo (bônus OpenClaw)</span>
+
+<span class="prompt-symbol">/</span>reset
+<span class="comment"># sinônimo de /new</span></div>
+      <div class="terminal-card-tip">
+        ▶ Slash commands rodam direto no chat (Telegram, Gateway). Não precisa abrir terminal.
+      </div>
+    </div>
+
+    <h3>Manutenção Tier 2 (terminal)</h3>
+
+    <p>
+      Comando opcional pra power users — limpa transcripts órfãos quando você acumulou muitas
+      sessões antigas:
+    </p>
+
+    <div class="terminal-card">
+      <div class="terminal-card-header">
+        <span class="terminal-card-label">Terminal Managed</span>
+        <span class="terminal-card-where">limpeza opcional</span>
+      </div>
+      <div class="terminal-card-body"><span class="prompt-symbol">$</span>openclaw sessions cleanup --enforce
+<span class="comment"># limpa sessões antigas + transcripts órfãos</span>
+<span class="comment"># reduz tamanho do session store (~/.openclaw/agents/&lt;id&gt;/sessions/)</span></div>
+      <div class="terminal-card-tip">
+        ▶ Use só se notar que disco tá enchendo. No uso PME normal, raramente é necessário.
+      </div>
+    </div>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>Sem ChatGPT Plus / API key na A1?</strong> Memória semântica não funciona ·
+        comandos manuais retornam erro. Volta na A1 antes de tentar A7. Tudo conecta.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= DEMO A-HA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Bloco 6 · A-ha #5 ao vivo</span>
+    <h2>Demo final — <em>"ela lembra apesar do chat zerado".</em></h2>
+
+    <p>
+      Demo que entrega o a-ha. Persona <strong>Aurora</strong> (continuidade A5/A6, empreendedor
+      PME). Sessão zerada visível — Bruno dá <code>/new</code> ao vivo antes da pergunta. Aluno
+      vê o chat ficar vazio e a Aurora ainda assim responder com contexto preciso.
+    </p>
+
+    <h3>Cenário</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Telegram da Aurora</strong> — chat ativo da semana</p>
+      <p><span class="check">✓</span> <strong><code>/new</code> ao vivo</strong> — Bruno aperta · chat zera · contexto da sessão sai</p>
+      <p><span class="check">✓</span> <strong>Pergunta sobre decisão antiga</strong> — algo que aconteceu semanas atrás, não tá no contexto da sessão</p>
+      <p><span class="check">✓</span> <strong>Aurora responde com contexto preciso</strong> — boot lê MEMORY.md + dailies 48h · semântica busca decisão antiga · sintetiza</p>
+    </div>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt · pergunta após /new</span>
+        <span class="prompt-card-where">Telegram da Aurora · sessão zerada</span>
+      </div>
+      <div class="prompt-card-body">Aurora, lembra do que a gente decidiu sobre
+[DECISÃO ANTIGA — ex: contratação de Head of Marketing]?
+
+Me responde com:
+1. Data da decisão
+2. Raciocínio
+3. Próximos passos definidos
+4. Onde tá registrado</div>
+      <div class="prompt-card-tip">
+        💡 Sucesso: Aurora cita data + raciocínio + arquivo. Falha: responde "não lembro" — sinal
+        de que decisão não foi salva ou índice tá desatualizado.
+      </div>
+    </div>
+
+    <div class="aha-card">
+      <span class="label">Frase do momento</span>
+      <p class="quote">"Você fala uma vez, ele lembra pra sempre. Você ajuda salvando o importante. Ele faz o resto."</p>
+    </div>
+
+    <div class="callout callout-success">
+      <p>
+        <strong>A-ha emocional:</strong> aluno vê que sessão zerada não apaga memória. Boot
+        reconstrói contexto · semântica acha histórico · agente sintetiza resposta. Persistência
+        real, sem mágica — arquitetura.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= TROUBLESHOOTING ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Travou? Antes de pedir ajuda</span>
+    <h2>Top <em>problemas comuns da A7.</em></h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Sintoma</th>
+          <th>Causa provável</th>
+          <th>Ação</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Memória semântica não acha nada</td>
+          <td>API key da A1 não configurada · embeddings não rodam</td>
+          <td>Volta A1 Fase A · valida com <code>openclaw memory status</code></td>
+        </tr>
+        <tr>
+          <td>Busca semântica retorna arquivo errado</td>
+          <td>Índice desatualizado após muitas mudanças manuais</td>
+          <td>Roda <code>openclaw memory index --force</code> (custa centavos)</td>
+        </tr>
+        <tr>
+          <td>Agente respondeu "não lembro" pra decisão antiga</td>
+          <td>Decisão não foi salva (Memory Flush 70% — falhou)</td>
+          <td>Princípio: <em>"salve antes de limpar"</em>. No futuro, salva manual quando importa</td>
+        </tr>
+        <tr>
+          <td>Agente lento · alucinando · perdendo contexto</td>
+          <td>Sessão saturada (perto de 200k tokens)</td>
+          <td>Roda <code>/status</code> · salva importante · <code>/new</code></td>
+        </tr>
+        <tr>
+          <td><code>/compact</code> deu erro / travou</td>
+          <td>Auto-compaction já tinha rodado · contexto inconsistente</td>
+          <td><code>/new</code> direto · começa sessão limpa</td>
+        </tr>
+        <tr>
+          <td>Daily notes não aparecem</td>
+          <td>Estavam em <code>memory/sessions/</code> em vez de raiz</td>
+          <td>Pede agente: <em>"migra dailies pra raiz de memory/, padrão OpenClaw"</em></td>
+        </tr>
+        <tr>
+          <td><code>sessions.json</code> enorme</td>
+          <td>Acumulou muitos tópicos no Telegram</td>
+          <td>Roda <code>openclaw sessions cleanup --enforce</code> + reduz tópicos (regra A4)</td>
+        </tr>
+        <tr>
+          <td>Boot não carrega contexto</td>
+          <td>MEMORY.md vazio (kit A3 não rodou completo)</td>
+          <td>Volta A3 · roda CHECKLIST · MEMORY.md popula com auto-conhecimento</td>
+        </tr>
+        <tr>
+          <td>Esqueci de salvar antes de <code>/new</code></td>
+          <td>Princípio "salve antes de limpar" não respeitado</td>
+          <td>Snapshot automático (A2) tem rede de segurança · pede pro agente recuperar via semântica</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Cheatsheet completo:</strong> <a href="../INDICE.md">memoria-do-seu-agente.md</a> —
+        3 tipos · <code>/new</code> · <code>/compact</code> · <code>/status</code> · comando
+        natural pra salvar · paths do session store · <em>"salve antes de limpar"</em>.
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Não conseguiu resolver com a tabela acima?</strong> Joga screenshot/print no
+        <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">grupo Telegram do
+        curso</a>. openclawzinho responde em &lt;30 segundos · humanos em &lt;5 minutos.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= NUMS ========================= -->
+
+  <section class="nums">
+    <div class="num-card">
+      <div class="n">3</div>
+      <div class="l">tipos de memória<br>(boot · sessão · semântica)</div>
+    </div>
+    <div class="num-card">
+      <div class="n">~70%</div>
+      <div class="l">confiabilidade real do<br>Memory Flush automático</div>
+    </div>
+    <div class="num-card">
+      <div class="n">200k</div>
+      <div class="l">tokens da janela<br>de sessão (GPT-5.5)</div>
+    </div>
+    <div class="num-card">
+      <div class="n">48h</div>
+      <div class="l">de daily notes carregadas<br>no boot automático</div>
+    </div>
+  </section>
+
+  <!-- ========================= FRASE-MÃE ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Frase-mãe da A7</span>
+    <h2>Pra colar na <em>geladeira.</em></h2>
+
+    <blockquote>
+      <p>
+        <strong>"Memória sem higiene = agente lerdo. Higiene sem memória = começar do zero todo
+        dia. Os dois juntos = ele escala com você."</strong>
+      </p>
+      <p>
+        3 tipos (padrão · sessão · semântica) · Memory Flush 70% (não confiar 100%) ·
+        <code>/compact</code> <code>/new</code> <code>/status</code> nativos · comando natural ·
+        <em>"salve antes de limpar"</em>.
+      </p>
+    </blockquote>
+  </section>
+
+  <!-- ========================= CTA PRÓXIMA ========================= -->
+
+  <section class="sec sec-alt">
+    <div class="cta-card">
+      <h3>Próximo passo: <em>A8 — Skills + 6 curadas + criar a sua</em></h3>
+      <p>
+        14 minutos · modular · memória ele tem. Próxima aula é sobre <strong>capacidades
+        modulares</strong> — skills nativas + 6 curadas pelo curso + como criar a sua. Aluno
+        sai sabendo invocar capacidade certa pra cada cenário e ampliar o agente sem inflar o
+        prompt principal.
+      </p>
+      <a href="aula-08-skills.html" class="cta-button">→ Ir pra Aula 8</a>
+    </div>
+  </section>
+
+  <!-- ========================= FOOTER ========================= -->
+
+  <footer class="aula-footer">
+
+    <div class="aula-footer-block">
+      <h4>Travou? Tá no grupo do curso</h4>
+      <p>
+        Comunidade Telegram do curso —
+        <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">t.me/cursoopenclaw</a>
+        — suporte 24/7 (openclawzinho bot + Bruno e equipe presente).
+        Dúvida sobre essa aula, problemas de setup, ou quer compartilhar como aplicou
+        no seu negócio: bora trocar lá.
+      </p>
+    </div>
+
+    <div class="aula-footer-block">
+      <h4>Próximo nível: Pixel AI Hub</h4>
+      <p>
+        Aplicar agente pra empresa toda — equipe, governance, escala?
+        <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=material&utm_campaign=v1" target="_blank" rel="noopener">Pixel AI Hub</a>:
+        segundo cérebro corporativo, comunidade de empreendedores, +50 skills enterprise,
+        encontros mensais ao vivo. Vagas mensais limitadas.
+      </p>
+    </div>
+
+    <div class="aula-footer-credit">
+      Mini-Curso OpenClaw 2026 · Material complementar à gravação · Atualizações conforme kit evolui<br>
+      <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=footer-credit" target="_blank" rel="noopener">Bruno Okamoto · Pixel Educação</a>
+    </div>
+
+  </footer>
+
+</div>
+
+</body>
+</html>

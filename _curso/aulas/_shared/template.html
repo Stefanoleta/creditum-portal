@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- ============================================================
+     TEMPLATE — Material complementar de aula · Mini-Curso OpenClaw 2026
+     Design: Pixel AI News oficial · Manrope + Fraunces · azul institucional + laranja
+     Copia este arquivo pra pasta da aula (ex: aula-02-cockpit-comandos.html)
+     Substitui {{PLACEHOLDERS}} pelo conteúdo da aula
+     Estrutura: header · hero · a-ha · pre-flight · estrutura blocos · aprofundamentos · prompts · troubleshooting · CTA · footer
+     Footer reutilizável NÃO mexe — copia idêntico
+     Componentes: aula-header · hero-meta · aha-card · item-icon · bullet-card · prompt-card · terminal-card · callouts · cards · cta-card · nums · tabelas
+     Padrão visual: alterna .sec (bg azul base) com .sec-alt (bg azul claro) pra criar blocos
+     Italic em <em> ou <span class="accent"> renderiza Fraunces serif laranja-claro
+     Referências de profundidade: aula-00-visao-stack · aula-01-setup-managed
+     ============================================================ -->
+
+<title>Aula {{NUMERO_AULA}} — {{TITULO_AULA}} · Mini-Curso OpenClaw</title>
+<meta name="description" content="{{PROMESSA_DA_AULA}}">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Fraunces:ital,wght@1,400;1,500;1,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+</head>
+
+<body>
+
+<div class="wrap">
+
+  <!-- ========================= HEADER (lockup superior) ========================= -->
+
+  <header class="aula-header">
+    <div class="aula-header-brand">
+      Mini-Curso <span class="accent">OpenClaw</span>
+    </div>
+    <div class="aula-header-meta">
+      Aula {{NUMERO_AULA_2_DIGITOS}} · {{TIPO_AULA}}
+    </div>
+  </header>
+
+  <!-- ========================= HERO ========================= -->
+
+  <section class="hero">
+    <div class="hero-meta">
+      <span class="hero-meta-item">⏱ <strong>{{DURACAO_MIN}} min</strong></span>
+      <span class="hero-meta-item">📚 <strong>{{TIPO_AULA}}</strong></span>
+      <span class="hero-meta-item">🎯 <strong>A-ha #{{NUM_AHA}}</strong></span>
+    </div>
+
+    <h1>
+      {{TITULO_PARTE_1}}
+      <em>{{TITULO_PARTE_2_DESTAQUE}}</em>
+    </h1>
+
+    <p class="hero-sub">
+      {{PROMESSA_DA_AULA_PARAGRAFO}}
+    </p>
+  </section>
+
+  <!-- ========================= A-HA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">A-ha desta aula</span>
+    <div class="aha-card">
+      <span class="label">A-ha #{{NUM_AHA}} entregue</span>
+      <p class="quote">"{{FRASE_AHA}}"</p>
+    </div>
+  </section>
+
+  <!-- ========================= PRE-FLIGHT (opcional) ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Pre-flight check</span>
+    <h2>Antes de <em>apertar play.</em></h2>
+
+    <p>{{INTRO_PREFLIGHT}}</p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> {{ITEM_1}}</p>
+      <p><span class="check">✓</span> {{ITEM_2}}</p>
+      <p><span class="check">✓</span> {{ITEM_3}}</p>
+      <p><span class="check">✓</span> link da comunidade aberto (<a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">t.me/cursoopenclaw</a>) pra travar em algum passo</p>
+    </div>
+  </section>
+
+  <!-- ========================= ESTRUTURA DOS BLOCOS ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Estrutura da aula em vídeo</span>
+    <h2>O que você vai aprender em <em>{{N_BLOCOS}} blocos.</em></h2>
+
+    <p>{{INTRO_ESTRUTURA}}</p>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-time">⏱ {{MIN_BLOCO_1}} min</div>
+        <div class="card-title">Bloco 1 — {{TITULO_BLOCO_1}}</div>
+        <p class="card-desc">{{DESC_BLOCO_1}}</p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ {{MIN_BLOCO_2}} min</div>
+        <div class="card-title">Bloco 2 — {{TITULO_BLOCO_2}}</div>
+        <p class="card-desc">{{DESC_BLOCO_2}}</p>
+      </div>
+
+      <!-- Replicar pra todos os blocos da aula -->
+
+    </div>
+  </section>
+
+  <!-- ========================= APROFUNDAMENTO (1+ seções) ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">{{LABEL_APROFUNDAMENTO}}</span>
+    <h2>{{TITULO_H2_APROFUNDAMENTO}}</h2>
+
+    <p>{{PARAGRAFO_INTRO}}</p>
+
+    <h3>{{SUBTITULO_H3}}</h3>
+
+    <p>{{DESCRICAO}}</p>
+
+    <ul>
+      <li><strong>{{ITEM_BOLD}}:</strong> {{ITEM_DESC}}</li>
+    </ul>
+
+    <!-- Tabela comparativa (opcional) -->
+    <table>
+      <thead>
+        <tr>
+          <th>{{COL_1}}</th>
+          <th>{{COL_2}}</th>
+          <th>{{COL_3}}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>{{LINHA_1_COL_1}}</strong></td>
+          <td>{{LINHA_1_COL_2}}</td>
+          <td>{{LINHA_1_COL_3}}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Item icon numerado (opcional, ótimo pra "como vai funcionar") -->
+    <div class="item-icon">
+      <div class="item-icon-box">1</div>
+      <div class="item-icon-content">
+        <h3>{{TITULO_PASSO_1}}</h3>
+        <p>{{DESC_PASSO_1}}</p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">2</div>
+      <div class="item-icon-content">
+        <h3>{{TITULO_PASSO_2}}</h3>
+        <p>{{DESC_PASSO_2}}</p>
+      </div>
+    </div>
+
+    <!-- Callouts (escolha o tipo) -->
+    <div class="callout callout-info">
+      <p><strong>Por quê:</strong> {{EXPLICACAO_CONCEITO}}</p>
+    </div>
+  </section>
+
+  <!-- ========================= PROMPTS PRONTOS PRA COLAR ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Prompts prontos pra colar</span>
+    <h2>{{TITULO_H2_PROMPTS}}</h2>
+
+    <p>{{INTRO_PROMPTS}}</p>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #1 · {{TITULO_PROMPT_1}}</span>
+        <span class="prompt-card-where">cola no Telegram do agente</span>
+      </div>
+      <div class="prompt-card-body">{{CORPO_PROMPT_1}}</div>
+      <div class="prompt-card-tip">
+        💡 {{DICA_PROMPT_1}}
+      </div>
+    </div>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #2 · {{TITULO_PROMPT_2}}</span>
+        <span class="prompt-card-where">cola no Telegram do agente</span>
+      </div>
+      <div class="prompt-card-body">{{CORPO_PROMPT_2}}</div>
+      <div class="prompt-card-tip">
+        💡 {{DICA_PROMPT_2}}
+      </div>
+    </div>
+
+    <!-- Adicionar mais prompts conforme a aula precisar (típico: 2-4 prompts) -->
+  </section>
+
+  <!-- ========================= COMANDOS TERMINAL (opcional · raros no V2 pós-A1) ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Comandos do terminal Managed</span>
+    <h2>{{TITULO_H2_COMANDOS}}</h2>
+
+    <p>{{INTRO_COMANDOS}}</p>
+
+    <div class="terminal-card">
+      <div class="terminal-card-header">
+        <span class="terminal-card-label">Terminal Managed Hostinger</span>
+        <span class="terminal-card-where">cola e dá Enter</span>
+      </div>
+      <div class="terminal-card-body"><span class="prompt-symbol">$</span>{{COMANDO_EXATO}}
+
+<span class="comment"># {{COMENTARIO_EXPLICATIVO}}</span></div>
+      <div class="terminal-card-tip">
+        ▶ {{RESULTADO_ESPERADO}}
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================= NUMS GRID (opcional · usar pra dados-chave) ========================= -->
+
+  <section class="nums">
+    <div class="num-card">
+      <div class="n">{{NUM_1}}</div>
+      <div class="l">{{LABEL_1}}</div>
+    </div>
+    <div class="num-card">
+      <div class="n">{{NUM_2}}</div>
+      <div class="l">{{LABEL_2}}</div>
+    </div>
+    <div class="num-card">
+      <div class="n">{{NUM_3}}</div>
+      <div class="l">{{LABEL_3}}</div>
+    </div>
+    <div class="num-card">
+      <div class="n">{{NUM_4}}</div>
+      <div class="l">{{LABEL_4}}</div>
+    </div>
+  </section>
+
+  <!-- ========================= TROUBLESHOOTING ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Travou? Antes de pedir ajuda</span>
+    <h2>Top <em>problemas comuns desta aula.</em></h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Sintoma</th>
+          <th>Causa provável</th>
+          <th>Ação</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>{{SINTOMA_1}}</td>
+          <td>{{CAUSA_1}}</td>
+          <td>{{ACAO_1}}</td>
+        </tr>
+        <tr>
+          <td>{{SINTOMA_2}}</td>
+          <td>{{CAUSA_2}}</td>
+          <td>{{ACAO_2}}</td>
+        </tr>
+        <tr>
+          <td>{{SINTOMA_3}}</td>
+          <td>{{CAUSA_3}}</td>
+          <td>{{ACAO_3}}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Cheatsheet completo:</strong> <a href="../../INDICE.md">{{CHEATSHEET_NOME}}</a> —
+        comandos detalhados, prompts prontos pra colar, troubleshooting profundo.
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Não conseguiu resolver com a tabela acima?</strong> Joga screenshot/áudio/vídeo
+        no <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">grupo Telegram do
+        curso</a>. openclawzinho responde em &lt;30 segundos · humanos em &lt;5 minutos.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= CTA PRÓXIMA AULA ========================= -->
+
+  <section class="sec sec-alt">
+    <div class="cta-card">
+      <h3>Próximo passo: <em>{{TITULO_PROXIMA_AULA}}</em></h3>
+      <p>{{DESC_PROXIMA_AULA}}</p>
+      <a href="../{{PROXIMA_AULA_PASTA}}.html" class="cta-button">→ Ir pra Aula {{PROXIMO_NUMERO}}</a>
+    </div>
+  </section>
+
+  <!-- ========================= FOOTER REUTILIZÁVEL — NÃO MEXER ========================= -->
+
+  <footer class="aula-footer">
+
+    <div class="aula-footer-block">
+      <h4>Travou? Tá no grupo do curso</h4>
+      <p>
+        Comunidade Telegram do curso —
+        <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">t.me/cursoopenclaw</a>
+        — suporte 24/7 (openclawzinho bot + Bruno e equipe presente).
+        Dúvida sobre essa aula, problemas de setup, ou quer compartilhar como aplicou
+        no seu negócio: bora trocar lá.
+      </p>
+    </div>
+
+    <div class="aula-footer-block">
+      <h4>Próximo nível: Pixel AI Hub</h4>
+      <p>
+        Aplicar agente pra empresa toda — equipe, governance, escala?
+        <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=material&utm_campaign=v1" target="_blank" rel="noopener">Pixel AI Hub</a>:
+        segundo cérebro corporativo, comunidade de empreendedores, +50 skills enterprise,
+        encontros mensais ao vivo. Vagas mensais limitadas.
+      </p>
+    </div>
+
+    <div class="aula-footer-credit">
+      Mini-Curso OpenClaw 2026 · Material complementar à gravação · Atualizações conforme kit evolui<br>
+      <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=footer-credit" target="_blank" rel="noopener">Bruno Okamoto · Pixel Educação</a>
+    </div>
+
+  </footer>
+
+</div>
+
+</body>
+</html>

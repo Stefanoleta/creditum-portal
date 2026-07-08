@@ -1,0 +1,201 @@
+{
+  "skill": "primeira-vitoria",
+  "version": "1.0",
+  "description": "4 cenários cobrindo: post LinkedIn (caminho mais comum), email (sem Brave), aluno trava sem inspiração, aluno detesta e refaz",
+  "scenarios": [
+    {
+      "id": "post-linkedin-completo",
+      "name": "Caminho feliz — post LinkedIn",
+      "description": "Aluno chega no passo 6 com tudo configurado. Pede post, agente busca Brave, gera, salva, NPS.",
+      "setup": {
+        "workspace_state": "tudo configurado, content/drafts vazia",
+        "memory_flags": {
+          "autonomia_liberada": true,
+          "workspace_organizado": true,
+          "conectado": true,
+          "brave_search_active": true,
+          "onboarding_current_step": 6
+        }
+      },
+      "interaction_flow": [
+        {
+          "user": "[despachado]",
+          "expected_agent_behavior": [
+            "checa dependências (autonomia + workspace + Brave) - tudo OK",
+            "Princípio 11 - content/drafts vazia, fluxo normal",
+            "narra promessa do passo (5min, artefato real)",
+            "pergunta tipo"
+          ]
+        },
+        {
+          "user": "a",
+          "expected_agent_behavior": [
+            "salva tipo=post",
+            "pergunta sobre o que",
+            "pergunta plataforma"
+          ]
+        },
+        {
+          "user": "post sobre 3 erros que cometo na padaria, pra LinkedIn",
+          "expected_agent_behavior": [
+            "salva tema",
+            "salva plataforma=LinkedIn",
+            "anuncia que vai buscar referências no Brave",
+            "roda call ao Brave Search"
+          ]
+        },
+        {
+          "user": "[Brave retornou 3 resultados]",
+          "expected_agent_behavior": [
+            "mostra os 3 resultados ao aluno",
+            "lê IDENTITY/SOUL/USER pra calibrar tom",
+            "gera draft seguindo padrão LinkedIn (parágrafos curtos)",
+            "salva em content/drafts/primeira-vitoria-post-{data}.md",
+            "mostra path + preview do conteúdo (primeiras linhas)",
+            "roda pergunta-âncora"
+          ]
+        },
+        {
+          "user": "content/drafts e sim posso editar",
+          "expected_agent_behavior": [
+            "valida resposta",
+            "menciona Aula 8",
+            "marca first_win_completed=true",
+            "pede NPS"
+          ]
+        },
+        {
+          "user": "9",
+          "expected_agent_behavior": [
+            "salva nps_score=9",
+            "agradece + convite pra grupo",
+            "renderiza checklist FINAL completa com 🎉",
+            "oferece 4 próximos passos opcionais",
+            "marca onboarding_complete=true"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "arquivo criado em content/drafts/primeira-vitoria-post-{data}.md",
+        "first_win_completed=true",
+        "onboarding_complete=true",
+        "nps_score=9 em MEMORY",
+        "Aula 8 mencionada",
+        "4 próximos passos opcionais oferecidos"
+      ]
+    },
+    {
+      "id": "email-sem-brave",
+      "name": "Email pra fornecedor — pula Brave",
+      "description": "Aluno escolhe email. Não precisa de pesquisa externa. Vai direto pra geração.",
+      "setup": {
+        "workspace_state": "tudo configurado",
+        "memory_flags": {}
+      },
+      "interaction_flow": [
+        {
+          "user": "[despachado, escolhe tipo]",
+          "expected_agent_behavior": ["pergunta tipo"]
+        },
+        {
+          "user": "b",
+          "expected_agent_behavior": [
+            "salva tipo=email",
+            "pergunta destinatário e assunto"
+          ]
+        },
+        {
+          "user": "Pedro, fornecedor de farinha. Pedindo desconto por volume.",
+          "expected_agent_behavior": [
+            "PULA pesquisa Brave (não faz sentido pra email)",
+            "lê USER.md pra tom",
+            "gera email seguindo tom + contexto",
+            "salva em content/drafts/primeira-vitoria-email-{data}.md"
+          ],
+          "must_not": [
+            "rodar Brave pra email pessoal (waste de query)"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "Brave NÃO foi chamado",
+        "email salvo em content/drafts/",
+        "fluxo prosseguiu normalmente"
+      ]
+    },
+    {
+      "id": "aluno-sem-inspiracao",
+      "name": "Aluno não sabe o que pedir",
+      "description": "Wizard sugere com base no USER.md.",
+      "setup": {
+        "workspace_state": "tudo configurado, USER.md tem 'dono de padaria pequena'",
+        "memory_flags": {}
+      },
+      "interaction_flow": [
+        {
+          "user": "[despachado]",
+          "expected_agent_behavior": ["pergunta tipo"]
+        },
+        {
+          "user": "não sei o que pedir",
+          "expected_agent_behavior": [
+            "lê o_que_faz do USER.md (dono de padaria)",
+            "sugere 3 opções personalizadas pelo contexto:",
+            "  a) Post sobre erros na padaria",
+            "  b) Decisão da semana",
+            "  c) Checklist diário",
+            "espera escolha"
+          ],
+          "must_not": [
+            "sugerir genérico sem contextualizar pelo USER"
+          ]
+        },
+        {
+          "user": "c, checklist",
+          "expected_agent_behavior": ["segue fluxo de checklist normalmente"]
+        }
+      ],
+      "success_criteria": [
+        "sugestões foram personalizadas pelo USER.md",
+        "fluxo prosseguiu após escolha"
+      ]
+    },
+    {
+      "id": "aluno-detesta-refaz",
+      "name": "Aluno pede refazer com ajuste de tom",
+      "description": "Versão 1 não bateu. Aluno pede refaz mais técnico. Wizard versiona em archive/ e gera v2.",
+      "setup": {
+        "workspace_state": "tudo configurado",
+        "memory_flags": {}
+      },
+      "interaction_flow": [
+        {
+          "user": "[despachado, completou geração v1]",
+          "expected_agent_behavior": ["mostrou v1, esperando feedback"]
+        },
+        {
+          "user": "ficou muito casual, refaz mais técnico",
+          "expected_agent_behavior": [
+            "Princípio 1 (backup): copia v1 pra archive/{nome}-v1.md",
+            "regenera com tom mais técnico",
+            "salva v2 no path original (não duplica arquivo)",
+            "mostra diff resumido do que mudou",
+            "pergunta se ficou bom"
+          ]
+        },
+        {
+          "user": "agora sim",
+          "expected_agent_behavior": [
+            "fluxo segue pra pergunta-âncora normalmente"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "v1 está em archive/",
+        "v2 substituiu v1 no content/drafts/",
+        "diff foi mostrado",
+        "aluno pôde aprovar antes de seguir"
+      ]
+    }
+  ]
+}

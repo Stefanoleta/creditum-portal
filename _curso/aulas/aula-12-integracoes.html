@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A12 — Integrações de produtividade · Mini-Curso OpenClaw</title>
+<meta name="description" content="Material complementar da Aula 12 — 4 padrões de auth universais (token, OAuth, CLI dedicada, IMAP/SMTP) cobrindo Notion, GitHub, Calendar, Gmail, Drive, CRM legado. Não decora 50 APIs — decora o modelo mental.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Fraunces:ital,wght@1,400;1,500;1,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="_shared/tokens.css">
+</head>
+
+<body>
+
+<div class="wrap">
+
+  <!-- ========================= HEADER ========================= -->
+
+  <header class="aula-header">
+    <div class="aula-header-brand">Mini-Curso <span class="accent">OpenClaw</span></div>
+    <div class="aula-header-meta">Aula 12 · Integrações</div>
+  </header>
+
+  <!-- ========================= HERO ========================= -->
+
+  <section class="hero">
+    <div class="hero-meta">
+      <span class="hero-meta-item">⏱ <strong>12 min</strong></span>
+      <span class="hero-meta-item">📚 <strong>Modular</strong></span>
+      <span class="hero-meta-item">🎯 <strong>A-ha #8</strong></span>
+    </div>
+
+    <h1>
+      Ele opera em cima da
+      <em>minha vida real.</em>
+    </h1>
+
+    <p class="hero-sub">
+      A A11 entregou <em>onde ele me responde</em>. A A12 entrega <em>em cima de quê ele opera</em>.
+      4 padrões de auth universais cobrem 90% dos casos — Notion, GitHub, Calendar, Gmail, Drive,
+      CRM legado. Você não decora 50 APIs. Aprende o modelo mental + delega o resto pro agente.
+    </p>
+  </section>
+
+  <!-- ========================= A-HA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">A-ha desta aula</span>
+    <div class="aha-card">
+      <span class="label">A-ha #8 entregue</span>
+      <p class="quote">"Ele NÃO TÁ DESCREVENDO um Notion. Ele TÁ NO MEU Notion."</p>
+    </div>
+  </section>
+
+  <!-- ========================= PRE-FLIGHT ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Pre-flight check</span>
+    <h2>Antes de <em>apertar play.</em></h2>
+
+    <p>
+      A12 é modular — não exige a próxima na sequência. Pré-requisitos reais: A2 (você tem
+      backup-workspace-github funcionando · setup do GitHub PAT já cobrado lá), A10 (princípios
+      de scope mínimo + defesa anti-injection no SOUL — obrigatório pro Bloco 7 de email).
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> A2 já feita (backup-workspace-github funcionando · você tem GitHub PAT)</p>
+      <p><span class="check">✓</span> A10 já feita (princípios de segurança · bloco anti-injection no SOUL)</p>
+      <p><span class="check">✓</span> Conta Notion ativa com pelo menos 1 page que você queira que o agente leia (workspace pessoal serve)</p>
+      <p><span class="check">✓</span> Conta Google ativa (Gmail/Calendar) que vai conectar via gog (NÃO usa sua conta crítica no day 1 — usa secundária pra demo)</p>
+      <p><span class="check">✓</span> 12-15 minutos sem interrupção — A12 tem 8 blocos e 6 prompts prontos pra colar</p>
+    </div>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>Pegadinha clássica:</strong> Notion exige <strong>compartilhar a page COM a
+        integração</strong> explicitamente — passo que muita gente esquece. Você cria o token
+        e configura tudo, mas se não for em cada page e clicar "Add connection" → escolher
+        sua integração, o agente não enxerga nada. Isso é cobrado no Bloco 3 da aula em
+        vídeo, mas vale alerta antecipado aqui.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= ESTRUTURA DA AULA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Estrutura da aula em vídeo</span>
+    <h2>O que você vai fazer em <em>8 blocos.</em></h2>
+
+    <p>
+      A12 é a aula mais densa do bloco modular — 8 blocos em 12 minutos. Tem 2 vitórias
+      visíveis (Notion no Bloco 3 e Calendar via gog no Bloco 5) e amarra com 4 outras aulas
+      (A2, A9, A10, A13).
+    </p>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-time">⏱ 1.5 min</div>
+        <div class="card-title">Bloco 1 — Tese: agente opera via API</div>
+        <p class="card-desc">
+          Cloud agent fala. Agente conectado <strong>opera</strong>. Realidade do PME:
+          atualiza CRM, lê inbox, abre ticket no Linear, confere agenda, edita roadmap no
+          Notion. Não tem "integração mágica" — tem 4 padrões de auth.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 2 min</div>
+        <div class="card-title">Bloco 2 — 4 padrões de auth</div>
+        <p class="card-desc">
+          <strong>Framework.</strong> Token simples · OAuth flow · CLI dedicada · IMAP/SMTP.
+          Cobre 90% dos casos. Aluno decora 4 padrões — não 50 APIs. Doc oficial é fonte
+          da verdade.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 2.5 min</div>
+        <div class="card-title">Bloco 3 — Notion via API token</div>
+        <p class="card-desc">
+          <strong>Demo ao vivo · vitória visível #1.</strong> Padrão 1 (token simples).
+          Aurora lê page real do Notion, lista cards In Progress. Alerta sobre
+          "share page com integração".
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1.5 min</div>
+        <div class="card-title">Bloco 4 — GitHub via PAT + skill commit-diario</div>
+        <p class="card-desc">
+          <strong>Caso real + gancho A2/A9.</strong> Cria skill <code>commit-diario-workspace</code>
+          ao vivo · cron 23h59 · complementa <code>backup-workspace-github</code> com granularidade
+          diária.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 2 min</div>
+        <div class="card-title">Bloco 5 — Google Workspace via gog CLI</div>
+        <p class="card-desc">
+          <strong>Demo · vitória visível #2.</strong> gog cobre Gmail + Calendar + Drive +
+          Docs + Sheets num CLI unificado. Já vem instalado no OpenClaw 2026.4+. 1 fluxo
+          OAuth pra tudo.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1 min</div>
+        <div class="card-title">Bloco 6 — Browser control: ferramenta sem API</div>
+        <p class="card-desc">
+          ERP antigo, CRM custom, painel admin só via UI. Agente abre navegador, faz login,
+          navega, lê, atualiza. <em>"Mesma coisa que você faz manualmente, só que automatizado."</em>
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1 min</div>
+        <div class="card-title">Bloco 7 — Webhooks + defesa email</div>
+        <p class="card-desc">
+          Agente <strong>reage</strong> a evento externo (ticket urgente, pagamento, PR
+          mergeado). Email é vetor #1 de prompt injection — defesa anti-injection no SOUL
+          é OBRIGATÓRIA (recap A10).
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 0.5 min</div>
+        <div class="card-title">Bloco 8 — Recap + amarração A13</div>
+        <p class="card-desc">
+          Recap em 5 linhas + frase de fechamento + gancho A13: <em>"ele tá fazendo MUITA
+          coisa agora — Notion, GitHub, Calendar, browser, webhook, email. Próxima aula:
+          um agente ou vários?"</em>
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ========================= TESE ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aprofundamento do Bloco 1</span>
+    <h2>Falar não é <em>operar.</em></h2>
+
+    <p>
+      Cloud agent fala. ChatGPT puro responde quando você chama, dá conselho, escreve texto.
+      Agente conectado é outra categoria — ele <strong>lê seu calendar real, escreve no
+      seu Notion real, abre PR no seu GitHub real, classifica seu inbox real</strong>.
+    </p>
+
+    <p>
+      Esse é o momento em que aluno PME para de pensar <em>"tenho um chatbot melhorado"</em>
+      e entende <em>"tenho um funcionário digital integrado"</em>. A diferença não é técnica
+      — é de <strong>papel</strong>.
+    </p>
+
+    <h3>Realidade do PME hoje</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> Agente atualiza CRM sem você abrir o painel</p>
+      <p><span class="check">✓</span> Agente lê inbox e classifica os 5 emails que precisam de você hoje</p>
+      <p><span class="check">✓</span> Agente abre ticket no Linear quando aluno reclama em comunidade</p>
+      <p><span class="check">✓</span> Agente confere agenda e te avisa do próximo evento + briefing dos participantes</p>
+      <p><span class="check">✓</span> Agente edita roadmap no Notion baseado em decisões do dia</p>
+      <p><span class="check">✓</span> Agente commit + push + PR diário do workspace pra GitHub privado</p>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Tese central:</strong> <em>"Toda ferramenta moderna tem API. Você dá uma
+        credencial pro agente, ele opera. Não tem 'integração mágica' — tem
+        <strong>4 padrões de auth</strong> que cobrem 90% dos casos."</em>
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= 4 PADRÕES ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Aprofundamento do Bloco 2 · framework</span>
+    <h2>4 padrões de <em>auth.</em></h2>
+
+    <p>
+      Esse é o coração da aula. Aprende esses 4 e você sabe conectar QUALQUER ferramenta
+      moderna — não importa se já existe, se é nova, se é interna da sua empresa.
+      A doc oficial de cada ferramenta diz qual padrão ela usa. O agente lê, conduz, valida.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Padrão</th>
+          <th>Como funciona</th>
+          <th>Exemplos</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td><strong>Token simples</strong> (API key)</td>
+          <td>Gera no painel da ferramenta · cola no <code>.env</code> (known key) · agente usa via Bearer</td>
+          <td>Notion · GitHub · Linear · Stripe · Buffer · Anthropic · Brave</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td><strong>OAuth flow</strong></td>
+          <td>Fluxo de browser · agente recebe access_token · refresha quando expira</td>
+          <td>Slack (como ferramenta de busca) · Twitter/X API · Spotify · Hubspot</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td><strong>CLI dedicada</strong></td>
+          <td>Instala CLI da plataforma · autentica uma vez via browser · agente roda comandos</td>
+          <td><strong>Google Workspace: <code>gog</code> CLI</strong> (Gmail/Calendar/Drive/Docs/Sheets) · AWS: <code>aws</code> · Azure: <code>az</code></td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td><strong>IMAP/SMTP + skill</strong></td>
+          <td>Protocolo padrão · skill custom abstrai · útil pra email</td>
+          <td>Gmail (alternativa ao gog) · Outlook · Yahoo · servidores email custom</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Princípio:</strong> <em>"Você decora 4 padrões. Não decora 50 APIs."</em>
+        E mais importante: <em>"a doc oficial de cada ferramenta é a fonte da verdade. O
+        agente lê, conduz o setup, valida. Você só fornece a credencial quando ele pedir."</em>
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Por que não MCP?</strong> MCP servers são uma alternativa real, mas o curso V2
+        decidiu por <strong>API direta + 4 padrões de auth</strong>. Razão: 4 padrões cobrem
+        90% dos casos e ensinam modelo mental transferível. MCP exige setup adicional por
+        servidor e maturidade que aluno PME não tem ainda. Bônus técnico cobre MCP pra quem
+        quiser depois.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= NOTION ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aprofundamento do Bloco 3 · momento A-ha #8</span>
+    <h2>Notion via <em>API token.</em></h2>
+
+    <p>
+      Demo ao vivo · padrão 1 (token simples — caso mais comum). Vitória visível #1: Aurora
+      respondendo no Telegram com conteúdo de page real do Notion.
+    </p>
+
+    <h3>Prompt pronto · Notion via Bearer token</h3>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #1 · conectar Notion</span>
+        <span class="prompt-card-where">cola no Telegram do agente</span>
+      </div>
+      <div class="prompt-card-body">Quero conectar meu Notion. Vai na doc oficial em
+https://docs.openclaw.ai/cli/secrets e em
+https://developers.notion.com/, lê como conectar via API com
+Bearer token, me explica:
+
+1. Onde criar o token (notion.so/my-integrations)
+2. Qual scope mínimo eu preciso (read-only se só vou ler,
+   read+write se vou criar/editar pages)
+3. Como adicionar token no .env (qual nome canônico)
+4. Como compartilhar pages/databases com a integração
+   (Notion exige isso explícito — passo que muita gente esquece)
+5. Como testar que tá funcionando
+
+Me pede a credencial quando estiver pronto, valida lendo
+uma page de teste, me avisa quando estiver tudo certo.
+Princípios A10: scope mínimo · token no cofre depois ·
+rotação periódica.</div>
+      <div class="prompt-card-tip">
+        💡 Esse é 1 dos 6 prompts prontos do cheatsheet. Os outros cobrem GitHub, Google
+        Workspace via gog, Stripe, Linear, Buffer — mesmo padrão, troca a ferramenta.
+      </div>
+    </div>
+
+    <h3>Resposta esperada da Aurora · vitória visível</h3>
+
+    <blockquote>
+      <p>
+        <em>"Achei sua página 'Roadmap Q2 — Pixel Educação'. 3 cards In Progress:
+        'Lançar mini-curso OpenClaw v2', 'Migrar Whisper local pra API', 'Reformular VSL'.
+        Quer que eu atualize algum? Ou crie card novo?"</em>
+      </p>
+    </blockquote>
+
+    <div class="callout callout-success">
+      <p>
+        <strong>A-ha #8 acontecendo:</strong> ele NÃO TÁ DESCREVENDO um Notion. Ele TÁ NO
+        MEU Notion. Diferença categorial — não é mais conselho. É operação real em cima
+        de dado real.
+      </p>
+    </div>
+
+    <h3>Pegadinha do Notion · share com integração</h3>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>O passo que muita gente esquece:</strong> token criado, configurado, salvo —
+        mas o agente não vê nada. Razão: Notion exige que você vá em <em>cada page ou
+        database</em> que quer compartilhar com a integração, clique em <strong>"Add connection"</strong>,
+        escolha sua integração na lista. Sem isso, integração tem permissão zero. Não é bug —
+        é design de privacidade do Notion.
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Token simples é o caminho mais comum.</strong> Notion · GitHub · Linear ·
+        Stripe · Buffer — todos seguem mesmo padrão. Cheatsheet do kit tem prompt pronto
+        pra cada um — você cola e ele conduz.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= GITHUB ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Aprofundamento do Bloco 4 · caso real + gancho A2/A9</span>
+    <h2>GitHub via PAT + skill <em>commit-diario.</em></h2>
+
+    <p>
+      Recap rápido (5s): você já configurou <code>backup-workspace-github</code> na A2.
+      Funciona pra snapshot. Mas faltava granularidade — saber o que mudou na quinta-feira.
+      O Bloco 4 resolve isso ao vivo.
+    </p>
+
+    <h3>Prompt pronto · conectar GitHub via PAT</h3>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #2 · conectar GitHub</span>
+        <span class="prompt-card-where">cola no Telegram do agente</span>
+      </div>
+      <div class="prompt-card-body">Quero conectar meu GitHub. Vai na doc oficial em
+https://docs.openclaw.ai/cli/secrets e em
+https://docs.github.com/en/rest, me explica:
+
+1. Onde gerar Personal Access Token (PAT) — fine-grained
+   ou classic
+2. Qual scope mínimo (recap A10): repo se quero commit/push,
+   apenas read se só vou ler
+3. Tempo de expiração (30/60/90 dias) e como rotacionar
+4. Adicionar como GITHUB_TOKEN no .env (known key OpenClaw)
+5. Validar com leitura de 1 repo de teste
+
+Me pede o token quando pronto. Cron mensal pra me lembrar
+de rotacionar 7 dias antes do vencimento (gancho A9).</div>
+      <div class="prompt-card-tip">
+        💡 PAT expira em 30/60/90 dias por padrão (boas práticas GitHub recomendam). Cron
+        mensal te lembra antes — não descobre vencido em meio a uma operação importante.
+      </div>
+    </div>
+
+    <h3>Comando natural pra criar a skill commit-diario-workspace</h3>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt · criar skill commit-diario</span>
+        <span class="prompt-card-where">cola no Telegram do agente</span>
+      </div>
+      <div class="prompt-card-body">Cria skill `commit-diario-workspace` que:
+
+- cd no workspace
+- git add .
+- git commit com mensagem "Auto: snapshot YYYY-MM-DD HH:mm"
+- git push origin main
+- me avisa no tópico Operação
+
+Roda toda noite 23h59 BRT em sessão isolada. Skip silencioso
+se git status limpo (nada pra commitar). Pausa skill se token
+expirar — me avisa pra rotacionar.</div>
+      <div class="prompt-card-tip">
+        💡 Skill rascunhada já tá no kit em <code>starter-kit/skills/operacional/commit-diario-workspace/</code>.
+        Aurora não escreve do zero ao vivo — confirma criação, agenda cron, primeira execução
+        em &lt; 30s.
+      </div>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Princípio do bloco:</strong> skill custom = automação específica que combina
+        API + cron + notificação. Você não escreve código — agente escreve. <code>backup-workspace-github</code>
+        (A2) faz snapshot. <code>commit-diario-workspace</code> (A12) dá granularidade
+        diária. Os dois juntos fecham operação.
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Recap A10/A12 sobre rotação:</strong> PAT expira. Cron mensal (gancho A9 —
+        meta-cron) lembra de rotacionar <strong>7 dias antes</strong> do vencimento. Você
+        não descobre token vencido em emergência — você rotaciona com calma uma vez por mês.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= GOG ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aprofundamento do Bloco 5 · vitória visível #2</span>
+    <h2>Google Workspace via <em>gog CLI.</em></h2>
+
+    <p>
+      Google é diferente — caminho oficial é <strong><code>gog</code> CLI</strong> (não
+      <code>gcloud</code>). gog cobre <strong>Gmail + Calendar + Drive + Docs + Sheets +
+      Contacts</strong> num CLI unificado. Boas notícias: <strong>já vem instalado no
+      OpenClaw 2026.4+</strong>. Setup é 1 fluxo OAuth pra tudo.
+    </p>
+
+    <h3>Comandos exatos</h3>
+
+    <div class="terminal-card">
+      <div class="terminal-card-header">
+        <span class="terminal-card-label">Terminal Managed</span>
+        <span class="terminal-card-where">setup gog em 4 comandos</span>
+      </div>
+      <div class="terminal-card-body"><span class="prompt-symbol">$</span>gog --version
+<span class="comment"># confere se já tá instalado (vem no OpenClaw 2026.4+)</span>
+
+<span class="prompt-symbol">$</span>gog auth credentials /path/to/client_secret.json
+<span class="comment"># aponta pro client_secret.json do Google Cloud Console</span>
+
+<span class="prompt-symbol">$</span>gog auth add seu@email.com --services gmail,calendar,drive,contacts,docs,sheets
+<span class="comment"># abre fluxo OAuth no browser · loga uma vez · cobre tudo</span>
+
+<span class="prompt-symbol">$</span>gog auth list
+<span class="comment"># confirma contas autenticadas + serviços ativos</span></div>
+      <div class="terminal-card-tip">
+        ▶ Setup OAuth roda 1x. Daí em diante, agente acessa Gmail/Calendar/Drive sem fricção.
+      </div>
+    </div>
+
+    <h3>Uso típico</h3>
+
+    <div class="terminal-card">
+      <div class="terminal-card-header">
+        <span class="terminal-card-label">Terminal Managed</span>
+        <span class="terminal-card-where">comandos gog mais comuns</span>
+      </div>
+      <div class="terminal-card-body"><span class="prompt-symbol">$</span>gog calendar events &lt;calendar-id&gt; --from 2026-01-01 --to 2026-01-07
+<span class="comment"># lista eventos no range</span>
+
+<span class="prompt-symbol">$</span>gog gmail search 'newer_than:7d'
+<span class="comment"># busca emails dos últimos 7 dias</span>
+
+<span class="prompt-symbol">$</span>gog drive search "minha pasta"
+<span class="comment"># busca arquivos no Drive</span></div>
+      <div class="terminal-card-tip">
+        ▶ Sintaxe consistente entre serviços. Cheatsheet completo:
+        <a href="https://github.com/steipete/gogcli" target="_blank" rel="noopener">github.com/steipete/gogcli</a>
+      </div>
+    </div>
+
+    <h3>Prompt pronto · Google Workspace via gog</h3>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #3 · conectar Google Workspace</span>
+        <span class="prompt-card-where">cola no Telegram do agente</span>
+      </div>
+      <div class="prompt-card-body">Quero conectar meu Google Workspace (Gmail + Calendar +
+Drive + Docs) via gog CLI. Confere se gog já está instalado
+(roda gog --version). Se sim, me explica e me guia:
+
+1. O que vamos conectar (qual conta Google)
+2. Quais serviços ativar (gmail · calendar · drive · contacts · docs · sheets)
+3. Fluxo OAuth (vai abrir browser pra eu logar) — 1x só
+4. Validação (gog auth list mostrando minha conta com serviços ativos)
+5. Teste rápido — gog calendar events listando próximos 3 eventos
+
+Se gog NÃO estiver instalado, me explica o caminho de
+instalação manual (apt/brew/curl) antes de tentar autenticar.
+
+Princípios A5/A10: agente confirma antes de enviar email
+ou criar evento (safe by default · gate humano).</div>
+      <div class="prompt-card-tip">
+        💡 1 prompt cobre Gmail, Calendar, Drive, Contacts, Docs, Sheets. Sintaxe é unificada.
+        Validar <code>gog --version</code> antes de gravar — se vier ausente do Managed por
+        algum motivo, plano B é instalar via agente ao vivo.
+      </div>
+    </div>
+
+    <h3>Vitória visível #2 · Aurora listando eventos</h3>
+
+    <blockquote>
+      <p>
+        <em>"Próximos 3 eventos: (1) Call Cayo amanhã 14h sobre VSL, (2) Lara aniversário
+        7/5, (3) Demo cliente terça 10h. Quer que eu prepare briefing pra cada?"</em>
+      </p>
+    </blockquote>
+
+    <h3>Por que gog em vez de gcloud</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> Cobre Google Workspace inteiro num CLI unificado · sintaxe consistente</p>
+      <p><span class="check">✓</span> Sem precisar criar projeto manualmente no Google Cloud Console (gog conduz)</p>
+      <p><span class="check">✓</span> Skills oficiais OpenClaw de Calendar/Drive/Gmail já usam gog · ecossistema integrado</p>
+      <p><span class="check">✓</span> Confirma antes de enviar email ou criar evento (safe by default — recap A5 gate humano)</p>
+    </div>
+  </section>
+
+  <!-- ========================= BROWSER ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Aprofundamento do Bloco 6</span>
+    <h2>Browser control: <em>quando não tem API decente.</em></h2>
+
+    <p>
+      Cenário típico do PME brasileiro: <strong>sistema legado interno</strong> (ERP antigo,
+      CRM custom da empresa), <strong>SaaS pequeno sem API pública nem MCP</strong>,
+      <strong>painel administrativo só funciona via UI</strong>. Solução: agente abre
+      navegador, faz login, navega, lê, atualiza.
+    </p>
+
+    <h3>Comando natural · ler painel CRM legado</h3>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt · browser control</span>
+        <span class="prompt-card-where">cola no Telegram do agente</span>
+      </div>
+      <div class="prompt-card-body">Abre o painel do meu CRM em [URL].
+Login: [email].
+Senha: lê do 1Password vault `OpenClaw/CRM` (gancho A10).
+
+Acessa a tela de leads, lista os 5 com status "aguardando
+contato", me manda no Telegram tópico Suporte com nome +
+valor + telefone.
+
+Se aparecer 2FA, PARA e me avisa — não tenta burlar.
+Se sessão expirar no meio, reconecta sob demanda.</div>
+      <div class="prompt-card-tip">
+        💡 Browser control é caminho legítimo. <em>"Mesma coisa que você faz manualmente, só
+        que automatizado."</em> Sem hack, sem gambiarra.
+      </div>
+    </div>
+
+    <h3>Ressalvas (recap A10)</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Scope de estagiário:</strong> agente NÃO tem write em sistema crítico sem confirmação humana (recap A5/A10)</p>
+      <p><span class="check">✓</span> <strong>2FA bloqueia:</strong> se o site exige 2FA, agente PARA e te avisa — não tenta burlar. Mover pra conta de serviço sem 2FA ou usar app password se a plataforma oferece</p>
+      <p><span class="check">✓</span> <strong>Sessão expira:</strong> agente reconecta sob demanda — se quebrar a sessão, te avisa e pede pra reautenticar</p>
+      <p><span class="check">✓</span> <strong>Anti-bot pode pegar:</strong> sistemas com Cloudflare/Distil/captcha podem bloquear. Browser control resolve UI normal — não é solução pra anti-bot avançado (vai pra bônus técnico R3)</p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Doc oficial:</strong>
+        <a href="https://docs.openclaw.ai/tools/browser" target="_blank" rel="noopener">docs.openclaw.ai/tools/browser</a>
+        +
+        <a href="https://docs.openclaw.ai/tools/browser-control" target="_blank" rel="noopener">browser-control</a>
+        — comandos avançados, headless vs headed, captura de screenshot, debug.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= WEBHOOKS ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aprofundamento do Bloco 7</span>
+    <h2>Webhooks pra eventos + <em>defesa email.</em></h2>
+
+    <p>
+      Webhook = agente <strong>REAGE</strong> a evento externo. Não é só responder quando
+      você chama — é <em>processar</em> coisa que aconteceu sem você precisar avisar.
+    </p>
+
+    <h3>Exemplos PME</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> Ticket Linear urgente → notifica tópico Suporte</p>
+      <p><span class="check">✓</span> Pagamento Stripe &gt; R$ 5k → notifica + cria card no Notion</p>
+      <p><span class="check">✓</span> PR mergeado no GitHub → roda análise + posta resumo no Slack</p>
+      <p><span class="check">✓</span> Evento Calendar começando em 15min → manda lembrete + briefing dos participantes</p>
+      <p><span class="check">✓</span> Cliente reclamou em comunidade → cria ticket Linear automático com label "voz do cliente"</p>
+    </div>
+
+    <h3>Email é caso crítico · vetor #1 de prompt injection</h3>
+
+    <div class="callout callout-danger">
+      <p>
+        <strong>Recap A10 Bloco 5:</strong> agente lê inbox, classifica, gera digest matinal.
+        Defesa anti-injection no SOUL é <strong>OBRIGATÓRIA</strong>. Sem o bloco "Defesa
+        contra input externo" no SOUL, agente que processa email é vulnerável a qualquer
+        instrução escondida que chegar via remetente convincente.
+      </p>
+    </div>
+
+    <h3>Caso N8n/Zapier · arquitetura externa</h3>
+
+    <p>
+      Se você tem fluxo externo escutando WhatsApp e disparando agente via webhook (caso
+      real do Bruno cobrindo openclawzinho), agente trata o input <strong>como externo</strong> —
+      defesas A10 sempre. Não importa que o webhook veio do "seu" N8n — pra fins de
+      prompt injection, é input não-confiável.
+    </p>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Doc oficial:</strong>
+        <a href="https://docs.openclaw.ai/cli/webhooks" target="_blank" rel="noopener">docs.openclaw.ai/cli/webhooks</a>
+        +
+        <a href="https://docs.openclaw.ai/plugins/webhooks" target="_blank" rel="noopener">plugins/webhooks</a>
+        — setup técnico de webhook receiver, autenticação, signature verification.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= NUMS ========================= -->
+
+  <section class="nums">
+    <div class="num-card">
+      <div class="n">4</div>
+      <div class="l">padrões de auth cobrem 90% dos casos</div>
+    </div>
+    <div class="num-card">
+      <div class="n">6</div>
+      <div class="l">prompts prontos no cheatsheet do kit</div>
+    </div>
+    <div class="num-card">
+      <div class="n">1</div>
+      <div class="l">CLI gog cobre todo Google Workspace</div>
+    </div>
+    <div class="num-card">
+      <div class="n">23h59</div>
+      <div class="l">cron commit-diario-workspace BRT</div>
+    </div>
+  </section>
+
+  <!-- ========================= TROUBLESHOOTING ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Troubleshooting</span>
+    <h2>Travou? <em>Antes de pedir ajuda.</em></h2>
+
+    <p>
+      Os 7 erros mais comuns ao integrar ferramentas e o caminho exato pra resolver. Se
+      passou pelos 7 e ainda não saiu do lugar, joga screenshot/log no grupo Telegram.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Erro / sintoma</th>
+          <th>Causa provável</th>
+          <th>Caminho</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Notion API retorna 404 em page que existe</strong></td>
+          <td>Page não foi compartilhada com a integração — Notion exige isso explícito</td>
+          <td>Vai na page no Notion · "..." → "Add connection" → escolhe sua integração na lista. Repete pra cada page que o agente precisa ler/escrever</td>
+        </tr>
+        <tr>
+          <td><strong>GitHub PAT funcionou ontem, hoje retorna 401</strong></td>
+          <td>PAT expirou (default 30/60/90 dias) ou token foi revogado por política do repo</td>
+          <td>Vai em github.com/settings/tokens · gera novo PAT com mesmo scope · atualiza <code>GITHUB_TOKEN</code> no <code>.env</code> · roda <code>openclaw secrets reload</code></td>
+        </tr>
+        <tr>
+          <td><strong><code>gog --version</code> retorna "command not found"</strong></td>
+          <td>Versão OpenClaw &lt; 2026.4 (gog não veio instalado por padrão)</td>
+          <td>Atualiza OpenClaw via painel Hostinger ou pede pro agente instalar gog manual via fluxo do <a href="https://github.com/steipete/gogcli" target="_blank" rel="noopener">gogcli README</a></td>
+        </tr>
+        <tr>
+          <td><strong>OAuth do gog falha com "invalid_client"</strong></td>
+          <td><code>client_secret.json</code> baixado da conta Google errada · ou projeto Google Cloud sem OAuth ativado</td>
+          <td>Confere se o <code>client_secret.json</code> é da conta certa · habilita "Gmail API · Calendar API · Drive API" no Google Cloud Console · gera credentials OAuth tipo "Desktop app"</td>
+        </tr>
+        <tr>
+          <td><strong>Browser control para no 2FA do CRM</strong></td>
+          <td>Site exige confirmação por SMS/app · agente não tem como interceptar</td>
+          <td>Cria conta de serviço dedicada SEM 2FA pra essa integração específica (recap A5 — funcionário digital com login próprio). Ou usa app password se a plataforma oferece</td>
+        </tr>
+        <tr>
+          <td><strong>Webhook recebe payload mas agente não processa</strong></td>
+          <td>Signature verification falhando · ou skill receiver não tá registrada</td>
+          <td>Confere assinatura do webhook (cada plataforma tem header próprio — <code>X-Hub-Signature</code> no GitHub, <code>Stripe-Signature</code> no Stripe). Roda <code>openclaw plugins list</code> pra ver se webhook receiver tá ativo</td>
+        </tr>
+        <tr>
+          <td><strong>Skill <code>commit-diario-workspace</code> não roda às 23h59</strong></td>
+          <td>Cron não foi agendado, ou timezone do Managed difere de BRT, ou git push falhou silencioso</td>
+          <td><code>openclaw crons list</code> · confere se cron tá ativo · confere timezone (<code>date</code> no terminal) · roda skill manual pra ver erro real (sem skip silencioso)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Cheatsheet completo:</strong>
+        <a href="../INDICE.md">integracoes-de-produtividade.md</a>
+        — 4 padrões de auth com tabela canônica, 6 prompts prontos pra colar (Notion, GitHub,
+        gog Google, Stripe, Linear, Buffer), princípios de segurança (recap A10),
+        troubleshooting estendido, quando não usar plano B.
+      </p>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Não conseguiu resolver com a tabela acima?</strong> Joga screenshot/log
+        (sanitiza tokens antes!) no
+        <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">grupo Telegram do
+        curso</a>. openclawzinho responde em &lt;30 segundos · humanos em &lt;5 minutos.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= FRASE-MÃE ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Frase-mãe da A12</span>
+    <div class="aha-card">
+      <span class="label">Pra colar na geladeira</span>
+      <p class="quote">"Toda ferramenta tem API. Você dá uma credencial. Ele opera. 4 padrões cobrem 90% dos casos. Você não decora APIs — você decora o modelo mental e escolhe o caminho certo."</p>
+    </div>
+  </section>
+
+  <!-- ========================= GANCHO A13 ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Gancho A13</span>
+    <h2>Ele saiu de "responde quando chamado" pra <em>"funcionário digital integrado".</em></h2>
+
+    <p>
+      Recap em 5 linhas:
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> Não tem "integração específica" pra cada ferramenta — tem <strong>4 padrões de auth</strong></p>
+      <p><span class="check">✓</span> <strong>Token simples</strong> é o mais comum (Notion, GitHub, Linear, Stripe, Buffer)</p>
+      <p><span class="check">✓</span> <strong>OAuth</strong> pra ferramentas que exigem (Slack-as-tool, Twitter)</p>
+      <p><span class="check">✓</span> <strong>CLI dedicada</strong> pra Google Workspace (<code>gog</code>) e clouds (<code>aws</code>, <code>az</code>)</p>
+      <p><span class="check">✓</span> <strong>Browser control</strong> + <strong>Webhooks</strong> pra fallbacks · email é vetor #1 de injection</p>
+    </div>
+
+    <p>
+      Frase de fechamento da aula em vídeo:
+      <em>"Ele saiu de 'responde quando chamado' (cloud agent) → 'trabalha 24/7' (A9) → 'fala
+      onde você fala' (A11) → <strong>'opera em cima do que você usa'</strong> (A12). É
+      funcionário digital de verdade."</em>
+    </p>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Mas espera</strong> — ele tá fazendo MUITA coisa agora. Notion · GitHub ·
+        Calendar · browser · webhook · email · 26 canais · crons · skills. Próxima aula:
+        <strong>um agente ou vários?</strong> Quando vale ter um time de agentes especializados,
+        e quando isso é overkill.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= CTA PRÓXIMA ========================= -->
+
+  <section class="sec sec-alt">
+    <div class="cta-card">
+      <h3>Próximo passo: <em>A13 — Multi-agente · subagentes</em></h3>
+      <p>
+        12 minutos · modular · framework pra <strong>decidir</strong> se vale evoluir pra
+        multi-agente (custo real explícito) + caminho técnico real quando vale.
+        Tese contraintuitiva: maioria absoluta dos PME não precisa.
+        <em>"Ele tem uma equipe quando precisa — e eu sei o caminho honesto pra montar."</em>
+      </p>
+      <a href="aula-13-multi-agente.html" class="cta-button">→ Ir pra Aula 13</a>
+    </div>
+  </section>
+
+  <!-- ========================= FOOTER ========================= -->
+
+  <footer class="aula-footer">
+
+    <div class="aula-footer-block">
+      <h4>Travou? Tá no grupo do curso</h4>
+      <p>
+        Comunidade Telegram do curso —
+        <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">t.me/cursoopenclaw</a>
+        — suporte 24/7 (openclawzinho bot + Bruno e equipe presente).
+        Dúvida sobre essa aula, problemas de setup, ou quer compartilhar como aplicou
+        no seu negócio: bora trocar lá.
+      </p>
+    </div>
+
+    <div class="aula-footer-block">
+      <h4>Próximo nível: Pixel AI Hub</h4>
+      <p>
+        Aplicar agente pra empresa toda — equipe, governance, escala?
+        <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=material&utm_campaign=v1" target="_blank" rel="noopener">Pixel AI Hub</a>:
+        segundo cérebro corporativo, comunidade de empreendedores, +50 skills enterprise,
+        encontros mensais ao vivo. Vagas mensais limitadas.
+      </p>
+    </div>
+
+    <div class="aula-footer-credit">
+      Mini-Curso OpenClaw 2026 · Material complementar à gravação · Atualizações conforme kit evolui<br>
+      <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=footer-credit" target="_blank" rel="noopener">Bruno Okamoto · Pixel Educação</a>
+    </div>
+
+  </footer>
+
+</div>
+
+</body>
+</html>

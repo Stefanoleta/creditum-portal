@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A11 — Outros canais · Mini-Curso OpenClaw</title>
+<meta name="description" content="Material complementar da Aula 11 — 26 canais nativos OpenClaw + WhatsApp via meta-prompt único. Slack, Discord, iMessage, Signal, Teams, Matrix e +20 outros. Não decora 26 tutoriais — decora 1 padrão.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Fraunces:ital,wght@1,400;1,500;1,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="_shared/tokens.css">
+</head>
+
+<body>
+
+<div class="wrap">
+
+  <!-- ========================= HEADER ========================= -->
+
+  <header class="aula-header">
+    <div class="aula-header-brand">Mini-Curso <span class="accent">OpenClaw</span></div>
+    <div class="aula-header-meta">Aula 11 · Outros canais</div>
+  </header>
+
+  <!-- ========================= HERO ========================= -->
+
+  <section class="hero">
+    <div class="hero-meta">
+      <span class="hero-meta-item">⏱ <strong>10 min</strong></span>
+      <span class="hero-meta-item">📚 <strong>Modular</strong></span>
+      <span class="hero-meta-item">🎯 <strong>A-ha #7</strong></span>
+    </div>
+
+    <h1>
+      Ele fala comigo
+      <em>onde eu já trabalho.</em>
+    </h1>
+
+    <p class="hero-sub">
+      A A4 te deu Telegram. A A11 entrega <em>liberdade de canal</em> — Slack, Discord, iMessage,
+      Signal, Teams, Matrix, +20 outros. Você não decora 26 tutoriais. Manda <em>1 prompt natural</em>
+      pro seu agente — ele lê a doc oficial e conduz.
+    </p>
+  </section>
+
+  <!-- ========================= A-HA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">A-ha desta aula</span>
+    <div class="aha-card">
+      <span class="label">A-ha #7 entregue</span>
+      <p class="quote">"Ele fala comigo onde eu já trabalho."</p>
+    </div>
+  </section>
+
+  <!-- ========================= PRE-FLIGHT ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Pre-flight check</span>
+    <h2>Antes de <em>apertar play.</em></h2>
+
+    <p>
+      A11 é modular — não exige aulas posteriores. Mas pré-requisitos reais: A4 (você já
+      sabe Telegram aprofundado) e A10 (princípios de segurança em canal público). Sem A10,
+      você pode conectar Slack rápido, mas vai sem rede de manipulação social.
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> A4 já feita (Telegram aprofundado · ressalva sobre WhatsApp)</p>
+      <p><span class="check">✓</span> A10 já feita (princípios de segurança em canal público + prompt blindado)</p>
+      <p><span class="check">✓</span> Decidiu o canal alvo — Slack pra equipe? Discord pra comunidade? Sabe pra que vai conectar antes de ligar</p>
+      <p><span class="check">✓</span> Conta administrativa do canal alvo (workspace Slack, server Discord, conta Teams) — ou permissão pra criar bot lá</p>
+      <p><span class="check">✓</span> 10 minutos sem interrupção pra acompanhar a demo de Slack ao vivo</p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Distinção da A12:</strong> A11 é <em>conversação</em> (fala/escuta texto humano).
+        A12 é <em>operação</em> (CRUD em dados/sistemas). Conectar Slack na A11 = agente
+        responde DM no Slack. Integrar Slack como ferramenta na A12 = agente lê histórico
+        de canal pra gerar summary. Padrões diferentes, aulas separadas.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= ESTRUTURA DA AULA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Estrutura da aula em vídeo</span>
+    <h2>O que você vai fazer em <em>6 blocos.</em></h2>
+
+    <p>
+      A A11 tem um coração: <strong>o meta-prompt único</strong>. Tudo o resto orbita em
+      volta dele. Demo ao vivo de Slack no Bloco 4 é a vitória visível.
+    </p>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-time">⏱ 1 min</div>
+        <div class="card-title">Bloco 1 — Por que outros canais</div>
+        <p class="card-desc">
+          Recap A4 em 5s · realidade do PME (Slack na equipe, Discord na comunidade,
+          iMessage no pessoal, Teams no enterprise). Princípio: <em>"agente vai onde você já
+          tá. Não você onde o agente tá."</em>
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1.5 min</div>
+        <div class="card-title">Bloco 2 — O meta-prompt único</div>
+        <p class="card-desc">
+          <strong>Coração da aula.</strong> 1 prompt natural cobre 26+ canais. Aluno fala
+          natural · agente lê doc oficial · agente conduz · doc é fonte da verdade.
+          3 informações que ele pede: identidade, credencial, escopo.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1.5 min</div>
+        <div class="card-title">Bloco 3 — Os 26 canais nativos</div>
+        <p class="card-desc">
+          Tabela em 4 categorias práticas (trabalho async · mensagem direta · comunidade
+          aberta · especiais e nicho). Padrão de conexão idêntico — só UX muda.
+          <strong>Recap A10 em 10s</strong>: cada canal novo aplica os mesmos princípios.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 2.5 min</div>
+        <div class="card-title">Bloco 4 — Demo ao vivo: conectar Slack</div>
+        <p class="card-desc">
+          <strong>Vitória visível.</strong> Bruno cola meta-prompt no Telegram · Aurora pede
+          token + escopo · Bruno fornece · Aurora valida · Aurora responde no Slack DM.
+          Aluno vê 2 canais funcionando ao vivo.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 0.5 min</div>
+        <div class="card-title">Bloco 5 — Multi-canal estratégico</div>
+        <p class="card-desc">
+          Você não precisa de TODOS os 26. Provavelmente 2-3 contextos:
+          pessoal + trabalho + especialista. Caso Bruno em 15s. Princípio:
+          <em>"cada canal serve um contexto. Não duplica."</em>
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1 min</div>
+        <div class="card-title">Bloco 6 — Recap + amarração A12</div>
+        <p class="card-desc">
+          Recap em 4 linhas + plano B no cheatsheet · gancho A12: <em>"aqui era 'onde ele me
+          responde'. Lá vai ser 'em cima de quê ele opera'."</em> Calendar, Notion, GitHub,
+          inbox.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ========================= META-PROMPT ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aprofundamento do Bloco 2 · coração da aula</span>
+    <h2>O meta-prompt <em>único.</em></h2>
+
+    <p>
+      Esse é o prompt que vai pro Telegram da Aurora (ou seu agente equivalente) pra
+      conectar <strong>qualquer</strong> dos 26 canais nativos. Você troca apenas o nome
+      do canal alvo. O resto é idêntico.
+    </p>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Meta-prompt · cobre 26 canais</span>
+        <span class="prompt-card-where">cola no Telegram do agente</span>
+      </div>
+      <div class="prompt-card-body">Conecta meu agente no [Slack / Discord / iMessage / Signal /
+Teams / Matrix / Google Chat / outro].
+
+Lê a doc oficial em https://docs.openclaw.ai/channels, segue
+o passo-a-passo do canal escolhido, me pede o que precisar
+(token, OAuth, QR, allowlist), valida que tá funcionando, e
+me avisa quando tiver tudo pronto.
+
+Se a doc tiver alguma escolha que muda como o canal funciona
+(ex: bot vs conta pessoal, DM vs canal específico, app oficial
+vs self-hosted), me explica as opções e me deixa escolher
+antes de seguir.</div>
+      <div class="prompt-card-tip">
+        💡 Princípio transversal A1, A2, A8, A9: <em>"seu agente lê documentação"</em>.
+        Aluno NÃO decora comando, token format, OAuth flow, webhook config, QR pairing.
+        Aluno fala natural · agente conduz · doc oficial é fonte da verdade.
+      </div>
+    </div>
+
+    <h3>3 informações que aluno fornece quando o agente pedir</h3>
+
+    <div class="item-icon">
+      <div class="item-icon-box">1</div>
+      <div class="item-icon-content">
+        <h3>Identidade do agente naquele canal</h3>
+        <p>
+          Recap A5: agente é funcionário digital, não sua conta pessoal. Em Slack:
+          <em>"bot dedicado da empresa, não meu user"</em>. Em Discord:
+          <em>"bot do server, não minha conta pessoal"</em>. Conta dedicada protege contra
+          banimento + manipulação social (recap A10).
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">2</div>
+      <div class="item-icon-content">
+        <h3>Credencial · token, OAuth, QR, app password</h3>
+        <p>
+          O agente te diz exatamente onde gerar a credencial pra cada canal. Slack:
+          api.slack.com → Slack App → Bot User OAuth Token. Discord: Developer Portal →
+          Bot Token. WhatsApp: QR pairing via Baileys. iMessage: BlueBubbles password.
+          Você fornece quando ele pedir.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">3</div>
+      <div class="item-icon-content">
+        <h3>Escopo · DM só seu? canal específico? grupo da equipe?</h3>
+        <p>
+          Recap A10 — escopo mínimo de estagiário. Slack: <em>"só DM comigo + canal
+          #ai-help"</em>. Discord: <em>"só canal #suporte, não responde DM aleatória"</em>.
+          Teams: <em>"só thread específica do projeto X"</em>. Promove conforme prova,
+          nunca abre tudo no day 1.
+        </p>
+      </div>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Frase do bloco:</strong> <em>"Você fala natural. Ele cuida da técnica."</em>
+        O aluno PME não vai virar engenheiro de canal. Vai virar empregador que sabe pedir
+        o que precisa — o agente faz o setup técnico.
+      </p>
+    </div>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>Aluno PME pode perguntar:</strong> <em>"e se a doc estiver desatualizada?"</em>
+        Tranquilo — a doc é mantida pelo time OpenClaw. Se algo mudou, o agente reporta na
+        hora. Você sempre vai saber se travar. Ele não inventa solução, ele para e pergunta.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= 26 CANAIS ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Aprofundamento do Bloco 3</span>
+    <h2>Os 26 canais <em>nativos.</em></h2>
+
+    <p>
+      Validados na doc oficial em <a href="https://docs.openclaw.ai/channels" target="_blank" rel="noopener">docs.openclaw.ai/channels</a>.
+      Lista organizada em <strong>4 categorias práticas pro PME</strong>. Cada canal tem
+      UX própria (post vs DM vs thread, mídia, formatação, threading), mas o
+      <strong>padrão de conexão é idêntico</strong> — token/OAuth/QR + escopo + identidade.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Categoria</th>
+          <th>Canais</th>
+          <th>Quando faz sentido</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Trabalho async</strong></td>
+          <td>Slack · Discord · Microsoft Teams · Mattermost</td>
+          <td>Equipe tech, comunidade, empresa enterprise</td>
+        </tr>
+        <tr>
+          <td><strong>Mensagem direta</strong></td>
+          <td>iMessage⚠️ · Signal · WhatsApp (A4/A10) · LINE · Telegram (A4)</td>
+          <td>Pessoal, privacidade, latência baixa</td>
+        </tr>
+        <tr>
+          <td><strong>Comunidade aberta</strong></td>
+          <td>Discord · Matrix · IRC · Google Chat · Twitch (chat) · Nostr</td>
+          <td>Comunidades nicho, federado, descentralizado</td>
+        </tr>
+        <tr>
+          <td><strong>Especiais e nicho</strong></td>
+          <td>WebChat (UI Gateway) · Voice Call (Plivo/Twilio, R4) · Self-hosted (Nextcloud Talk · Synology Chat) · Mercado Ásia (Feishu · WeChat · Yuanbao · QQ · Zalo) · BlueBubbles · Tlon</td>
+          <td>Mercados específicos, infra própria, descentralizado</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>iMessage = deprecated.</strong> Suporte legacy ainda funciona, mas novos
+        projetos preferem <strong>BlueBubbles</strong> (alternativa moderna com suporte
+        ativo) ou <strong>Signal</strong>. Se você é aluno PME que quer mensagem em ecossistema
+        Apple, não começa por iMessage direto — começa por BlueBubbles.
+      </p>
+    </div>
+
+    <h3>Recap A10 · cada canal novo = nova superfície</h3>
+
+    <p>
+      Cada canal conectado é uma nova porta de entrada. Aplica os princípios da A10
+      automaticamente em cada conexão:
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Conta dedicada</strong> onde gera output em nome seu (banimento atinge só o agente)</p>
+      <p><span class="check">✓</span> <strong>Prompt blindado</strong> em canal público (escopo restrito + bloco anti-injection no SOUL)</p>
+      <p><span class="check">✓</span> <strong>Monitoramento diário 30 dias</strong> nos primeiros dias de cada canal público novo · depois mensaliza</p>
+      <p><span class="check">✓</span> <strong>Escutar ≠ interagir</strong> — se o canal só processa input, arquitetura é outra (recap A10 Bloco 4)</p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Email IMAP/SMTP, webhook genérico (Zapier/N8n), Linear, Rocket.Chat, Zulip,
+        Threema</strong> não são canais nativos do OpenClaw — não entram nessa lista. Email
+        vai pra A12 como ferramenta de produtividade (com defesa anti-injection obrigatória).
+        Webhook genérico também vira A12. Linear, Rocket, Zulip, Threema saem do escopo do
+        curso V2 — bônus específico se pedir.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= DEMO SLACK ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aprofundamento do Bloco 4 · momento A-ha #7</span>
+    <h2>Demo ao vivo: <em>conectar Slack.</em></h2>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Case real do curso:</strong> openclawzinho é o agente de suporte da comunidade
+        Telegram do curso OpenClaw. +1.000 alunos atendidos · resposta &lt;30s · escala pra humanos
+        quando trava. Setup completo via 1 prompt pro Amora — sem mexer em config manual. Esse
+        aluno (você) vai cruzar com ele no grupo do curso (<a href="https://t.me/cursoopenclaw">t.me/cursoopenclaw</a>).
+      </p>
+    </div>
+
+    <p>
+      O coração visível da aula. Bruno cola o meta-prompt no Telegram (Aurora). Em ~30s,
+      Aurora processa, pede token + escopo, valida, responde no Slack DM. Aluno vê
+      <strong>2 canais funcionando ao mesmo tempo</strong> — Telegram e Slack.
+    </p>
+
+    <h3>Passo 1 · Bruno cola o meta-prompt no Telegram</h3>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt · conectar Slack</span>
+        <span class="prompt-card-where">Telegram da Aurora</span>
+      </div>
+      <div class="prompt-card-body">Conecta meu agente no Slack. Lê a doc oficial em
+https://docs.openclaw.ai/channels, segue o passo a passo,
+me pede o que precisar, valida que funciona, me avisa quando
+tiver pronto.</div>
+      <div class="prompt-card-tip">
+        💡 Versão curta do meta-prompt — Aurora preenche o resto sozinha consultando a doc.
+      </div>
+    </div>
+
+    <h3>Passo 2 · Aurora pede o que precisa</h3>
+
+    <blockquote>
+      <p>
+        <em>"Pra conectar no Slack, preciso de 2 coisas: (1) <strong>token de bot do Slack</strong>
+        — você cria no api.slack.com criando um Slack App, instala no workspace, copia o
+        Bot User OAuth Token; (2) <strong>escopo</strong>: quer que eu poste em canal específico,
+        ou só responda DMs pra você? Te passo o link do api.slack.com pra criar o bot agora?"</em>
+      </p>
+    </blockquote>
+
+    <h3>Passo 3 · Bruno fornece (pré-preparado)</h3>
+
+    <blockquote>
+      <p>
+        <em>"Token: xoxb-... Escopo: só DM comigo + canal #operacao-amora"</em>
+      </p>
+    </blockquote>
+
+    <h3>Passo 4 · Aurora conecta · valida · responde no Slack DM</h3>
+
+    <div class="terminal-card">
+      <div class="terminal-card-header">
+        <span class="terminal-card-label">Resposta da Aurora no Slack DM</span>
+        <span class="terminal-card-where">vitória visível</span>
+      </div>
+      <div class="terminal-card-body"><span class="comment">✅ Conectado.</span>
+
+Manda /start aqui no Slack pra confirmar que tá funcionando.</div>
+      <div class="terminal-card-tip">
+        ▶ Bruno troca pro Slack, manda <code>/start</code>, Aurora responde no Slack.
+        <strong>Saiu do Telegram pra outro canal sem perder fio.</strong>
+      </div>
+    </div>
+
+    <div class="callout callout-success">
+      <p>
+        <strong>A-ha #7 acontecendo:</strong> <em>"Eu não decorei nada. Falei o que queria.
+        Ele leu a doc e fez. E se quiser amanhã conectar Discord ou iMessage, mesmo prompt —
+        só troca o nome do canal."</em>
+      </p>
+    </div>
+
+    <h3>Plano B · cheatsheet com comando CLI direto</h3>
+
+    <p>
+      E se o agente travar conectando algum canal — rate limit, doc desatualizada, erro
+      inesperado? O cheatsheet
+      <a href="../INDICE.md">outros-canais.md</a>
+      do kit tem o <strong>comando CLI direto + link da doc oficial</strong> pra cada um
+      dos 24 canais. Cola no terminal Managed e segue manual. Plano B sempre pronto.
+    </p>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Quando NÃO usar plano B:</strong> aluno PME sem confiança em terminal · canal
+        novo na vida · token sensível que você não quer expor mesmo no terminal Managed.
+        Nesses casos, vai pelo meta-prompt e o agente conduz com mais conforto.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= MULTI-CANAL ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Aprofundamento do Bloco 5</span>
+    <h2>Multi-canal <em>estratégico.</em></h2>
+
+    <p>
+      Você não precisa de TODOS os 26 canais. <strong>Provavelmente 2-3</strong> resolvem
+      sua vida operacional inteira. Conectar mais que isso vira ruído — o agente passa a
+      ter que decidir <em>onde</em> responder em vez de <em>o que</em> responder.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Eixo</th>
+          <th>Exemplo</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Pessoal</strong></td>
+          <td>Telegram (default do curso) + WhatsApp se for caso (com ressalva A10)</td>
+        </tr>
+        <tr>
+          <td><strong>Trabalho</strong></td>
+          <td>Slack ou Discord (depende do time — equipe tech tende pra Slack, comunidade pra Discord)</td>
+        </tr>
+        <tr>
+          <td><strong>Especialista</strong></td>
+          <td>Canal de comunidade, fórum, ou nicho específico (Matrix pra federado, BlueBubbles pra Apple, Feishu pra mercado Ásia)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Princípio:</strong> <em>"Cada canal serve um contexto. Não duplica."</em>
+        Se o mesmo agente fala com você no Telegram E no Slack E no Discord pra mesmo tipo
+        de tarefa, você criou 3 superfícies redundantes. Escolhe o melhor pra aquele contexto
+        e fecha o resto.
+      </p>
+    </div>
+
+    <h3>Caso Bruno (15s)</h3>
+
+    <p>
+      Telegram pessoal pra trabalho do dia · Slack interno Pixel pra equipe · WhatsApp
+      openclawzinho pra comunidade do curso (com ressalva da A10 — conta dedicada,
+      monitoramento diário, prompt blindado).
+    </p>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>Tentação comum:</strong> aluno conecta tudo "porque pode". 1 mês depois tá
+        com fadiga de notificação cruzada e não sabe em qual canal o agente respondeu o que.
+        Resista. 2-3 canais bem definidos &gt; 26 canais ativos.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= NUMS ========================= -->
+
+  <section class="nums">
+    <div class="num-card">
+      <div class="n">26</div>
+      <div class="l">canais nativos OpenClaw</div>
+    </div>
+    <div class="num-card">
+      <div class="n">1</div>
+      <div class="l">meta-prompt cobre todos</div>
+    </div>
+    <div class="num-card">
+      <div class="n">3</div>
+      <div class="l">informações que o agente pede</div>
+    </div>
+    <div class="num-card">
+      <div class="n">2-3</div>
+      <div class="l">canais ideais pra um PME</div>
+    </div>
+  </section>
+
+  <!-- ========================= TROUBLESHOOTING ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Troubleshooting</span>
+    <h2>Travou? <em>Antes de pedir ajuda.</em></h2>
+
+    <p>
+      Os 7 erros mais comuns ao conectar canais novos e o caminho exato pra resolver. Se você
+      passou pelos 7 e ainda não saiu do lugar, joga screenshot/log no grupo Telegram.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Erro / sintoma</th>
+          <th>Causa provável</th>
+          <th>Caminho</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Slack OAuth expira / agente para de responder</strong></td>
+          <td>OAuth flow do Slack tem refresh, mas pode ser revogado se admin do workspace mudou política</td>
+          <td>Pede pro agente reconectar via meta-prompt — ele detecta token inválido e abre fluxo OAuth de novo. Confere se o admin do workspace não removeu o app</td>
+        </tr>
+        <tr>
+          <td><strong>Discord token revogado de repente</strong></td>
+          <td>Bot pode ter sido removido do server, ou token regenerado pelo Developer Portal</td>
+          <td>Acessa Developer Portal · gera novo token · cola no agente pelo meta-prompt. Confere se o bot ainda tá no server (pode ter sido kickado)</td>
+        </tr>
+        <tr>
+          <td><strong>QR do WhatsApp/Zalo expira em 1h e some</strong></td>
+          <td>QR pairing tem janela curta — se você pareou e não usou, sessão pode ter morrido. Sintoma de Baileys</td>
+          <td>Reseta a conexão · pede novo QR ao agente · escaneia rápido (&lt; 60s) · valida com mensagem de teste antes de fechar a janela</td>
+        </tr>
+        <tr>
+          <td><strong>2FA bloqueando bot</strong> (iMessage/Signal/Teams)</td>
+          <td>Conta com 2FA exige confirmação manual que bot não tem como dar — agente para no passo de auth</td>
+          <td>Conta dedicada sem 2FA pra esse uso (recap A5/A10) — não usa sua conta pessoal com 2FA. Ou usa app password se a plataforma oferece</td>
+        </tr>
+        <tr>
+          <td><strong>Canal precisa adicionar bot como admin</strong> (Slack channel privado, Discord server)</td>
+          <td>Bot tá conectado mas não tem permissão pra postar em canal específico — falta o convite no canal</td>
+          <td>No Slack: <code>/invite @nome-do-bot</code> no canal alvo. No Discord: arrasta bot pra role com permissão. No Teams: adiciona bot como membro do team</td>
+        </tr>
+        <tr>
+          <td><strong><code>getUpdates 409</code> no Telegram</strong> ao trocar de canal</td>
+          <td>Conflict — duas instâncias do bot tentando puxar mensagens do mesmo token simultaneamente</td>
+          <td>Para o webhook concorrente · roda <code>openclaw channels list</code> · revoga conexão duplicada · reconecta única instância</td>
+        </tr>
+        <tr>
+          <td><strong>Bot não responde após mudar privacy do bot</strong> (Telegram bot privacy mode)</td>
+          <td>BotFather mudou privacy mode (bot só vê mensagens dirigidas a ele) — bot precisa ser re-adicionado a grupos pra captar mensagens</td>
+          <td>Re-add o bot em cada grupo onde ele perdeu acesso · ou desabilita privacy mode no BotFather (<code>/setprivacy</code> → Disable)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Cheatsheet completo:</strong>
+        <a href="../INDICE.md">outros-canais.md</a> —
+        meta-prompt versão final, tabela canônica dos 24 canais com setup CLI direto, auth e
+        link da doc oficial pra cada um, troubleshooting estendido.
+      </p>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Não conseguiu resolver com a tabela acima?</strong> Joga screenshot/log no
+        <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">grupo Telegram do
+        curso</a>. openclawzinho responde em &lt;30 segundos · humanos em &lt;5 minutos.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= FRASE-MÃE ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Frase-mãe da A11</span>
+    <div class="aha-card">
+      <span class="label">Pra colar na geladeira</span>
+      <p class="quote">"Não decora 26 tutoriais. Decora 1 padrão: agente lê doc, agente conecta, você usa."</p>
+    </div>
+  </section>
+
+  <!-- ========================= GANCHO A12 ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Gancho A12</span>
+    <h2>De <em>"onde ele me responde"</em> pra <em>"em cima de quê ele opera".</em></h2>
+
+    <p>
+      A11 entregou conversação — agente fala com você no canal que você já usa. Mas
+      conversar é metade da história. <strong>Próxima aula entrega operação</strong> —
+      mesmo meta-prompt funciona pra ferramentas de produtividade. Calendar, Notion, GitHub,
+      Drive, email.
+    </p>
+
+    <p>
+      Aqui ele saiu do Telegram pra falar no Slack. Lá ele <strong>sai de "responder
+      quando chamado" pra "operar em cima da sua vida real"</strong>: edita roadmap no
+      Notion, abre PR no GitHub, lê próximo evento no Calendar, classifica seu inbox.
+    </p>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Frase do gancho:</strong> <em>"Aqui era 'onde ele me responde'. Lá vai ser
+        'em cima de quê ele opera'."</em> A11 + A12 juntas fecham o ciclo de conexão real
+        do agente com o mundo do PME.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= CTA PRÓXIMA ========================= -->
+
+  <section class="sec sec-alt">
+    <div class="cta-card">
+      <h3>Próximo passo: <em>A12 — Integrações de produtividade</em></h3>
+      <p>
+        12 minutos · modular · 4 padrões de auth universais (token simples · OAuth · CLI
+        dedicada · IMAP/SMTP) cobrindo Notion, GitHub, Calendar, Gmail, Drive, CRM legado.
+        Não decora 50 APIs — decora o modelo mental e escolhe o caminho certo.
+        <em>"Ele opera em cima da minha vida real."</em>
+      </p>
+      <a href="aula-12-integracoes.html" class="cta-button">→ Ir pra Aula 12</a>
+    </div>
+  </section>
+
+  <!-- ========================= FOOTER ========================= -->
+
+  <footer class="aula-footer">
+
+    <div class="aula-footer-block">
+      <h4>Travou? Tá no grupo do curso</h4>
+      <p>
+        Comunidade Telegram do curso —
+        <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">t.me/cursoopenclaw</a>
+        — suporte 24/7 (openclawzinho bot + Bruno e equipe presente).
+        Dúvida sobre essa aula, problemas de setup, ou quer compartilhar como aplicou
+        no seu negócio: bora trocar lá.
+      </p>
+    </div>
+
+    <div class="aula-footer-block">
+      <h4>Próximo nível: Pixel AI Hub</h4>
+      <p>
+        Aplicar agente pra empresa toda — equipe, governance, escala?
+        <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=material&utm_campaign=v1" target="_blank" rel="noopener">Pixel AI Hub</a>:
+        segundo cérebro corporativo, comunidade de empreendedores, +50 skills enterprise,
+        encontros mensais ao vivo. Vagas mensais limitadas.
+      </p>
+    </div>
+
+    <div class="aula-footer-credit">
+      Mini-Curso OpenClaw 2026 · Material complementar à gravação · Atualizações conforme kit evolui<br>
+      <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=footer-credit" target="_blank" rel="noopener">Bruno Okamoto · Pixel Educação</a>
+    </div>
+
+  </footer>
+
+</div>
+
+</body>
+</html>

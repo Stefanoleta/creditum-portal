@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A1 — Setup Managed OpenClaw · Mini-Curso OpenClaw</title>
+<meta name="description" content="Material complementar da Aula 1 — setup completo do agente OpenClaw Managed em ~16min: Fase A credencial OpenAI API, Fase B OAuth ChatGPT via terminal, Telegram pro Quick Win.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Fraunces:ital,wght@1,400;1,500;1,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="_shared/tokens.css">
+</head>
+
+<body>
+
+<div class="wrap">
+
+  <!-- ========================= HEADER ========================= -->
+
+  <header class="aula-header">
+    <div class="aula-header-brand">Mini-Curso <span class="accent">OpenClaw</span></div>
+    <div class="aula-header-meta">Aula 01 · Setup</div>
+  </header>
+
+  <!-- ========================= HERO ========================= -->
+
+  <section class="hero">
+    <div class="hero-meta">
+      <span class="hero-meta-item">⏱ <strong>16 min</strong></span>
+      <span class="hero-meta-item">📚 <strong>Sequencial</strong></span>
+      <span class="hero-meta-item">🎯 <strong>A-ha #1</strong></span>
+    </div>
+
+    <h1>
+      Setup Managed +
+      <em>agente respondendo.</em>
+    </h1>
+
+    <p class="hero-sub">
+      Em <em>~16min</em> você sai de "comprei o curso" pra "tenho um agente respondendo no
+      meu celular". 6 blocos · 2 fases de credencial · 1 comando no terminal · Telegram funcional
+      pra desbloquear a próxima aula. <em>Zero código.</em>
+    </p>
+  </section>
+
+  <!-- ========================= A-HA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">A-ha desta aula</span>
+    <div class="aha-card">
+      <span class="label">A-ha #1 entregue</span>
+      <p class="quote">"Meu agente respondeu + se conhece + tá no meu celular."</p>
+    </div>
+  </section>
+
+  <!-- ========================= PRE-FLIGHT ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Pre-flight check</span>
+    <h2>Antes de <em>apertar play.</em></h2>
+
+    <p>
+      A1 é sequencial — não dá pra pular passo. Reserva 30-45 minutos sem interrupção (idealmente
+      A1 + A2 em sequência) e tem em mãos:
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> cartão de crédito (pra OpenAI API)</p>
+      <p><span class="check">✓</span> conta ChatGPT Plus criada e logada (recomendado, não obrigatório no day 1)</p>
+      <p><span class="check">✓</span> navegador atualizado</p>
+      <p><span class="check">✓</span> celular com Telegram instalado</p>
+      <p><span class="check">✓</span> link da comunidade aberto (<a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">t.me/cursoopenclaw</a>) pra travar em algum passo</p>
+    </div>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>Pegadinha clássica:</strong> aluno PME confunde <code>platform.openai.com</code>
+        (onde você gera API key) com <code>chatgpt.com</code> (onde você assina ChatGPT Plus).
+        SÃO SITES DIFERENTES. Se você cadastrou cartão no chatgpt.com pensando que era pra API,
+        abriu assinatura ChatGPT Plus — não API. Cancela e vai pro platform.openai.com.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= ESTRUTURA DA AULA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Estrutura da aula em vídeo</span>
+    <h2>O que você vai fazer em <em>6 blocos.</em></h2>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-time">⏱ 1 min</div>
+        <div class="card-title">Bloco 1 — Por que Managed</div>
+        <p class="card-desc">
+          Recap A0 da escolha de stack. Analogia "alugar apartamento mobiliado" vs "comprar casa".
+          VPS standalone vira bônus técnico (R1-R4) — não é trilha do curso MAIN.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 3 min</div>
+        <div class="card-title">Bloco 2 — Os 2 caminhos da Hostinger</div>
+        <p class="card-desc">
+          Visual: 2 prints lado a lado das landings · Caminho A (Managed OpenClaw — usado no curso) ·
+          Caminho B (VPS standalone — não cancela, é útil pra outros usos depois). Cupom
+          <code>BRUNOOKAMOTO</code> · reembolso via chat com agente Hostinger se errar.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 6 min</div>
+        <div class="card-title">Bloco 3 — Setup em 2 fases</div>
+        <p class="card-desc">
+          <strong>Fase A</strong> (credencial OpenAI API · 5 cliques · sem terminal):
+          conta · cartão · crédito · API key · contrato Managed · login painel.
+          <strong>Fase B</strong> (OAuth ChatGPT · 1 comando no terminal Managed):
+          destrava GPT 5.5/5.4 da assinatura.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 3 min</div>
+        <div class="card-title">Bloco 4 — Agente responde + Onboarding</div>
+        <p class="card-desc">
+          Primeira mensagem · agente confirma quem é · cola prompt de onboarding do Kit · agente lê
+          <code>llms-full.txt</code> · cria <code>MEMORY.md</code> com auto-conhecimento estruturado.
+          <strong>A-ha #1</strong> conquistado.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 2 min</div>
+        <div class="card-title">Bloco 5 — Conectar Telegram pro Quick Win</div>
+        <p class="card-desc">
+          @BotFather · cria bot · pega token · cola comando no terminal Managed · agente responde
+          no seu celular. Vitória visível: agente saiu da web pro mobile. Habilita A4
+          (Starter Kit precisa de upload de zip que só Telegram aceita).
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1 min</div>
+        <div class="card-title">Bloco 6 — Recap + amarração A2</div>
+        <p class="card-desc">
+          Você tem: Managed contratado · API key · OAuth ativo · agente respondendo · MEMORY.md
+          auto-criado · Telegram DM funcionando. <strong>Amarração A2:</strong> "você
+          entrou no terminal só pra rodar 1 comando — na A2 vai morar lá 15min e descobrir que
+          é o cockpit do seu agente."
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ========================= FASE A ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Bloco 3 · Fase A</span>
+    <h2>Configurar credencial <em>OpenAI API.</em></h2>
+
+    <p>
+      Esses 5 passos são <strong>todos clicáveis no painel</strong> — sem terminal, sem comando.
+      Pega ~5 minutos se você for com calma.
+    </p>
+
+    <div class="item-icon">
+      <div class="item-icon-box">1</div>
+      <div class="item-icon-content">
+        <h3>Criar conta no platform.openai.com</h3>
+        <p>
+          Abre <a href="https://platform.openai.com" target="_blank" rel="noopener">platform.openai.com</a>
+          (NÃO confundir com chatgpt.com). Cria conta com email pessoal ou Google.
+          Pula questionário "what brings you to OpenAI?" — qualquer resposta serve.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">2</div>
+      <div class="item-icon-content">
+        <h3>Cadastrar cartão + comprar crédito (US$ 5-10)</h3>
+        <p>
+          <strong>Settings</strong> → <strong>Billing</strong> → <strong>Add payment method</strong>
+          (cartão de crédito internacional) → <strong>Add credit balance</strong> (US$ 5-10).
+          Pagamento processa em ~30 segundos.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">3</div>
+      <div class="item-icon-content">
+        <h3>Gerar API key</h3>
+        <p>
+          <strong>API Keys</strong> → <strong>+ Create new secret key</strong>.
+          Nome: <code>openclaw-managed</code>. Permissions: All. <strong>Copia a chave</strong> —
+          começa com <code>sk-proj-...</code>. Cola num lugar seguro temporariamente (vai usar no Passo 5).
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">4</div>
+      <div class="item-icon-content">
+        <h3>Contratar Hostinger Managed OpenClaw</h3>
+        <p>
+          Abre <a href="https://www.hostg.xyz/SHJMI" target="_blank" rel="noopener">hostg.xyz/SHJMI</a> ·
+          aplica cupom <code>BRUNOOKAMOTO</code> · finaliza · aguarda provisionamento (3-5 min).
+          Email da Hostinger chega quando OpenClaw estiver pronto.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">5</div>
+      <div class="item-icon-content">
+        <h3>Logar painel OpenClaw com API key</h3>
+        <p>
+          Email Hostinger → link de acesso → painel OpenClaw → setup wizard pede API key →
+          cola a chave do Passo 3. Painel ativa · agente já consegue responder.
+        </p>
+      </div>
+    </div>
+
+    <div class="callout callout-danger">
+      <p>
+        <strong>Atenção:</strong> a API key só aparece UMA VEZ. Se fechar a janela sem copiar,
+        precisa gerar outra. Cola num lugar seguro AGORA — bloco de notas, password manager,
+        Slack do you mesmo. Princípio A10 (segurança): NÃO compartilha · NÃO commita em repo
+        público.
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Por que US$ 5-10?</strong> Cobre meses de uso PME normal (Whisper +
+        embeddings + algumas chamadas DALL-E). Se acabar, você só recarrega quando o saldo
+        cair — sem assinatura mensal automática.
+      </p>
+    </div>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>Caiu na landing errada?</strong> Se o site oferecer VPS standalone em vez de
+        Managed OpenClaw, NÃO CANCELA — VPS é útil pra outras coisas depois (rodar outros
+        OpenClaw, Claude direto, MCPs). Mas pra esse curso você precisa <strong>especificamente
+        do Managed OpenClaw</strong>. Pega o Managed pelo link acima também. Se errou e quer
+        reembolso do VPS: chat com agente Hostinger no painel deles.
+      </p>
+    </div>
+
+    <div class="callout callout-success">
+      <p>
+        <strong>Validação Fase A:</strong> agente respondendo no Gateway do Managed OpenClaw via
+        API key. Manda <code>oi, quem é vc?</code> e ele responde. Se respondeu, <strong>Fase A
+        OK</strong> — pronto pra Fase B (OAuth no terminal).
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= FASE B ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Bloco 3 · Fase B</span>
+    <h2>Ativar OAuth ChatGPT — <em>segundo passo crítico.</em></h2>
+
+    <p>
+      Aqui você abre o terminal Managed pela <strong>primeira (e provavelmente única) vez</strong>
+      no curso. No V2, esse é o ÚNICO comando que você cola manualmente — daqui em diante o
+      agente faz tudo via Telegram.
+    </p>
+
+    <h3>Por que esse comando é manual</h3>
+
+    <p>
+      Comandos de elevação de privilégio (mudar autenticação do agente) <strong>JAMAIS passam pelo
+      próprio agente</strong> — é princípio defensivo do OpenClaw. Você decide quando ativar OAuth.
+      Aprofunda na A10 (segurança operacional).
+    </p>
+
+    <h3>Passo 1 — Abrir terminal Managed</h3>
+
+    <ol>
+      <li>Painel Hostinger → menu OpenClaw → seu OpenClaw</li>
+      <li>Botão <strong>"Abrir linha de comando (CLI)"</strong> abaixo do nome do seu OpenClaw</li>
+      <li>Abre janela com terminal preto · aguarda 2-3s até aparecer o prompt (<code>$</code>)</li>
+    </ol>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Aluno PME nunca usou terminal?</strong> Tudo bem — esse é o único comando manual
+        que você cola no day 1. Esse terminal não é Linux completo · é uma versão restrita
+        (<code>lshell</code>) que só aceita comandos <code>openclaw *</code>. Não tem como você
+        quebrar nada com comando errado — o sistema bloqueia tudo que não é OpenClaw.
+      </p>
+    </div>
+
+    <h3>Passo 2 — Rodar comando OAuth</h3>
+
+    <p>Cola o comando abaixo no terminal e dá Enter:</p>
+
+    <div class="terminal-card">
+      <div class="terminal-card-header">
+        <span class="terminal-card-label">Terminal Managed Hostinger</span>
+        <span class="terminal-card-where">cola e dá Enter</span>
+      </div>
+      <div class="terminal-card-body"><span class="prompt-symbol">$</span>openclaw models auth login --provider openai-codex --set-default</div>
+      <div class="terminal-card-tip">
+        ▶ Resultado: terminal mostra URL de OAuth · você abre no navegador · loga com sua
+        conta ChatGPT Plus (a mesma da assinatura) · autoriza · volta pro terminal · OpenClaw
+        confirma sucesso. Fluxo de ~30 segundos.
+      </div>
+    </div>
+
+    <h3>Passo 3 — Validar Fase B</h3>
+
+    <div class="terminal-card">
+      <div class="terminal-card-header">
+        <span class="terminal-card-label">Terminal Managed</span>
+        <span class="terminal-card-where">validação</span>
+      </div>
+      <div class="terminal-card-body"><span class="prompt-symbol">$</span>openclaw models auth list
+
+<span class="comment"># mostra providers configurados + qual é default</span>
+<span class="comment"># esperado: openai-codex marcado como [default]</span>
+
+<span class="prompt-symbol">$</span>openclaw status
+
+<span class="comment"># confirma que codex provider está ativo + agente saudável</span></div>
+    </div>
+
+    <div class="callout callout-success">
+      <p>
+        <strong>Resultado:</strong> agente passa a usar <strong>GPT 5.5/5.4 da sua assinatura
+        ChatGPT Plus via OpenAI Codex</strong> (mais barato + melhor pra agentic). API key da Fase
+        A fica como <strong>rede de segurança automática</strong> — se OAuth falhar, agente cai
+        nela sem você precisar fazer nada.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= POR QUE 2 CREDENCIAIS ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Conceito-chave</span>
+    <h2>Por que 2 credenciais — <em>API key + OAuth.</em></h2>
+
+    <p>
+      Aluno frequentemente pergunta: "se já tenho API key, pra que OAuth?". Resposta:
+      <strong>cada uma cobre coisas diferentes</strong>. Não substituem — complementam.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Credencial</th>
+          <th>O que cobre</th>
+          <th>Custo</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>API key</strong> (Fase A)</td>
+          <td>Whisper · embeddings · memória semântica · DALL-E · fallback automático</td>
+          <td>Crédito pré-pago US$ 5-10</td>
+        </tr>
+        <tr>
+          <td><strong>OAuth ChatGPT</strong> (Fase B)</td>
+          <td>GPT 5.5/5.4 pra inferência · raciocínio · agentic tasks</td>
+          <td>Já incluso na assinatura (R$ 100/mês)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Frase-mãe da A1:</strong> API key autentica seu OpenClaw e libera Whisper +
+        embeddings. OAuth dá acesso ao GPT 5.5 da sua subscription. Você precisa das duas — uma
+        não substitui a outra.
+      </p>
+    </div>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>Sem ChatGPT Plus?</strong> Pula Fase B · agente roda só com API key da Fase A ·
+        funciona, mas paga TUDO via crédito pré-pago (mais caro pra agentic). Recomendação: assina
+        ChatGPT Plus (R$ 100/mês) e faz Fase B — economia significativa em uso intenso.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= BLOCO 4 ONBOARDING ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Bloco 4 · A-ha #1</span>
+    <h2>Agente responde + <em>se conhece.</em></h2>
+
+    <p>
+      Com Fase A + Fase B prontas, você pode falar com o agente. Esse é o <strong>momento mais
+      forte da A1</strong> — não dilui em cliques, é onde aluno PME para de pensar "comprei um
+      curso" e começa a pensar "tenho um agente".
+    </p>
+
+    <h3>Primeira mensagem</h3>
+
+    <p>Pelo painel Gateway (chat web do OpenClaw), manda:</p>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #1 · primeira mensagem</span>
+        <span class="prompt-card-where">cola no Gateway</span>
+      </div>
+      <div class="prompt-card-body">oi, quem é vc?</div>
+      <div class="prompt-card-tip">
+        💡 Esperado: agente responde quem é (genérico no day 1 — vai ganhar personalidade na A5).
+        Se respondeu, <strong>Fase A + Fase B OK</strong>.
+      </div>
+    </div>
+
+    <h3>Onboarding — agente cria auto-conhecimento</h3>
+
+    <p>
+      Cola este prompt em seguida — agente vai ler a documentação oficial do OpenClaw e gerar
+      MEMORY.md com auto-conhecimento estruturado. Agente <strong>passa a saber o que é, o que
+      faz e o que não faz</strong>.
+    </p>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #2 · onboarding canônico</span>
+        <span class="prompt-card-where">cola no Gateway · primeira mensagem séria</span>
+      </div>
+      <div class="prompt-card-body">Leia https://docs.openclaw.ai/llms-full.txt
+
+Em português simples me explique:
+1. O que vc é e como funciona
+2. O que consegue fazer hoje (canais, ferramentas, integrações)
+3. O que NÃO consegue fazer (limitações reais)
+4. Comandos principais que eu posso usar pra te configurar
+5. Onde guarda memórias, skills, configurações e logs
+
+Salve esse resumo em MEMORY.md como "auto-conhecimento do agente"
+e me mostre o resultado.</div>
+      <div class="prompt-card-tip">
+        💡 Resultado: agente lê doc · processa · cria <code>MEMORY.md</code> · retorna resumo.
+        <strong>A-ha #1 conquistado:</strong> "meu agente respondeu + se conhece".
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Por que esse prompt funciona:</strong> ele cobre os 4 elementos que o agente
+        precisa pra ser útil: identidade ("o que sou"), capacidades ("o que faço"), limitações
+        ("o que NÃO faço"), navegação ("como você me opera"). Salvar em <code>MEMORY.md</code>
+        garante que o agente consulta isso sempre — não esquece. Princípio do curso:
+        <em>"seu agente lê documentação"</em>.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= BLOCO 5 TELEGRAM ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Bloco 5 · Telegram pro Quick Win</span>
+    <h2>Agente <em>no seu celular.</em></h2>
+
+    <p>
+      Antes de fechar a aula, mais 1 setup essencial: conectar o Telegram. Razão: o chat do painel
+      Hostinger (Gateway) <strong>não aceita upload de arquivo</strong>. E na próxima aula
+      sequencial (A4), você vai precisar enviar arquivo pro seu agente — o Starter Kit em zip.
+      Telegram resolve isso. Setup leva 2 minutos.
+    </p>
+
+    <h3>Passo 1 — Criar bot no @BotFather</h3>
+
+    <ol>
+      <li>Abre <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> no Telegram</li>
+      <li>Digita <code>/newbot</code></li>
+      <li>Escolhe nome amigável (ex: <em>"Meu Agente"</em>)</li>
+      <li>Escolhe handle único terminado em <code>_bot</code> (ex: <code>meu_agente_2026_bot</code>)</li>
+      <li>BotFather retorna o token (formato <code>123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11</code>) · <strong>copia</strong></li>
+    </ol>
+
+    <div class="callout callout-danger">
+      <p>
+        <strong>Token = senha do bot.</strong> Não compartilha em chat público · não commita em
+        GitHub · se vazar, no @BotFather: <code>/revoke</code> → gera novo token → atualiza no
+        agente. Princípio A10.
+      </p>
+    </div>
+
+    <h3>Passo 1.5 — Disable Privacy (CRÍTICO pra grupo)</h3>
+
+    <p>
+      Por <strong>default</strong>, o bot só recebe mensagens onde é mencionado (<code>@meu_agente_bot</code>)
+      ou comandos (<code>/start</code>). Em DM 1-1 isso não importa. Mas no momento que você for
+      colocar o bot num <strong>grupo da equipe ou supergrupo com tópicos</strong> (A4 modular cobre),
+      ele vai ficar <strong>mudo</strong> — não consegue ler conversa pra entrar em contexto, monitorar,
+      ou aplicar allowlist por contexto.
+    </p>
+
+    <p>
+      <strong>Solução:</strong> desabilitar privacy mode AGORA, no @BotFather, antes de adicionar o bot
+      em qualquer grupo. Faz parte do setup mínimo.
+    </p>
+
+    <div class="terminal-card">
+      <div class="terminal-card-header">
+        <span class="terminal-card-label">Telegram · @BotFather</span>
+        <span class="terminal-card-where">conversa direta com o BotFather</span>
+      </div>
+      <div class="terminal-card-body"><span class="prompt-symbol">/</span>setprivacy
+
+<span class="comment"># BotFather pede pra escolher qual bot</span>
+<span class="comment"># escolhe o bot que você acabou de criar</span>
+
+<span class="comment"># BotFather mostra status atual: 'Enabled' (default)</span>
+<span class="comment"># clica em [Disable]</span>
+
+<span class="comment"># confirmação: 'Privacy mode is disabled for &lt;bot&gt;.'</span></div>
+      <div class="terminal-card-tip">
+        ▶ Resultado: bot passa a receber TODAS as mensagens dos grupos onde for adicionado (não só
+        @menções e comandos). Sem isso, agente em grupo é cego.
+      </div>
+    </div>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>Bot já tá num grupo?</strong> Privacy só aplica a partir da próxima vez que o bot
+        for adicionado. Se mudou privacy DEPOIS de já ter colocado o bot no grupo: <strong>remove o
+        bot do grupo + adiciona de novo</strong>. Aí privacy nova passa a valer.
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Por que isso é setup, não tweak avançado:</strong> Telegram em DM 1-1 sempre funciona
+        (privacy não afeta DM). Mas grupo é o canal mais útil pra agente PME — equipe inteira marca
+        o agente, ele lê contexto, responde no canal certo. Sem privacy disabled, esse caso de uso
+        morre. Faz agora pra não esquecer depois.
+      </p>
+    </div>
+
+    <h3>Passo 2 — Conectar bot ao agente</h3>
+
+    <p>No terminal Managed, cola:</p>
+
+    <div class="terminal-card">
+      <div class="terminal-card-header">
+        <span class="terminal-card-label">Terminal Managed</span>
+        <span class="terminal-card-where">substitui &lt;token&gt; pelo token do BotFather</span>
+      </div>
+      <div class="terminal-card-body"><span class="prompt-symbol">$</span>openclaw channels add --channel telegram --token &lt;token-do-botfather&gt;
+
+<span class="comment"># exemplo:</span>
+<span class="prompt-symbol">$</span>openclaw channels add --channel telegram --token 123456:ABC-DEF...
+
+<span class="comment"># validar:</span>
+<span class="prompt-symbol">$</span>openclaw channels list</div>
+      <div class="terminal-card-tip">
+        ▶ Resultado: telegram aparece como conectado em <code>channels list</code>.
+      </div>
+    </div>
+
+    <h3>Passo 3 — Testar no celular</h3>
+
+    <ol>
+      <li>Abre teu novo bot no Telegram (busca pelo handle que você escolheu)</li>
+      <li>Manda <code>/start</code> ou qualquer mensagem</li>
+      <li>Agente responde no Telegram em segundos</li>
+    </ol>
+
+    <div class="callout callout-success">
+      <p>
+        <strong>Vitória visível:</strong> agente respondendo no celular do aluno (não só no
+        terminal/painel). Saiu da web pro mobile sem fricção. <strong>Quick Win conquistado</strong> —
+        pronto pra A3 (Starter Kit).
+      </p>
+    </div>
+
+    <p>
+      A aula <strong>A4</strong> (modular) vai aprofundar Telegram (tópicos por tema · grupo da
+      equipe · allowlist por comando natural · ressalva sobre WhatsApp). Aqui foi só DM funcional —
+      o suficiente pra A3 jogar o zip do Starter Kit.
+    </p>
+  </section>
+
+  <!-- ========================= O QUE VOCÊ TEM AGORA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Bloco 6 · Recap</span>
+    <h2>O que você tem <em>depois da A1.</em></h2>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-title">✅ Hostinger Managed contratado</div>
+        <p class="card-desc">
+          Plano com cupom <code>BRUNOOKAMOTO</code> · 1 OpenClaw provisionado · acesso ao painel.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">✅ OpenAI API key configurada</div>
+        <p class="card-desc">
+          Conta em <code>platform.openai.com</code> · cartão · US$ 5-10 de crédito · API key colada
+          no painel OpenClaw. Cobre Whisper · embeddings · memória semântica · fallback OAuth.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">✅ OAuth ChatGPT Plus ativo</div>
+        <p class="card-desc">
+          Comando OAuth rodado · agente usando GPT 5.5/5.4 da assinatura ChatGPT Plus. Mais
+          barato pra agentic.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">✅ Agente respondendo + MEMORY.md auto-criado</div>
+        <p class="card-desc">
+          Onboarding completo · agente lê doc oficial · sabe o que é, o que faz, o que não faz.
+          Não é mais folha em branco.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">✅ Telegram DM funcionando</div>
+        <p class="card-desc">
+          Bot criado no @BotFather · token configurado · agente respondendo no celular. Habilita
+          Quick Win da A3 (Starter Kit). Aprofundamento de tópicos · grupo equipe · allowlist
+          natural fica pra A4 (modular).
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">⏳ Falta pra A2</div>
+        <p class="card-desc">
+          Cockpit do terminal · 10 comandos essenciais · Autopilot · Health check semanal · plano
+          de restore. Próxima aula sequencial.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================= TROUBLESHOOTING ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Travou? Antes de pedir ajuda</span>
+    <h2>Top <em>problemas comuns da A1.</em></h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Sintoma</th>
+          <th>Causa provável</th>
+          <th>Ação</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>API key inválida no painel</td>
+          <td>Confundiu site (chatgpt.com em vez de platform.openai.com)</td>
+          <td>Volta em platform.openai.com → API keys → gera nova</td>
+        </tr>
+        <tr>
+          <td>Crédito não suficiente</td>
+          <td>Esqueceu de comprar crédito após cadastrar cartão</td>
+          <td>Settings → Billing → Add credit (US$ 5-10)</td>
+        </tr>
+        <tr>
+          <td>OAuth via terminal trava</td>
+          <td>Browser bloqueou popup OU rede corporativa</td>
+          <td>Tenta <code>openclaw models auth paste-token</code> (token manual)</td>
+        </tr>
+        <tr>
+          <td><code>openclaw</code> não encontrado</td>
+          <td>Tá no terminal local em vez de terminal Managed</td>
+          <td>Use o <strong>terminal do painel Hostinger</strong></td>
+        </tr>
+        <tr>
+          <td><code>lshell: forbidden character</code></td>
+          <td>Tentou comando bash arbitrário no Managed</td>
+          <td>Terminal Managed é <code>lshell</code> — só comandos <code>openclaw *</code> passam</td>
+        </tr>
+        <tr>
+          <td>Telegram bot não responde</td>
+          <td>Token errado OU bot não conectado</td>
+          <td><code>openclaw channels list</code> · refazer <code>channels add</code> se preciso</td>
+        </tr>
+        <tr>
+          <td><code>getUpdates 409</code> (Telegram)</td>
+          <td>Outro gateway/poller usando o mesmo bot</td>
+          <td>Verifica se há 2 OpenClaws com mesmo bot · desliga duplicado</td>
+        </tr>
+        <tr>
+          <td>Onboarding não carrega contexto</td>
+          <td><code>llms-full.txt</code> muito grande pra janela</td>
+          <td>Tenta <code>https://docs.openclaw.ai/llms.txt</code> (índice resumido)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Cheatsheet completo:</strong> <a href="../INDICE.md">onboarding-do-seu-agente.md</a> —
+        comandos detalhados, 4 prompts prontos pra colar, troubleshooting profundo de todos os erros
+        conhecidos da A1.
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Não conseguiu resolver com a tabela acima?</strong> Joga screenshot/áudio/vídeo
+        no <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">grupo Telegram do
+        curso</a>. openclawzinho responde em &lt;30 segundos · humanos em &lt;5 minutos.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= CTA PRÓXIMA ========================= -->
+
+  <section class="sec sec-alt">
+    <div class="cta-card">
+      <h3>Próximo passo: <em>A2 — Cockpit do terminal</em></h3>
+      <p>
+        14 minutos · sequencial · você morou no terminal Managed por 30s pra rodar OAuth.
+        A A2 é onde você descobre que esse terminal é o <strong>cockpit do seu agente</strong> —
+        10 comandos essenciais · autopilot · health check semanal automático · plano de restore.
+        Sai dela sabendo consertar qualquer coisa que quebrar.
+      </p>
+      <a href="aula-02-cockpit.html" class="cta-button">→ Ir pra Aula 2</a>
+    </div>
+  </section>
+
+  <!-- ========================= FOOTER ========================= -->
+
+  <footer class="aula-footer">
+
+    <div class="aula-footer-block">
+      <h4>Travou? Tá no grupo do curso</h4>
+      <p>
+        Comunidade Telegram do curso —
+        <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">t.me/cursoopenclaw</a>
+        — suporte 24/7 (openclawzinho bot + Bruno e equipe presente).
+        Dúvida sobre essa aula, problemas de setup, ou quer compartilhar como aplicou
+        no seu negócio: bora trocar lá.
+      </p>
+    </div>
+
+    <div class="aula-footer-block">
+      <h4>Próximo nível: Pixel AI Hub</h4>
+      <p>
+        Aplicar agente pra empresa toda — equipe, governance, escala?
+        <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=material&utm_campaign=v1" target="_blank" rel="noopener">Pixel AI Hub</a>:
+        segundo cérebro corporativo, comunidade de empreendedores, +50 skills enterprise,
+        encontros mensais ao vivo. Vagas mensais limitadas.
+      </p>
+    </div>
+
+    <div class="aula-footer-credit">
+      Mini-Curso OpenClaw 2026 · Material complementar à gravação · Atualizações conforme kit evolui<br>
+      <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=footer-credit" target="_blank" rel="noopener">Bruno Okamoto · Pixel Educação</a>
+    </div>
+
+  </footer>
+
+</div>
+
+</body>
+</html>

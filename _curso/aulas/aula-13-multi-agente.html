@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A13 — Multi-agente · subagentes · Mini-Curso OpenClaw</title>
+<meta name="description" content="Material complementar da Aula 13 — quando vale evoluir pra multi-agente, subagente vs agente paralelo, 4 caminhos REAIS de comunicação, AGENTS.md como organograma, custo real de manutenção 5x.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Fraunces:ital,wght@1,400;1,500;1,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="_shared/tokens.css">
+</head>
+
+<body>
+
+<div class="wrap">
+
+  <!-- ========================= HEADER ========================= -->
+
+  <header class="aula-header">
+    <div class="aula-header-brand">Mini-Curso <span class="accent">OpenClaw</span></div>
+    <div class="aula-header-meta">Aula 13 · Multi-agente</div>
+  </header>
+
+  <!-- ========================= HERO ========================= -->
+
+  <section class="hero">
+    <div class="hero-meta">
+      <span class="hero-meta-item">⏱ <strong>12 min</strong></span>
+      <span class="hero-meta-item">📚 <strong>Modular</strong></span>
+      <span class="hero-meta-item">🎯 <strong>A-ha #9</strong></span>
+    </div>
+
+    <h1>
+      Ele tem uma equipe
+      <em>quando precisa.</em>
+    </h1>
+
+    <p class="hero-sub">
+      Em <em>12min</em> você sabe se PRECISA de mais de 1 agente — e como criar um time digital
+      quando precisar. Maioria absoluta dos casos: <em>1 agente bem configurado resolve</em>.
+      Multi-agente é refinamento, não default. E o custo verdadeiro não é o setup — é a
+      <em>manutenção 5x</em>.
+    </p>
+  </section>
+
+  <!-- ========================= A-HA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">A-ha desta aula</span>
+    <div class="aha-card">
+      <span class="label">A-ha #9 entregue</span>
+      <p class="quote">"Ele tem uma equipe quando precisa — e eu sei o caminho honesto pra montar."</p>
+    </div>
+  </section>
+
+  <!-- ========================= TIMELINE PIXEL ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Como Bruno chegou em multi-agente · timeline real</span>
+    <h2>De 1 agente pra <em>3 em 6 meses.</em></h2>
+
+    <p>
+      Pra entender quando faz sentido ter mais de 1 agente, conta a história de como Bruno chegou
+      nisso na Pixel. Não foi planejado — foi necessidade.
+    </p>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-time">📅 Janeiro</div>
+        <div class="card-title">Só Amora</div>
+        <p class="card-desc">
+          Amora é Chief of Staff — segundo cérebro do Bruno. Roda Telegram pessoal, Slack interno
+          da Pixel, calendar, Notion, GitHub. Resolve 90% da operação dele. <strong>1 agente, 1
+          identidade, 1 workspace.</strong> Custo: ~R$ 200/mês.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">📅 Março</div>
+        <div class="card-title">Nasce openclawzinho</div>
+        <p class="card-desc">
+          Comunidade Telegram do curso OpenClaw passa de 100 → 1.000 alunos em 2 meses. Amora
+          começa a confundir contexto pessoal do Bruno com suporte de comunidade.
+          <strong>Decisão:</strong> agente novo dedicado a atender comunidade. openclawzinho nasce
+          com SOUL próprio (alegre, casual, paciente), workspace separado, foco em FAQ + escalar
+          pra humano. <strong>2 agentes, papéis distintos.</strong>
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">📅 Abril</div>
+        <div class="card-title">Léo entra como gestor de equipe</div>
+        <p class="card-desc">
+          Time da Pixel cresce pra 8 pessoas. Bruno percebe que precisa de agente
+          <strong>compartilhado</strong> entre os sócios — calendário comum, decisões registradas,
+          Notion da empresa. Léo nasce como agente de equipe — todo sócio fala com ele, ele
+          agrega. Diferente de Amora (pessoal do Bruno) e openclawzinho (público da comunidade).
+          <strong>3 agentes, 3 escopos: pessoal · público · equipe.</strong>
+        </p>
+      </div>
+
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Custo total dos 3:</strong> ~R$ 500/mês. <strong>Substituem:</strong> assistente
+        virtual da Pixel (~R$ 4k/mês), tempo do Bruno respondendo comunidade (~10h/sem), e
+        coordenação interna manual entre sócios (incalculável).
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Lição da timeline:</strong> não comece com 3 agentes. Comece com 1, deixe
+        ele saturar (sinais: confusão de contexto, escopo diluído, performance caindo), aí divida.
+        A13 ensina <strong>quando dividir</strong> e <strong>como dividir bem</strong> — não <em>se</em>
+        dividir.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= PRE-FLIGHT ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Pre-flight check</span>
+    <h2>Antes de <em>apertar play.</em></h2>
+
+    <p>
+      A13 amarra com 3 aulas anteriores. Releitura rápida ajuda — mas não é pré-requisito
+      duro. Tem em mãos:
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>A5 fresca</strong> — você já criou <code>AGENTS.md</code> no day 1 com framing "preparado pra equipe". Hoje ele ganha substância</p>
+      <p><span class="check">✓</span> <strong>A10 absorvida</strong> — princípios de segurança operacional aparecem aqui (escopo por agente, custo de credenciais, monitoramento)</p>
+      <p><span class="check">✓</span> <strong>A4 lembrada</strong> — <code>requireMention: true</code> resolve a pergunta clássica "se 2 bots no mesmo grupo, eles se respondem?"</p>
+      <p><span class="check">✓</span> <strong>Telegram aberto</strong> em paralelo · você vai ver demo de subagente rodando</p>
+      <p><span class="check">✓</span> <strong>Cheatsheet do kit</strong> aberto em outra aba — <a href="../INDICE.md">multi-agente.md</a> tem 6 prompts prontos pra colar (incluindo "criar agente paralelo dedicado a 1 canal" e "migrar contexto saturado")</p>
+    </div>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>Aluno PME atenção:</strong> A13 NÃO é "vá criar 5 agentes". É exatamente o
+        contrário — entender quando vale, e ter humildade técnica de ficar com 1 quando 1
+        resolve. <em>Estética &gt; função</em> é a forma mais cara de overengineering.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= ESTRUTURA DA AULA ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Estrutura da aula em vídeo</span>
+    <h2>O que você vai aprender em <em>7 blocos.</em></h2>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-time">⏱ 1.5 min</div>
+        <div class="card-title">Bloco 1 — Pergunta + custo real de manutenção</div>
+        <p class="card-desc">
+          1 agente ou vários? Resposta honesta: maioria PME, 1 resolve. <strong>Multiplicador
+          5x</strong> de manutenção (SOULs · credenciais · monitoramento · skills · comunicação).
+          4 sinais de que vale evoluir mesmo assim.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 2 min</div>
+        <div class="card-title">Bloco 2 — Subagente vs Agente Paralelo</div>
+        <p class="card-desc">
+          Distinção fundamental + tabela de prós/contras. <strong>Subagente</strong> = background
+          run com identidade limitada (só herda <code>AGENTS.md</code> + <code>TOOLS.md</code>).
+          <strong>Agente paralelo</strong> = entidade separada com SOUL/IDENTITY/USER próprios.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 2 min</div>
+        <div class="card-title">Bloco 3 — Subagente em ação · pesquisador</div>
+        <p class="card-desc">
+          Demo prático: <code>/subagents spawn researcher "..."</code>. Aurora dispara, pesquisador
+          roda async em sandbox isolado, retorna síntese. <strong>Tela split</strong> — Aurora
+          limpa em cima, subagente cheio de fontes embaixo.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 2.5 min</div>
+        <div class="card-title">Bloco 4 — Arquitetura + 4 caminhos de comunicação</div>
+        <p class="card-desc">
+          Onde agentes vivem (Managed = 1 OpenClaw, N agentes mesmo workspace). 4 caminhos REAIS
+          de comunicação (subagente spawn · mention · arquivo compartilhado · cron). <strong>NÃO
+          existe DM interna direta entre agentes</strong> em runtime.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1.5 min</div>
+        <div class="card-title">Bloco 5 — AGENTS.md como organograma</div>
+        <p class="card-desc">
+          Aquele <code>AGENTS.md</code> da A5 ganha substância. Quem é cada agente · quem chama
+          quem · onde cada um vive · permissões cruzadas · governance. <strong>Source of truth
+          vivo</strong> do time digital.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1.5 min</div>
+        <div class="card-title">Bloco 6 — Caso real Pixel + custo</div>
+        <p class="card-desc">
+          3 agentes ativos hoje (Amora COS · openclawzinho · Leonardo Da Vinci) + subagentes
+          on-demand. Custo controlado por design: caps mensais, audit log, digest semanal.
+          <strong>Custo previsível, sem surpresa.</strong>
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1 min</div>
+        <div class="card-title">Bloco 7 — Quando NÃO + recap + amarração A14</div>
+        <p class="card-desc">
+          6 sintomas de overengineering. Recap em 4 linhas. <strong>Amarração A14:</strong>
+          "se você tem 1 OU vários agentes operando 24/7 — como você OBSERVA tudo?"
+          → Mission Control.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ========================= BLOCO 1 — CUSTO REAL ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Aprofundamento do Bloco 1</span>
+    <h2>Custo real de manutenção — <em>multiplicador 5x.</em></h2>
+
+    <p>
+      Aluno PME chega na A13 quase sempre pensando "vou criar 3 agentes amanhã". A primeira
+      coisa que A13 entrega é honestidade: <strong>3 agentes ≠ 3x trabalho. Mais perto de 5x.</strong>
+      Não pelo setup — pela manutenção contínua.
+    </p>
+
+    <h3>O que multiplica quando você tem 3 agentes</h3>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Eixo</th>
+          <th>Com 1 agente</th>
+          <th>Com 3 agentes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Identidade</strong> (SOUL · IDENTITY · USER · MEMORY)</td>
+          <td>1 set pra manter sincronizado</td>
+          <td>3 sets · 3x atualizações quando seu contexto muda</td>
+        </tr>
+        <tr>
+          <td><strong>Credenciais</strong> (recap A10 · A12)</td>
+          <td>1 conjunto de tokens</td>
+          <td>3 sets de tokens · 3x rotações mensais</td>
+        </tr>
+        <tr>
+          <td><strong>Monitoramento</strong> (primeiros 30d, recap A10 Bloco 4)</td>
+          <td>1 histórico pra revisar</td>
+          <td>3 históricos · 3x prompts pra blindar contra manipulação</td>
+        </tr>
+        <tr>
+          <td><strong>Skills</strong></td>
+          <td>1 conjunto atualizado</td>
+          <td>3 conjuntos pra manter sincronizados</td>
+        </tr>
+        <tr>
+          <td><strong>Comunicação entre eles</strong> (handoff, AGENTS.md)</td>
+          <td>Não existe</td>
+          <td>Crescimento exponencial · cada par de relação é cruzamento</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>Princípio invariante:</strong> multiplicar agentes multiplica manutenção. Comece
+        com 1. Evolua quando provar que precisa — e que aceita o custo. <em>Estética &gt; função</em>
+        é a forma mais cara de overengineering em IA.
+      </p>
+    </div>
+
+    <h3>4 sinais de que VALE evoluir mesmo assim</h3>
+
+    <div class="item-icon">
+      <div class="item-icon-box">1</div>
+      <div class="item-icon-content">
+        <h3>Agente único tá lento</h3>
+        <p>
+          Context rot · threads pesadas · respostas demoram porque ele tem que carregar tudo.
+          Sinal técnico de que ficou grande demais pra 1 só.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">2</div>
+      <div class="item-icon-content">
+        <h3>Você fala 2 línguas operacionais distintas</h3>
+        <p>
+          Marketing + dev, comercial + ops, conteúdo + atendimento. Ele confunde os tons,
+          mistura os contextos, perde precisão em ambas.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">3</div>
+      <div class="item-icon-content">
+        <h3>Você tem time/funcionários</h3>
+        <p>
+          Cada pessoa precisa de agente próprio · cada agente com escopo restrito ao papel da
+          pessoa. Não dá pra todo mundo dividir o seu agente pessoal.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">4</div>
+      <div class="item-icon-content">
+        <h3>Você quer delegação 24/7</h3>
+        <p>
+          1 agente vigia inbox · outro escreve · outro atende comunidade. Cada um numa thread
+          própria, sem se atropelarem.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================= BLOCO 2 — SUBAGENTE VS PARALELO ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aprofundamento do Bloco 2</span>
+    <h2>Subagente vs Agente Paralelo — <em>os 2 caminhos.</em></h2>
+
+    <p>
+      A confusão clássica: aluno acha que "subagente" é "agente paralelo light". Não é. São
+      <strong>mecanismos distintos</strong> com casos de uso diferentes. A tabela abaixo resolve
+      a decisão.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Aspecto</th>
+          <th>Subagente</th>
+          <th>Agente Paralelo</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>O que é</strong></td>
+          <td>Background run spawned do agente pai · async · resultado anunciado quando termina</td>
+          <td>Entidade separada · SOUL/IDENTITY/USER próprios · vida própria · canais próprios</td>
+        </tr>
+        <tr>
+          <td><strong>Custo de criar</strong></td>
+          <td>Baixo — 1 comando direto</td>
+          <td>Alto — SOUL + IDENTITY + USER + memória + canais</td>
+        </tr>
+        <tr>
+          <td><strong>Custo de manter</strong></td>
+          <td>Quase zero — sem identidade pra manter</td>
+          <td>5x trabalho (recap Bloco 1)</td>
+        </tr>
+        <tr>
+          <td><strong>Identidade</strong></td>
+          <td><strong>Limitada</strong> — só herda <code>AGENTS.md</code> + <code>TOOLS.md</code> (não SOUL próprio)</td>
+          <td>Completa — SOUL/IDENTITY/USER próprios</td>
+        </tr>
+        <tr>
+          <td><strong>Memória</strong></td>
+          <td><strong>Sandbox isolado</strong> por execução (modo <code>isolated</code> default) ou herda contexto pai (modo <code>fork</code>)</td>
+          <td>Memória própria contínua (<code>MEMORY.md</code>)</td>
+        </tr>
+        <tr>
+          <td><strong>Aparece no Telegram?</strong></td>
+          <td>Não — invisível</td>
+          <td>Sim — handle próprio</td>
+        </tr>
+        <tr>
+          <td><strong>Como invocar</strong></td>
+          <td><code>/subagents spawn &lt;agentId&gt; "&lt;task&gt;"</code> · tool <code>sessions_spawn</code></td>
+          <td>Mention canal · subagente · arquivo · cron</td>
+        </tr>
+        <tr>
+          <td><strong>Aluno invoca direto?</strong></td>
+          <td>Não — só pelo agente principal</td>
+          <td>Sim</td>
+        </tr>
+        <tr>
+          <td><strong>Ideal pra</strong></td>
+          <td>Tarefas pontuais (pesquisa · análise PDF · gerar imagem) — execução isolada com retorno async</td>
+          <td>Domínios contínuos (atendimento · conteúdo · ops) — identidade persistente</td>
+        </tr>
+        <tr>
+          <td><strong>Risco de overengineering</strong></td>
+          <td>Quase nenhum</td>
+          <td>Frequente</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Frase pra colar na geladeira:</strong> subagente é <em>execução background</em>
+        com identidade limitada. Agente paralelo é <em>entidade separada</em> com identidade
+        completa. Subagente é <strong>técnica de produtividade</strong>. Agente paralelo é
+        <strong>decisão de organização</strong>.
+      </p>
+    </div>
+
+    <h3>Como decidir</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Tarefa pontual?</strong> → Subagente (sempre que dúvida, comece por aqui)</p>
+      <p><span class="check">✓</span> <strong>Domínio contínuo + 4 sinais do Bloco 1?</strong> → Agente paralelo (e antes, releia o custo de manutenção)</p>
+      <p><span class="check">✓</span> <strong>Não consegue decidir?</strong> → Subagente. Sempre. Você reverte com 1 comando · agente paralelo te custa semanas pra desmontar</p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Doc oficial:</strong> <a href="https://docs.openclaw.ai/tools/subagents" target="_blank" rel="noopener">tools/subagents</a> ·
+        <a href="https://docs.openclaw.ai/concepts/multi-agent" target="_blank" rel="noopener">concepts/multi-agent</a>.
+        Releia se quiser fundamento técnico além do que A13 cobre.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= BLOCO 3 — DEMO PESQUISADOR ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Aprofundamento do Bloco 3</span>
+    <h2>Subagente em ação — <em>pesquisador.</em></h2>
+
+    <p>
+      Caso prático que aluno PME entende na hora: você quer Aurora escrever post sobre
+      "tendências IA pra PME 2026". Pesquisa profunda exige ler 10-15 fontes, comparar,
+      sintetizar. Se Aurora fizer direto, esgota contexto. <strong>Solução: subagente
+      "pesquisador" que roda em background.</strong>
+    </p>
+
+    <div class="terminal-card">
+      <div class="terminal-card-header">
+        <span class="terminal-card-label">Comando OpenClaw</span>
+        <span class="terminal-card-where">Aurora dispara, você não precisa colar</span>
+      </div>
+      <div class="terminal-card-body"><span class="prompt-symbol">$</span>/subagents spawn researcher "tendências IA pra PME 2026 — busca 10-15
+fontes brasileiras e inglesas, sintetiza em 200 palavras, foca em
+ferramentas práticas pra empreendedor não-técnico" --thinking medium</div>
+      <div class="terminal-card-tip">
+        ▶ Resultado: Aurora retorna <strong>imediatamente</strong> com <code>runId</code> · não bloqueia
+        · subagente roda em background · quando termina, announce posta resultado no canal de origem.
+      </div>
+    </div>
+
+    <h3>O que acontece passo a passo</h3>
+
+    <div class="item-icon">
+      <div class="item-icon-box">1</div>
+      <div class="item-icon-content">
+        <h3>Bruno pede pra Aurora</h3>
+        <p>
+          <em>"escreve post LinkedIn sobre tendências IA PME 2026"</em>. Aurora detecta que
+          precisa de pesquisa profunda — não tenta fazer direto.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">2</div>
+      <div class="item-icon-content">
+        <h3>Aurora dispara <code>/subagents spawn</code></h3>
+        <p>
+          Você não precisa colar nada. Aurora coordena automaticamente. Recebe
+          <code>runId</code>, segue trabalhando estrutura/voz/gancho do post.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">3</div>
+      <div class="item-icon-content">
+        <h3>Subagente roda em sandbox isolado</h3>
+        <p>
+          Sessão limpa (recap A9 · modo <code>isolated</code>). Lê 10-15 fontes · cada subagent
+          rastreia tokens próprios · sem poluir contexto da Aurora.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">4</div>
+      <div class="item-icon-content">
+        <h3>Announce posta síntese</h3>
+        <p>
+          Subagente termina · posta síntese de 200 palavras no canal de origem · Aurora integra
+          no post final. Tela split — Aurora limpa em cima, subagente embaixo cheio de fontes lidas.
+        </p>
+      </div>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Princípio do Bloco 3:</strong> subagente faz o trabalho sujo em paralelo. Aurora
+        mantém contexto limpo. <em>Async</em> — Aurora não fica esperando. É produtividade pura.
+      </p>
+    </div>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>Ressalva técnica importante:</strong> subagente herda <code>AGENTS.md</code> +
+        <code>TOOLS.md</code> mas <strong>NÃO</strong> o SOUL/IDENTITY da Aurora. Significa
+        que ele segue regras gerais do workspace, mas <em>sem personalidade própria</em>. Não é
+        problema pra task técnica (pesquisar é pesquisar). Diferente de criar um "pesquisador
+        agente paralelo" com identidade própria — esse caminho custa 5x mais manutenção.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= BLOCO 4 — ARQUITETURA + COMUNICAÇÃO ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aprofundamento do Bloco 4</span>
+    <h2>Onde os agentes vivem + <em>4 caminhos de comunicação.</em></h2>
+
+    <p>
+      Bloco mais denso da aula — resolve as 2 maiores dúvidas do aluno: <strong>onde os
+      agentes vivem?</strong> e <strong>como conversam entre si?</strong>
+    </p>
+
+    <h3>Onde eles vivem (por plataforma)</h3>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Plataforma</th>
+          <th>Limite</th>
+          <th>Como funciona</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Managed</strong> (curso default)</td>
+          <td><strong>1 OpenClaw por plano</strong> (recap A2)</td>
+          <td>Múltiplos agentes coexistem <strong>dentro do mesmo workspace</strong> · 1 daemon orquestra todos</td>
+        </tr>
+        <tr>
+          <td><strong>VPS standalone</strong> (bônus R1-R4)</td>
+          <td>Até <strong>3 OpenClaws na mesma VPS</strong></td>
+          <td>Containers Docker independentes</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>
+      <strong>Pra aluno do curso (Managed): única opção é multi-agente NO MESMO WORKSPACE.</strong>
+      Estrutura de pastas:
+    </p>
+
+    <pre><code>~/.openclaw/
+├── .env                       ← compartilhado (cuidado escopo)
+├── shared/                    ← assets compartilhados (logos, templates, notes/)
+└── agents/
+    ├── amora/
+    │   ├── SOUL.md           ← identidade direta
+    │   ├── IDENTITY.md       ← Chief of Staff
+    │   ├── MEMORY.md         ← memória própria isolada
+    │   └── workspace/
+    ├── openclawzinho/
+    │   ├── SOUL.md           ← identidade atenciosa (DIFERENTE)
+    │   ├── IDENTITY.md       ← Suporte da comunidade
+    │   └── ...
+    └── pesquisador/          ← subagente — sem SOUL próprio</code></pre>
+
+    <h3>Como conversam entre si — 4 caminhos REAIS</h3>
+
+    <div class="callout callout-danger">
+      <p>
+        <strong>Importante:</strong> NÃO existe DM interna direta entre agentes em runtime. A
+        comunicação acontece via mecanismos abaixo. Não invente flag <code>--from --to</code> —
+        ela não existe na doc oficial.
+      </p>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Caminho</th>
+          <th>Mecanismo real</th>
+          <th>Quando usar</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>1. Subagente via spawn</strong></td>
+          <td><code>/subagents spawn &lt;agentId&gt; "&lt;task&gt;"</code> · tool <code>sessions_spawn</code> · async · resultado anunciado</td>
+          <td>Delegar tarefa específica · agente principal continua trabalhando</td>
+        </tr>
+        <tr>
+          <td><strong>2. Mention em canal compartilhado</strong></td>
+          <td><code>@amora @openclawzinho ...</code> · <code>requireMention: true</code> (recap A4) previne spam</td>
+          <td>Aluno orquestra explícito · 1 thread, múltiplos respondedores</td>
+        </tr>
+        <tr>
+          <td><strong>3. Arquivo compartilhado</strong></td>
+          <td>A escreve em <code>~/.openclaw/shared/notes/X.md</code> · B lê quando precisa · async, sem bloqueio</td>
+          <td>Dump de contexto pesado · handoff async · documentação cruzada</td>
+        </tr>
+        <tr>
+          <td><strong>4. Trigger via cron + flag</strong></td>
+          <td>Cron de B detecta evento de A · roda <code>openclaw agent --agent &lt;id&gt;</code> programático</td>
+          <td>Automação async sem interação humana</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>A pergunta-armadilha clássica do aluno</h3>
+
+    <blockquote>
+      <p>
+        <strong>"Se eu colocar Amora E openclawzinho no mesmo grupo do Telegram, eles vão ver
+        as mensagens um do outro?"</strong>
+      </p>
+    </blockquote>
+
+    <p>Resposta direta:</p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> Tecnicamente, <strong>sim</strong> — ambos os bots leem o canal</p>
+      <p><span class="check">✓</span> Por design (recap A4 — <code>requireMention: true</code>), <strong>só respondem quando mencionados</strong>: <code>@amora</code> ou <code>@openclawzinho</code></p>
+      <p><span class="check">✓</span> Mensagem genérica sem mention? <strong>Ninguém responde</strong> (não vira spam de 2 respostas duplicadas)</p>
+      <p><span class="check">✓</span> Pra cooperarem em 1 thread: <code>@amora @openclawzinho coordenem essa task</code> — ambos veem, mas só o mencionado primeiro responde por default</p>
+      <p><span class="check">✓</span> <code>AGENTS.md</code> pode configurar handoff (ex: openclawzinho escala pra Amora se aparecer mention dela)</p>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Princípio do Bloco 4:</strong> por default, agentes não se veem em runtime.
+        <em>Você decide</em> quando e como cooperam — via subagente, mention explícita,
+        arquivo compartilhado ou cron. Previne spam, vazamento de contexto entre escopos
+        (recap A10) e loops infinitos.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= BLOCO 5 — AGENTS.md ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Aprofundamento do Bloco 5</span>
+    <h2>AGENTS.md como <em>organograma vivo.</em></h2>
+
+    <p>
+      Recap A5: você criou <code>AGENTS.md</code> no day 1 com framing "preparado pra equipe".
+      <strong>Hoje ganha substância</strong> — vira o organograma vivo do seu time digital.
+    </p>
+
+    <h3>O que tem em AGENTS.md</h3>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Seção</th>
+          <th>Conteúdo</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Quem é cada agente</strong></td>
+          <td>Handle · papel · modelo · escopo</td>
+        </tr>
+        <tr>
+          <td><strong>Quem chama quem</strong></td>
+          <td>Subagentes disponíveis · agentes paralelos com handoff</td>
+        </tr>
+        <tr>
+          <td><strong>Onde cada um vive</strong></td>
+          <td>Workspace · canais · integrações</td>
+        </tr>
+        <tr>
+          <td><strong>Permissões cruzadas</strong></td>
+          <td>Subagente herda allowlist? Não. Cada um com scope próprio (recap A10)</td>
+        </tr>
+        <tr>
+          <td><strong>Governance</strong></td>
+          <td>Cap mensal por agente · audit log · digest semanal</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>AGENTS.md real (sanitizado)</h3>
+
+    <pre><code># AGENTS.md — Pixel Educação
+
+## Amora COS (Chief of Staff)
+- Modelo: Claude Sonnet 4.5 / GPT 5.5
+- Localização: ~/.openclaw/agents/amora/
+- Papel: coordenação geral, contexto Bruno, propagação semântica
+- Subagentes invocáveis: pesquisador, gerador-imagem, analista
+- Agentes paralelos coordenados: openclawzinho
+
+## openclawzinho
+- Modelo: GPT-5.5
+- Localização: ~/.openclaw/agents/openclawzinho/
+- Papel: atendimento da comunidade do curso
+- Canal: WhatsApp comunidade (recap A10 — monitoramento diário 30d)
+- Handoff pra Amora: escala se questão fora de escopo
+
+## pesquisador (subagente)
+- Modelo: Claude Haiku
+- Tipo: subagente · invocado via /subagents spawn
+- Modo: isolated · retorna síntese de 200 palavras</code></pre>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Princípio do Bloco 5:</strong> AGENTS.md é vivo. Cresce com o time. Source of
+        truth de quem faz o quê. Quando você atualiza um agente, atualiza aqui também — senão
+        Amora não sabe o que mudou.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= BLOCO 6 — CASO REAL PIXEL ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aprofundamento do Bloco 6</span>
+    <h2>Caso real Pixel — <em>3 agentes em produção.</em></h2>
+
+    <p>
+      Bruno narra o que tem hoje, sanitizado, em ranges. Não como vitrine — como
+      <strong>prova viva</strong> de que dá pra ter time digital sem virar bagunça.
+    </p>
+
+    <h3>Os 3 agentes principais</h3>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-time">⏱ Coordenação</div>
+        <div class="card-title">Amora COS</div>
+        <p class="card-desc">
+          <strong>Chief of Staff pessoal.</strong> Coordena tudo · contexto Bruno · propagação
+          semântica · orquestra os outros agentes. Subagentes invocáveis: pesquisador,
+          gerador-imagem, analista.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ Atendimento</div>
+        <div class="card-title">openclawzinho</div>
+        <p class="card-desc">
+          <strong>Suporte da comunidade do curso.</strong> Atende WhatsApp · escopo restrito a
+          dúvidas de OpenClaw · escala pra Amora se sai do escopo. Monitorado diariamente nos
+          primeiros 30d (recap A10).
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ Operações</div>
+        <div class="card-title">Leonardo Da Vinci</div>
+        <p class="card-desc">
+          <strong>Pixel Ops.</strong> Agente da equipe (compartilhado entre sócios) · acessa
+          kanban · métricas SaaS · análise de dados · relatórios pro time. Slack interno como canal.
+        </p>
+      </div>
+
+    </div>
+
+    <h3>Como funcionam</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Workspace separado por agente</strong> (mesma <code>~/.openclaw/</code>, pastas isoladas)</p>
+      <p><span class="check">✓</span> <strong>Identidades distintas</strong> (Amora direta · openclawzinho atencioso · Leonardo executor)</p>
+      <p><span class="check">✓</span> <strong>Permissões cruzadas</strong>: Amora vê tudo · openclawzinho só comunidade · Leonardo só ops</p>
+      <p><span class="check">✓</span> <strong>4 caminhos de comunicação</strong>: subagente spawn + arquivo compartilhado em <code>shared/notes/</code> + mention em canais compartilhados + cron</p>
+    </div>
+
+    <h3>Custo real (ranges sanitizados)</h3>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Agente</th>
+          <th>Range mensal</th>
+          <th>Cap definido</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Agente principal</strong> (tipo Amora)</td>
+          <td>R$ 100-300/mês</td>
+          <td>Cap mensal no <code>AGENTS.md</code></td>
+        </tr>
+        <tr>
+          <td><strong>Agente atendimento</strong> (tipo openclawzinho)</td>
+          <td>R$ 50-150/mês</td>
+          <td>Cap mensal + audit log diário</td>
+        </tr>
+        <tr>
+          <td><strong>Agente especialista</strong> (tipo Leonardo)</td>
+          <td>R$ 30-80/mês</td>
+          <td>Cap mensal + digest semanal</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-success">
+      <p>
+        <strong>Princípio do Bloco 6:</strong> 3 agentes ≠ 3x custo. Cada um roda quando precisa.
+        Cap mensal por agente (governance no <code>AGENTS.md</code>). Total previsível, audit
+        log diário, digest semanal mostrando consumo por agente. <em>Sem surpresa.</em>
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= BLOCO 7 — QUANDO NÃO ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Aprofundamento do Bloco 7</span>
+    <h2>6 sintomas de <em>overengineering.</em></h2>
+
+    <p>
+      Se você tá em multi-agente e vê algum desses sinais, <strong>volta pra 1</strong>. Não tem
+      vergonha — todo mundo passa por isso.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Sintoma</th>
+          <th>Diagnóstico</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>"Vou criar 5 agentes só porque é legal"</td>
+          <td>Estética &gt; função. Volta pra 1</td>
+        </tr>
+        <tr>
+          <td>Cada agente fica ocioso 90% do dia</td>
+          <td>Sub-utilização — junte funções</td>
+        </tr>
+        <tr>
+          <td>Custo dobrou e produtividade não</td>
+          <td>ROI ruim — reverta</td>
+        </tr>
+        <tr>
+          <td>Você passa mais tempo orquestrando que produzindo</td>
+          <td>Overhead &gt; benefício — simplifique</td>
+        </tr>
+        <tr>
+          <td>Você fala com 1 agente e ele "não sabe" o que outro fez</td>
+          <td>AGENTS.md desatualizado OU domínios mal divididos</td>
+        </tr>
+        <tr>
+          <td>Manutenção dos SOULs/USERs ficou pesada</td>
+          <td>Multiplicador 5x do Bloco 1 te alcançou</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Recap em 4 linhas</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Maioria dos PME: 1 agente.</strong> Multi-agente é refinamento — custo real é manutenção contínua, não setup</p>
+      <p><span class="check">✓</span> <strong>2 caminhos:</strong> subagente (background com identidade limitada) vs agente paralelo (entidade separada com identidade completa)</p>
+      <p><span class="check">✓</span> <strong>No Managed:</strong> agentes paralelos vivem no mesmo workspace (1 OpenClaw, N agentes lá dentro). Comunicação via 4 caminhos (subagente spawn · mention · arquivo · cron) — NÃO há DM interna direta</p>
+      <p><span class="check">✓</span> <strong>AGENTS.md</strong> é o organograma vivo — preparado desde A5, agora com substância</p>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Frase de fechamento:</strong> 1 agente bem configurado primeiro. Subagente
+        quando precisa especialista pontual. Agente paralelo só quando provar que vale a
+        manutenção 5x.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= PROMPTS PRONTOS ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Prompts prontos pra colar</span>
+    <h2>6 prompts do <em>cheatsheet multi-agente.</em></h2>
+
+    <p>
+      Resumo dos prompts canônicos do <a href="../INDICE.md">multi-agente.md</a>.
+      Cola direto no agente — ele conduz a partir daí.
+    </p>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #1 · análise "preciso evoluir?"</span>
+        <span class="prompt-card-where">cola no agente principal</span>
+      </div>
+      <div class="prompt-card-body">Quero analisar honestamente se preciso evoluir pra multi-agente.
+
+Contexto: [DESCREVE TUA OPERAÇÃO ATUAL EM 3 LINHAS — o que tu faz com 1
+agente hoje, onde tá funcionando bem, onde tá travando].
+
+Avalia os 4 sinais da A13:
+1. Agente único tá lento (context rot · threads pesadas)?
+2. Eu falo 2 línguas operacionais distintas (ex: marketing + dev)?
+3. Tenho time/funcionários que precisam de agente próprio?
+4. Quero delegação 24/7 (1 vigia inbox · outro escreve · outro atende)?
+
+E o custo de manutenção 5x:
+- Vou aceitar 3x SOULs pra sincronizar?
+- 3x rotações de credenciais?
+- 3x monitoramento diário primeiros 30d?
+- 3x skills pra manter atualizadas?
+
+Resposta honesta: vale a pena agora OU é melhor ficar com 1 e revisitar
+em 90 dias? Sem hype. Sem arrogância. Só análise.</div>
+      <div class="prompt-card-tip">
+        💡 Use ANTES de criar agente paralelo. Se a resposta for "ainda não", você economizou
+        semanas de manutenção desnecessária.
+      </div>
+    </div>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #2 · criar subagente especialista</span>
+        <span class="prompt-card-where">cola no agente principal</span>
+      </div>
+      <div class="prompt-card-body">Quero criar um subagente especialista em [DOMÍNIO — ex: pesquisa
+profunda, análise PDF, geração de imagem].
+
+Contexto: tarefa pontual, async, sandbox isolado. Subagente herda só
+AGENTS.md + TOOLS.md (sem SOUL próprio).
+
+Me ajuda a:
+1. Definir o agentId (handle curto · sem espaço · em inglês)
+2. Escrever a descrição que vai ficar em AGENTS.md (3-5 linhas)
+3. Listar as TOOLS específicas que ele precisa (não herda allowlist do
+   agente pai)
+4. Decidir o modo: isolated (sandbox limpo · default) ou fork (herda
+   contexto pai · pra continuação de tarefa)
+5. Mostrar o comando final /subagents spawn pra eu testar
+
+Quero comando funcional, não pseudocódigo.</div>
+      <div class="prompt-card-tip">
+        💡 Sempre comece por subagente quando estiver em dúvida. Subagente reverte com 1
+        comando · agente paralelo te custa semanas pra desmontar.
+      </div>
+    </div>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #3 · gerar AGENTS.md inicial</span>
+        <span class="prompt-card-where">cola no agente principal</span>
+      </div>
+      <div class="prompt-card-body">Quero gerar um AGENTS.md completo pro meu workspace — organograma vivo
+do meu time digital.
+
+Contexto: tenho [N] agentes hoje: [LISTA — handle, papel, modelo, canal].
+Mais [M] subagentes invocáveis: [LISTA — handle, tipo de tarefa].
+
+Cria AGENTS.md com as 5 seções da A13:
+1. Quem é cada agente (handle · papel · modelo · escopo)
+2. Quem chama quem (subagentes disponíveis · agentes paralelos com
+   handoff)
+3. Onde cada um vive (workspace · canais · integrações)
+4. Permissões cruzadas (scope por agente — recap A10)
+5. Governance (cap mensal · audit log · digest semanal)
+
+Formato Markdown, pronto pra colar em ~/.openclaw/AGENTS.md.</div>
+      <div class="prompt-card-tip">
+        💡 Roda esse prompt logo depois de criar 2º agente — pra organograma nascer junto com
+        o time, não depois que virou bagunça.
+      </div>
+    </div>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #4 · configurar handoff</span>
+        <span class="prompt-card-where">cola no agente principal</span>
+      </div>
+      <div class="prompt-card-body">Quero configurar handoff entre 2 agentes paralelos: [agente A — handle]
+e [agente B — handle].
+
+Cenário: agente A é [PAPEL — ex: atendimento da comunidade] · escopo
+restrito a [DOMÍNIO]. Quando aparecer questão fora desse escopo, ele
+deve escalar pra agente B (que é [PAPEL — ex: coordenação geral]).
+
+Me ajuda a:
+1. Definir os triggers de escala (palavras-chave · padrões de pergunta ·
+   menção explícita do nome de B)
+2. Escrever a regra em AGENTS.md (seção handoff de A pra B)
+3. Mostrar como fica no SOUL.md de A (como ele "sabe" quando escalar)
+4. Mostrar exemplo prático: aluno pergunta X em canal · A reconhece · A
+   responde com handoff (mention @B · contexto resumido)
+5. Configurar requireMention: true no canal compartilhado pra evitar
+   spam de respostas duplicadas
+
+Sem inventar flag --from --to (não existe). Só usar mecanismos reais
+da doc OpenClaw.</div>
+      <div class="prompt-card-tip">
+        💡 Handoff bem configurado é o que faz multi-agente funcionar sem virar bagunça.
+        Recap A4 (<code>requireMention: true</code>) é amigo seu aqui.
+      </div>
+    </div>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #5 · agente paralelo dedicado a 1 canal Telegram</span>
+        <span class="prompt-card-where">cola no agente principal</span>
+      </div>
+      <div class="prompt-card-body">Quero criar um SEGUNDO agente paralelo dedicado APENAS ao canal Telegram
+[DESCREVE O CANAL: ex "grupo da comunidade do meu curso", "grupo do time
+de atendimento", "DM do meu cliente X"].
+
+NÃO quero que ele acesse outros canais da [Amora / agente principal].
+NÃO quero que ele veja contexto pessoal meu (USER.md fica isolado).
+Workspace, identidade e memória SEPARADOS.
+
+Vai na doc oficial OpenClaw + cheatsheet multi-agente.md (Prompt #5
+completo) e executa em ordem:
+
+1. Bot novo no @BotFather (NÃO reusa token da Amora) · me lembra de
+   rodar /setprivacy → Disable ANTES de adicionar no grupo (recap A1/A4)
+2. Workspace isolado em ~/.openclaw/agents/<nome>/ com SOUL/IDENTITY/
+   MEMORY próprios. SOUL com TOM adequado ao papel (suporte = atencioso
+   paciente · equipe = direto operacional · cliente = profissional formal)
+3. Conecta SÓ a este canal · escopo restrito ao chat_id · privacy
+   disabled · requireMention: true se for grupo
+4. Registra em AGENTS.md com nome · papel · canais · escopo · cap
+   mensal de custo · regras de handoff com Amora
+5. Validação: manda mensagem no canal (novo agente responde) · manda
+   em outro canal da Amora (novo agente NÃO responde lá)
+
+Princípios A10: scope mínimo · identidade própria isolada · cap mensal
+(default R$ 50/mês — pergunta o valor) · audit log primeiros 30 dias.
+
+NÃO crie sem mostrar o plano completo antes. Quero confirmar identidade,
+escopo e cap antes de você executar.</div>
+      <div class="prompt-card-tip">
+        💡 Esse é o caso "openclawzinho do zero" — agente nasce com escopo claro, não herda
+        confusão da Amora. Padrão pra suporte de comunidade · atendimento de cliente · grupo
+        de equipe interno.
+      </div>
+    </div>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #6 · migrar canal saturado pra agente dedicado</span>
+        <span class="prompt-card-where">cola no agente principal</span>
+      </div>
+      <div class="prompt-card-body">Minha [Amora / agente principal] tá saturada — começou a misturar
+contextos do canal [DESCREVE O CANAL] com o resto. Sintomas: [ex:
+"responde no tom da minha persona pessoal pra cliente", "esquece briefing
+do grupo X depois de 2 dias", "não distingue thread do cliente Y do
+thread do cliente Z"].
+
+Quero migrar TODO o contexto desse canal pra um agente novo dedicado.
+Vai na doc oficial + cheatsheet multi-agente.md (Prompt #6 completo) e
+executa em ordem (CONFIRMA cada passo antes de seguir):
+
+1. Análise prévia (sem mexer em nada) · lista o que migra vs fica · tempo
+   + risco
+2. Cria o agente novo seguindo o Prompt #5 (bot novo, privacy disabled,
+   workspace isolado, identidade própria) · usa nome [SUGESTÃO]
+3. Migra arquivos · MOVE (não copia) · backup em shared/migrations/
+   <data>/ antes de mover · atualiza referências internas
+4. SOUL adequado ao tom do canal · MEMORY já populado com histórico
+   relevante (últimos 30 dias)
+5. Desconecta a Amora desse canal · atualiza AGENTS.md · regra de
+   handoff (Amora encaminha pro novo agente se cliente DM ela
+   acidentalmente)
+6. Validação: manda 1 mensagem teste · novo agente responde · Amora
+   ainda funciona normal nos outros canais dela
+
+CRÍTICO: NÃO faz migração destrutiva sem backup. NÃO desconecta a Amora
+do canal antes do novo agente estar 100% testado e respondendo. Aluno
+PME não pode ficar com canal mudo durante migração.</div>
+      <div class="prompt-card-tip">
+        💡 Esse é o caso "Amora ficou confusa, hora de spawnar dedicado". Sintomas claros
+        antes de migrar: tom errado, esquecimento de briefing, confusão de threads. Sem
+        sintomas reais? Não migra — vira overengineering.
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Cheatsheet completo:</strong> <a href="../INDICE.md">multi-agente.md</a> —
+        análise honesta "preciso evoluir?" + 4 sinais + 6 sintomas overengineering · tabela
+        prós/contras subagente vs paralelo · arquitetura por plataforma · 4 caminhos REAIS de
+        comunicação · template AGENTS.md de organograma · troubleshooting comum · 6 prompts
+        prontos pra colar.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= TROUBLESHOOTING ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Travou? Antes de pedir ajuda</span>
+    <h2>Top <em>problemas comuns da A13.</em></h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Sintoma</th>
+          <th>Causa provável</th>
+          <th>Ação</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>/subagents spawn</code> retorna erro de agentId</td>
+          <td>Subagente não cadastrado no <code>AGENTS.md</code></td>
+          <td>Cadastra primeiro · cola Prompt #2 do cheatsheet</td>
+        </tr>
+        <tr>
+          <td>Subagente não retorna resultado</td>
+          <td>Sandbox isolado sem TOOLS necessárias</td>
+          <td>Confere allowlist no <code>AGENTS.md</code> do subagente · subagente NÃO herda do pai</td>
+        </tr>
+        <tr>
+          <td>2 bots no mesmo grupo respondem duplicado</td>
+          <td><code>requireMention: true</code> não tá ativo (recap A4)</td>
+          <td>Configura no canal · só responde quando mencionado</td>
+        </tr>
+        <tr>
+          <td>Agentes "não sabem" o que outro fez</td>
+          <td><code>AGENTS.md</code> desatualizado OU domínios mal divididos</td>
+          <td>Cola Prompt #3 pra regerar AGENTS.md · revisar handoffs</td>
+        </tr>
+        <tr>
+          <td>Handoff de A pra B falha</td>
+          <td>Triggers de escala não definidos OU mention não passa</td>
+          <td>Cola Prompt #4 pra configurar handoff · valida <code>requireMention</code></td>
+        </tr>
+        <tr>
+          <td>Custo dobrou em 1 mês de multi-agente</td>
+          <td>Caps mensais não definidos no <code>AGENTS.md</code></td>
+          <td>Define cap por agente · ativa audit log diário · digest semanal</td>
+        </tr>
+        <tr>
+          <td>"Não sei se vale ter agente paralelo"</td>
+          <td>Análise honesta não rodada</td>
+          <td>Cola Prompt #1 · resposta vem em 3min</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Não conseguiu resolver com a tabela acima?</strong> Joga screenshot/áudio/vídeo
+        no <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">grupo Telegram do
+        curso</a>. openclawzinho responde em &lt;30 segundos · humanos em &lt;5 minutos.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= CTA PRÓXIMA ========================= -->
+
+  <section class="sec">
+    <div class="cta-card">
+      <h3>Próximo passo: <em>A14 — Mission Control</em></h3>
+      <p>
+        15-20 minutos · modular · aula reaproveitada do V1. Você tem 1 OU vários agentes
+        operando 24/7 — como você OBSERVA tudo? Sem ficar olhando 5 telas de Telegram, sem
+        perder o que cron rodou ontem, sem adivinhar se erro ficou silencioso. <strong>Mission
+        Control</strong> é o cockpit conversacional onde você constrói dashboard customizado
+        com a Amora — workflow completo via áudio Telegram.
+      </p>
+      <a href="aula-14-mission-control.html" class="cta-button">→ Ir pra Aula 14</a>
+    </div>
+  </section>
+
+  <!-- ========================= FOOTER ========================= -->
+
+  <footer class="aula-footer">
+
+    <div class="aula-footer-block">
+      <h4>Travou? Tá no grupo do curso</h4>
+      <p>
+        Comunidade Telegram do curso —
+        <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">t.me/cursoopenclaw</a>
+        — suporte 24/7 (openclawzinho bot + Bruno e equipe presente).
+        Dúvida sobre essa aula, problemas de setup, ou quer compartilhar como aplicou
+        no seu negócio: bora trocar lá.
+      </p>
+    </div>
+
+    <div class="aula-footer-block">
+      <h4>Próximo nível: Pixel AI Hub</h4>
+      <p>
+        Aplicar agente pra empresa toda — equipe, governance, escala?
+        <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=material&utm_campaign=v1" target="_blank" rel="noopener">Pixel AI Hub</a>:
+        segundo cérebro corporativo, comunidade de empreendedores, +50 skills enterprise,
+        encontros mensais ao vivo. Vagas mensais limitadas.
+      </p>
+    </div>
+
+    <div class="aula-footer-credit">
+      Mini-Curso OpenClaw 2026 · Material complementar à gravação · Atualizações conforme kit evolui<br>
+      <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=footer-credit" target="_blank" rel="noopener">Bruno Okamoto · Pixel Educação</a>
+    </div>
+
+  </footer>
+
+</div>
+
+</body>
+</html>

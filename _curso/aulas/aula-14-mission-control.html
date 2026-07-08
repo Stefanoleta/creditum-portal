@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A14 — Mission Control · cockpit customizado · Mini-Curso OpenClaw</title>
+<meta name="description" content="Material complementar da Aula 14 — Mission Control: cockpit conversacional onde Amora constrói dashboard customizado com você. Aula reaproveitada do V1, com adaptações Managed via cheatsheet.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Fraunces:ital,wght@1,400;1,500;1,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="_shared/tokens.css">
+</head>
+
+<body>
+
+<div class="wrap">
+
+  <!-- ========================= HEADER ========================= -->
+
+  <header class="aula-header">
+    <div class="aula-header-brand">Mini-Curso <span class="accent">OpenClaw</span></div>
+    <div class="aula-header-meta">Aula 14 · Mission Control</div>
+  </header>
+
+  <!-- ========================= HERO ========================= -->
+
+  <section class="hero">
+    <div class="hero-meta">
+      <span class="hero-meta-item">⏱ <strong>15-20 min</strong></span>
+      <span class="hero-meta-item">📚 <strong>Modular</strong></span>
+      <span class="hero-meta-item">🎯 <strong>A-ha #10</strong></span>
+    </div>
+
+    <h1>
+      Sei observar +
+      <em>sei construir cockpit.</em>
+    </h1>
+
+    <p class="hero-sub">
+      Em <em>~18min</em> você vê como Bruno construiu o Mission Control real — dashboard customizado
+      com Kanban, conteúdo, métricas de redes, integração Notion, gestão de bosses. Workflow
+      inteiro <em>reaproveitável</em>: pesquisa template, audit de segurança, PRD com superpowers,
+      execução, iteração via áudio Telegram. Você não precisa fazer igual — sai sabendo o
+      <em>caminho real</em> quando precisar.
+    </p>
+  </section>
+
+  <!-- ========================= A-HA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">A-ha desta aula</span>
+    <div class="aha-card">
+      <span class="label">A-ha #10 entregue</span>
+      <p class="quote">"Sei observar o que ele tá fazendo, e sei como construir um cockpit completo quando precisar — a Amora faz comigo."</p>
+    </div>
+  </section>
+
+  <!-- ========================= AVISO REAPROVEITADA ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aviso importante</span>
+    <h2>A14 é uma aula <em>reaproveitada do V1.</em></h2>
+
+    <p>
+      Bruno NÃO regrava — vídeo crú entra no curso V2 com <strong>adaptações de contexto via
+      cheatsheet</strong>. A razão é direta: o que importa na aula é o <em>workflow conversacional
+      via Telegram com agente</em> — universal, funciona Managed ou VPS.
+    </p>
+
+    <p>
+      A parte específica de <strong>Cloud Code + VPS</strong> é só preferência de produção do
+      Bruno (motivo: custo de tokens). Aluno Managed pode fazer tudo via agente OpenClaw direto —
+      mais lento em token, mas funciona. As 2 trilhas tão cobertas no cheatsheet
+      <a href="../INDICE.md">mission-control.md</a> do kit.
+    </p>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Esse material HTML serve de complemento</strong> — explica o que esperar da aula
+        reaproveitada, contexto do que Bruno fez, e os 2 caminhos pra você fazer no Managed sem
+        precisar de VPS. <strong>Não é tutorial passo a passo</strong> — passo a passo tá no
+        cheatsheet do kit.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= O QUE A AULA COBRE ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">O que esperar da aula</span>
+    <h2>Workflow do Bruno em <em>9 etapas.</em></h2>
+
+    <p>
+      A aula original tem ~18min e mostra Bruno construindo o Mission Control real, do zero
+      conceitual até dashboard funcional. Ordem do vídeo:
+    </p>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-time">⏱ Etapa 1</div>
+        <div class="card-title">Introdução · stack · promessa</div>
+        <p class="card-desc">
+          2026 é ano dos agentes. Stack que Bruno usa: <strong>OpenClaw + Cloud Code +
+          Supabase</strong>. Promessa do vídeo: você acompanha o build real do dashboard
+          customizado.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ Etapa 2</div>
+        <div class="card-title">Achou template · <a href="https://github.com/carlosazaustre/tenacitOS" target="_blank" rel="noopener">tenacitOS</a></div>
+        <p class="card-desc">
+          Carlos Azaustre, GitHub (<a href="https://github.com/carlosazaustre/tenacitOS" target="_blank" rel="noopener">github.com/carlosazaustre/tenacitOS</a>).
+          Next.js + React 19 + Tailwind v4 · escritório 3D com voxel avatars (React Three Fiber) ·
+          Kanban · system monitor · cron manager · memory browser. Usou como base — princípio
+          chave: <strong>não reinventar a roda</strong>. Pesquisa primeiro, depois adapta.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ Etapa 3</div>
+        <div class="card-title">Audit de segurança com Amora</div>
+        <p class="card-desc">
+          Antes de clonar repo de terceiro, <strong>Amora faz audit</strong> — prompt injection,
+          malware, vulnerabilidades. Relatório executivo. Princípio A10 vivo.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ Etapa 4</div>
+        <div class="card-title">Amora monta PRD</div>
+        <p class="card-desc">
+          PRD com fixes de segurança · <strong>Tailscale substitui CloudFlare Tunnel</strong> ·
+          acesso direto VPS via Tailnet (recap regras invariantes). Documento que vai virar
+          execução.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ Etapa 5</div>
+        <div class="card-title">Instala skill superpowers</div>
+        <p class="card-desc">
+          <code>brainstorming + writing-plans + executing-plans</code> — ativa por default na
+          inicialização. Permite revisão profunda do PRD antes de executar.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ Etapa 6</div>
+        <div class="card-title">Re-revisão do PRD</div>
+        <p class="card-desc">
+          Perguntas críticas: escopo · permissões · fork vs upstream · branding · comportamento
+          dos personagens. <strong>Must-have vs nice-to-have</strong>. Cortou o que não era
+          essencial.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ Etapa 7</div>
+        <div class="card-title">Decisão · Cloud Code em vez de OpenClaw</div>
+        <p class="card-desc">
+          Pra fundação técnica. Motivo: <strong>custo de tokens</strong>. OpenClaw bebe muito
+          em dev pesado. Cloud Code roda na VPS Hostinger via SSH — mais barato pra build.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ Etapa 8</div>
+        <div class="card-title">Execução · 4 chunks em 1h30</div>
+        <p class="card-desc">
+          Cloud Code SSH na VPS · executa PRD em 4 chunks: <strong>segurança · branding ·
+          escritório · deploy</strong>. ~1h30 de execução total.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ Etapa 9</div>
+        <div class="card-title">Iteração via áudio Telegram</div>
+        <p class="card-desc">
+          <strong>Vitória visível ⭐</strong>: Bruno na academia · áudios pra Amora · Amora vai
+          construindo · manda prints · recebe ajustes · repete. <em>Workflow conversacional
+          puro.</em>
+        </p>
+      </div>
+
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Frase-mãe da A14:</strong> Mission Control não é dashboard que você decora. É
+        workflow conversacional onde a Amora constrói com você — você manda áudio na academia,
+        ela manda print, vocês iteram. <em>85% do trabalho em 1 prompt.</em> O resto é refinamento.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= 2 CAMINHOS PRO ALUNO MANAGED ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Adaptações Managed</span>
+    <h2>2 caminhos pra <em>você fazer.</em></h2>
+
+    <p>
+      Aula original mostra workflow com <strong>Cloud Code + VPS</strong> — preferência de
+      produção do Bruno (custo de tokens). Aluno Managed do curso V2 tem 2 caminhos válidos.
+      Ambos funcionam. Bruno escolheu B por motivo de custo. Aluno PME que quer simplicidade
+      fica em A.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Caminho</th>
+          <th>Como</th>
+          <th>Trade-off</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>A — Tudo via agente Managed</strong> (default V2)</td>
+          <td>Pede pra agente executar PRD direto, dentro do workspace OpenClaw</td>
+          <td>Mais lento em token · sem necessidade de VPS / Cloud Code / Tailscale</td>
+        </tr>
+        <tr>
+          <td><strong>B — Aluno avançado com VPS</strong> (gancho R1-R4)</td>
+          <td>Cloud Code SSH na VPS + executa PRD via Cloud Code</td>
+          <td>Mais barato em tokens · setup inicial maior</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Princípio:</strong> ambos os caminhos chegam no mesmo lugar. Se você é PME e quer
+        agente pra você — <strong>caminho A</strong>. Se você tá disposto a montar VPS + Tailscale
+        + Cloud Code pra economizar tokens em build pesado — <strong>caminho B</strong> (e os
+        bônus técnicos R1-R4 cobrem).
+      </p>
+    </div>
+
+    <h3>Tabela de hospedagem por perfil</h3>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Perfil</th>
+          <th>Onde hospedar</th>
+          <th>Custo</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>PME testando</strong> (day 1-30)</td>
+          <td>Vercel free tier · domínio do Vercel · Supabase free</td>
+          <td>R$ 0/mês</td>
+        </tr>
+        <tr>
+          <td><strong>PME em produção</strong></td>
+          <td>Vercel Pro OU VPS Hostinger própria · domínio próprio</td>
+          <td>R$ 30-100/mês (VPS) · US$ 20/mês (Vercel Pro)</td>
+        </tr>
+        <tr>
+          <td><strong>Empresa com equipe</strong></td>
+          <td>Pixel AI Hub (multi-tenant · governance enterprise)</td>
+          <td>Plano Hub (ver landing)</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ========================= STACK OPCIONAL ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Stack opcional</span>
+    <h2>Métricas de redes — <em>Apify ou alternativas.</em></h2>
+
+    <p>
+      Mission Control do Bruno usa <strong>Apify</strong> (US$ 30-40/mês) pra puxar métricas de
+      LinkedIn, Instagram, YouTube, Twitter. Se você não quer pagar Apify desde o day 1, tem
+      alternativas gratuitas:
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>LinkedIn</strong> — API oficial limitada · scraping pelo browser via skill custom (gratuito mas frágil)</p>
+      <p><span class="check">✓</span> <strong>Instagram</strong> — Instagram Graph API oficial (gratuita pra business · setup 30min)</p>
+      <p><span class="check">✓</span> <strong>YouTube</strong> — YouTube Data API oficial (gratuita até 10k requests/dia · sobra pra PME)</p>
+      <p><span class="check">✓</span> <strong>Twitter/X</strong> — API paga (US$ 100/mês básico) OU manual export semanal</p>
+      <p><span class="check">✓</span> <strong>Apify</strong> — paga (US$ 30-40/mês) · pega tudo isso num dashboard único · vale quando você quer setup &lt; 1h</p>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Recomendação Bruno:</strong> começa com APIs gratuitas pra YouTube + Instagram.
+        Se travar e quiser setup unificado, paga Apify (US$ 30-40/mês cobre tudo). Não precisa
+        decidir agora.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= PRINCÍPIOS A10 APLICADOS ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Princípios A10 aplicados</span>
+    <h2>Segurança em <em>cada etapa.</em></h2>
+
+    <p>
+      A14 não ensina segurança nova — <strong>aplica os princípios da A10</strong> num caso real.
+      Cada etapa do build do Bruno tem proteção embutida:
+    </p>
+
+    <div class="item-icon">
+      <div class="item-icon-box">1</div>
+      <div class="item-icon-content">
+        <h3>Audit antes de clonar repo de terceiro</h3>
+        <p>
+          Etapa 3 — Amora roda audit no <strong>tenacitOS</strong> antes de qualquer commit.
+          Procura prompt injection, malware, vulnerabilidades. <em>Repo de terceiro entra com
+          desconfiança, não com fé.</em>
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">2</div>
+      <div class="item-icon-content">
+        <h3>Scope mínimo por agente</h3>
+        <p>
+          Cada agente que toca no Mission Control tem escopo restrito. Cloud Code tem permissão
+          de executar PRD na VPS, mas não tem credenciais de produção. <em>Princípio do menor
+          privilégio.</em>
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">3</div>
+      <div class="item-icon-content">
+        <h3>Row-level security (RLS) no Supabase</h3>
+        <p>
+          Dashboard multi-tenant exige RLS por default. Cada usuário só vê dados próprios.
+          Esquecer RLS = vazamento horizontal de dados.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">4</div>
+      <div class="item-icon-content">
+        <h3>Defesa contra prompt injection no dashboard</h3>
+        <p>
+          Se o dashboard recebe input do usuário e passa pra agente, sanitização é obrigatória.
+          User input ≠ instrução pro agente. <em>Recap A10 — separação de canal humano e canal
+          de instrução.</em>
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================= MULTI-AGENTE EM AÇÃO ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">A14 reforça A13</span>
+    <h2>Mission Control como <em>prova viva.</em></h2>
+
+    <p>
+      A14 entrega 2 coisas ao mesmo tempo: (1) workflow do Mission Control, (2) <strong>demonstração
+      viva de multi-agente em ação</strong> — Bruno mostra a hierarquia de bosses no Telegram
+      durante a aula. É a A13 ganhando prova prática.
+    </p>
+
+    <h3>Hierarquia de bosses do Bruno</h3>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-time">⏱ Chefe geral</div>
+        <div class="card-title">Cosa Mora</div>
+        <p class="card-desc">
+          <strong>Coordenação top-level.</strong> Vê tudo. Orquestra os outros agentes. Aparece
+          no Telegram como handle separado.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ Conteúdo</div>
+        <div class="card-title">FLG Amora</div>
+        <p class="card-desc">
+          <strong>Especialista em conteúdo.</strong> Newsletter, LinkedIn, YouTube. Escopo
+          restrito a produção editorial.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ SaaS</div>
+        <div class="card-title">MGM Amora</div>
+        <p class="card-desc">
+          <strong>Especialista em portfólio Micro-SaaS.</strong> Métricas, ideias mercado,
+          análise de produto. Escopo SaaS exclusivo.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ Equipe</div>
+        <div class="card-title">Leonardo Da Vinci</div>
+        <p class="card-desc">
+          <strong>Equipe Pixel.</strong> Compartilhado entre sócios via Slack interno. Ops
+          internas, kanban, relatórios.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ Comunidade</div>
+        <div class="card-title">openclawzinho</div>
+        <p class="card-desc">
+          <strong>Suporte da comunidade WhatsApp.</strong> Aluno-facing, escopo restrito a
+          dúvidas OpenClaw. Monitorado diariamente (recap A10).
+        </p>
+      </div>
+
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Princípio:</strong> cada card do dashboard aciona um agente diferente. Mission
+        Control não é só visual — é o ponto de orquestração onde múltiplos agentes coexistem
+        sem colisão. <em>A13 + A14 = time digital + cockpit pra observar o time.</em>
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= 4 PROMPTS DO CHEATSHEET ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Prompts prontos pra colar</span>
+    <h2>4 prompts do <em>cheatsheet mission-control.</em></h2>
+
+    <p>
+      Resumo dos prompts canônicos do <a href="../INDICE.md">mission-control.md</a>.
+      Cola direto no agente principal — ele conduz a partir daí, replicando o workflow do Bruno.
+    </p>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #1 · pesquisar template</span>
+        <span class="prompt-card-where">cola no agente principal</span>
+      </div>
+      <div class="prompt-card-body">Quero construir um Mission Control customizado pro meu negócio.
+
+Contexto: [DESCREVE TEU NEGÓCIO + 3-5 INFORMAÇÕES QUE QUER VER NUM
+DASHBOARD ÚNICO — ex: kanban de tasks, métricas de redes, leads novos,
+financeiro do mês].
+
+Pesquisa pra mim 3-5 templates open-source no GitHub que servem de base
+(stacks: Next.js + Tailwind + shadcn/ui · React + Supabase). Critérios:
+1. Manutenção ativa (commits últimos 6 meses)
+2. Licença permissiva (MIT, Apache)
+3. Estrutura modular (fácil adaptar pro meu caso)
+4. Componentes que cobrem 70%+ do que preciso (não vou reinventar)
+
+Retorna: nome do template · URL · stack · % de aderência ao meu caso ·
+princípio recomendação. Quero comparativo direto, não lista genérica.</div>
+      <div class="prompt-card-tip">
+        💡 Bruno achou TenacityOS desse jeito (Carlos Azaustre, GitHub). Princípio: não
+        reinventar a roda. Pesquisa primeiro, adapta depois.
+      </div>
+    </div>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #2 · audit de segurança no template</span>
+        <span class="prompt-card-where">cola no agente principal</span>
+      </div>
+      <div class="prompt-card-body">Antes de clonar o repo [URL DO TEMPLATE] pro meu workspace, faz audit
+de segurança completo.
+
+Procura especificamente:
+1. Prompt injection em strings de prompts (se o template tem chamada
+   pra LLM)
+2. Dependências com vulnerabilidades conhecidas (npm audit · CVEs)
+3. Hardcoded secrets ou tokens (mesmo que comentados)
+4. Endpoints sem auth (rotas públicas que não deveriam ser)
+5. Acesso a localStorage/sessionStorage de domínios externos
+6. Scripts inline ou eval() suspeito
+7. Network calls pra domínios não-canônicos do projeto
+
+Relatório executivo: severidade (crítico/alto/médio/baixo) · onde tá ·
+o que faz · ação recomendada (não-clonar / fix-antes-de-rodar /
+revisar / aceitar).
+
+Repo de terceiro entra com desconfiança, não com fé.</div>
+      <div class="prompt-card-tip">
+        💡 Princípio A10 vivo. Bruno fez exatamente isso com TenacityOS. Audit antes de qualquer
+        commit pode salvar você de prompt injection ou malware oculto.
+      </div>
+    </div>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #3 · montar PRD com superpowers</span>
+        <span class="prompt-card-where">cola no agente principal</span>
+      </div>
+      <div class="prompt-card-body">Quero montar PRD completo pro meu Mission Control, baseado no template
+[URL] que já passou audit de segurança.
+
+Usa skill superpowers (brainstorming + writing-plans + executing-plans)
+pra fazer revisão profunda. Eu quero perguntas críticas, não checklist
+genérico.
+
+Frame:
+1. Brainstorming: 5-7 perguntas que NÃO posso deixar de responder antes
+   de executar (escopo · permissões · fork vs upstream · branding ·
+   comportamento dos personagens · hospedagem · custos)
+2. Writing-plans: organiza em must-have vs nice-to-have. Corte agressivo
+   no nice-to-have — só fica o que é bloqueante pro V1
+3. Executing-plans: divide em chunks executáveis (4-6 chunks de 30-45min
+   cada) pra eu rodar via Cloud Code OU OpenClaw
+
+Output: PRD em Markdown · pronto pra colar como contexto na execução ·
+sem fluff, só o que vai virar código.</div>
+      <div class="prompt-card-tip">
+        💡 Skill <code>superpowers</code> faz a diferença aqui. Sem ela, PRD vira lista de
+        wishlist. Com ela, vira documento executável.
+      </div>
+    </div>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #4 · iterar via Telegram</span>
+        <span class="prompt-card-where">cola no agente principal</span>
+      </div>
+      <div class="prompt-card-body">PRD executado · Mission Control rodando em [URL DEV LOCAL ou STAGING].
+
+Agora quero iterar via áudio no Telegram, modo Bruno na academia.
+
+Como vai funcionar:
+1. Eu mando áudio descrevendo o que quero ajustar (ex: "deixa o card
+   de Kanban no topo · move métricas pra direita · cor do badge
+   amarelo tá feio")
+2. Tu transcreve mentalmente · interpreta · executa
+3. Tu manda PRINT do resultado pra mim (screenshot do dashboard depois
+   da mudança)
+4. Se precisa de validação ANTES de executar (mudança grande), pergunta
+5. Se é mudança visual menor (tipo reordenar, mudar cor), executa direto
+   e me mostra o resultado
+
+Princípio: 85% do trabalho em 1 prompt. Resto é refinamento via áudio.
+Não pergunta a cada microajuste — só quando muda escopo materialmente.</div>
+      <div class="prompt-card-tip">
+        💡 Esse é o coração da A14. Bruno fez exatamente isso na academia, recebendo prints da
+        Amora e voltando com áudio. Workflow conversacional puro.
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================= QUANDO NÃO ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Proteção anti-overengineering</span>
+    <h2>Quando NÃO construir <em>Mission Control.</em></h2>
+
+    <p>
+      A14 mostra build complexo — não é pra todo mundo. Aluno PME dia-1 NÃO precisa de Mission
+      Control. <strong>Sinais de que ainda não é a hora:</strong>
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Sintoma</th>
+          <th>Diagnóstico</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Você ainda não usa o agente todo dia</td>
+          <td>Construa relação primeiro · cockpit é refinamento</td>
+        </tr>
+        <tr>
+          <td>Você tem 1 agente só, sem multi-agente ativo</td>
+          <td>Telegram já é cockpit suficiente · Mission Control vira gold-plating</td>
+        </tr>
+        <tr>
+          <td>Você não tem &gt;5 fontes de dados pra unificar</td>
+          <td>Spreadsheet ou Notion resolvem com 10% do trabalho</td>
+        </tr>
+        <tr>
+          <td>Você não vai mexer no dashboard toda semana</td>
+          <td>Setup pesado, manutenção zero = código morto em 60 dias</td>
+        </tr>
+        <tr>
+          <td>Você só quer porque viu o do Bruno</td>
+          <td>Estética &gt; função. Volta pro básico</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>Princípio:</strong> Mission Control é refinamento avançado. Maioria dos PME no
+        day 30-60 ainda tá calibrando agente principal — esse é o ROI real. Mission Control faz
+        sentido quando você tem <em>1 OU mais agentes operando 24/7 com múltiplas fontes de
+        dados que precisam de visão unificada</em>. Se não é teu caso ainda, deixa pra depois
+        sem culpa.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= TROUBLESHOOTING ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Travou? Antes de pedir ajuda</span>
+    <h2>Top <em>problemas comuns da A14.</em></h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Sintoma</th>
+          <th>Causa provável</th>
+          <th>Ação</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Audit retorna "tudo limpo" mas algo parece estranho</td>
+          <td>Audit superficial · falta de heurísticas específicas</td>
+          <td>Roda Prompt #2 com lista expandida · valida manualmente os 3 endpoints mais sensíveis</td>
+        </tr>
+        <tr>
+          <td>PRD virou wishlist de 40 itens</td>
+          <td><code>superpowers</code> não foi acionada OU corte agressivo não rolou</td>
+          <td>Roda Prompt #3 de novo · pede explicitamente "must-have apenas"</td>
+        </tr>
+        <tr>
+          <td>Cloud Code esgota tokens em 1 chunk</td>
+          <td>PRD muito denso pra 1 chunk único</td>
+          <td>Divide em 4-6 chunks de 30-45min · 1 chunk por vez</td>
+        </tr>
+        <tr>
+          <td>OpenClaw Managed mais lento que esperado em build</td>
+          <td>Workflow agentic em token-heavy task</td>
+          <td>Aceita o caminho A (mais lento, sem VPS) OU migra pro caminho B (VPS + Cloud Code)</td>
+        </tr>
+        <tr>
+          <td>Tailscale não conecta na VPS</td>
+          <td>Service não inicializou OU porta bloqueada</td>
+          <td>Verifica com <code>tailscale status</code> · cobertura nos bônus técnicos R1-R4</td>
+        </tr>
+        <tr>
+          <td>Apify quebra scraping de LinkedIn</td>
+          <td>Anti-bot nativo do LinkedIn ficou mais agressivo</td>
+          <td>Migra pra LinkedIn API oficial OU export semanal manual</td>
+        </tr>
+        <tr>
+          <td>Mission Control vira código morto em 60 dias</td>
+          <td>Setup pesado sem manutenção contínua</td>
+          <td>Releia "Quando NÃO construir" — talvez não era hora</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Cheatsheet completo:</strong> <a href="../INDICE.md">mission-control.md</a> —
+        workflow do Bruno em 9 etapas detalhadas · caveats Managed vs VPS · tabela de hospedagem
+        por perfil · stack opcional · 4 prompts prontos pra colar · princípios A10 aplicados ·
+        troubleshooting profundo.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= CTA PRÓXIMA ========================= -->
+
+  <section class="sec sec-alt">
+    <div class="cta-card">
+      <h3>Próximo passo: <em>A15 — Wrap-up + cases</em></h3>
+      <p>
+        ~7 minutos · curto · conceitual. Vídeo simples de fechamento — recap dos 10 a-has,
+        cases dos 3 agentes do Bruno (Amora · openclawzinho · Léo da Vinci), avaliação NPS,
+        2 vídeos YouTube como referência, e CTA pro próximo nível: <strong>Pixel AI Hub</strong>.
+        Não tem demo de build, não tem produção pesada — é fechamento de chapter.
+      </p>
+      <a href="aula-15-fechamento.html" class="cta-button">→ Ir pra Aula 15</a>
+    </div>
+  </section>
+
+  <!-- ========================= FOOTER ========================= -->
+
+  <footer class="aula-footer">
+
+    <div class="aula-footer-block">
+      <h4>Travou? Tá no grupo do curso</h4>
+      <p>
+        Comunidade Telegram do curso —
+        <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">t.me/cursoopenclaw</a>
+        — suporte 24/7 (openclawzinho bot + Bruno e equipe presente).
+        Dúvida sobre essa aula, problemas de setup, ou quer compartilhar como aplicou
+        no seu negócio: bora trocar lá.
+      </p>
+    </div>
+
+    <div class="aula-footer-block">
+      <h4>Próximo nível: Pixel AI Hub</h4>
+      <p>
+        Aplicar agente pra empresa toda — equipe, governance, escala?
+        <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=material&utm_campaign=v1" target="_blank" rel="noopener">Pixel AI Hub</a>:
+        segundo cérebro corporativo, comunidade de empreendedores, +50 skills enterprise,
+        encontros mensais ao vivo. Vagas mensais limitadas.
+      </p>
+    </div>
+
+    <div class="aula-footer-credit">
+      Mini-Curso OpenClaw 2026 · Material complementar à gravação · Atualizações conforme kit evolui<br>
+      <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=footer-credit" target="_blank" rel="noopener">Bruno Okamoto · Pixel Educação</a>
+    </div>
+
+  </footer>
+
+</div>
+
+</body>
+</html>

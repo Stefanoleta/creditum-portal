@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A8 — Skills (6 curadas + criar a sua) · Mini-Curso OpenClaw</title>
+<meta name="description" content="Material complementar da Aula 8 — capacidades nativas do OpenClaw, tour de 6 skills curadas, templates de report do kit, onde achar mais skills e como criar a sua própria com criar-skill.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Fraunces:ital,wght@1,400;1,500;1,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="_shared/tokens.css">
+</head>
+
+<body>
+
+<div class="wrap">
+
+  <!-- ========================= HEADER ========================= -->
+
+  <header class="aula-header">
+    <div class="aula-header-brand">Mini-Curso <span class="accent">OpenClaw</span></div>
+    <div class="aula-header-meta">Aula 08 · Modular</div>
+  </header>
+
+  <!-- ========================= HERO ========================= -->
+
+  <section class="hero">
+    <div class="hero-meta">
+      <span class="hero-meta-item">⏱ <strong>18 min</strong></span>
+      <span class="hero-meta-item">🧩 <strong>Modular</strong></span>
+      <span class="hero-meta-item">🎯 <strong>Skills + criar a sua</strong></span>
+    </div>
+
+    <h1>
+      Skills — 6 curadas +
+      <em>criar a sua.</em>
+    </h1>
+
+    <p class="hero-sub">
+      Em <em>~18min</em> você sai de <em>"prompt que se repete"</em> pra <em>"SOP que o agente
+      executa sozinho"</em>. Tour de 6 skills (3 da comunidade, 1 do Bruno, 2 da Anthropic),
+      capacidades nativas que já vêm de fábrica no OpenClaw, e demo passo-a-passo da
+      <code>criar-skill</code> — sua primeira skill custom em 1 prompt.
+    </p>
+  </section>
+
+  <!-- ========================= A-HA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">A-ha desta aula</span>
+    <div class="aha-card">
+      <span class="label">A-ha entregue</span>
+      <p class="quote">"Sei criar minhas próprias skills — e meu agente já tem skills boas de fábrica."</p>
+    </div>
+  </section>
+
+  <!-- ========================= CASE PME ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Como skills mudam a operação · case real</span>
+    <h2>João, agência criativa, <em>5 pessoas.</em></h2>
+
+    <p>
+      João tem agência de design + dev em São Paulo. 5 colaboradores, 12 clientes ativos, tudo
+      rodando em Slack do cliente + Notion + Figma + Linear. Toda sexta-feira 14h ele perdia
+      <strong>2 horas</strong> compilando o que tinha rolado na semana com cada cliente — abria
+      Slack canal por canal, copiava decisões importantes, atualizava Notion do projeto, mandava
+      resumo pelo email. Trabalho braçal, sem alavancagem.
+    </p>
+
+    <p>
+      Depois de aprender a A8 (essa aula), criou uma skill chamada <code>briefing-cliente-semanal</code>.
+      A skill faz <strong>3 coisas</strong>:
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> Lê últimos 7 dias do canal Slack de cada cliente · extrai decisões, blockers, próximos passos</p>
+      <p><span class="check">✓</span> Cruza com Notion do projeto · marca o que mudou de status</p>
+      <p><span class="check">✓</span> Gera 1 markdown por cliente com resumo executivo + pendências por pessoa</p>
+    </div>
+
+    <p>
+      João combinou a skill com cron (A9 cobre): toda sexta 13h o agente roda automaticamente,
+      deixa os 12 markdowns prontos no Notion. Quando João abre o computador às 14h, o trabalho
+      de 2 horas tá feito. Ele revisa, ajusta tom, manda. <strong>15 minutos</strong>. Hoje a
+      skill tá rodando há 3 meses — economizou ~25 horas só dele, sem contar os colaboradores
+      que pararam de fazer setup manual de status.
+    </p>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>O ponto da A8:</strong> skill não é feature técnica. É <em>capacidade que vira
+        hábito do agente</em> — tarefa repetitiva da sua semana virou tarefa do agente. Você não
+        reescreve toda vez. Você ensina uma vez, ele repete pra sempre. Esse é o A-ha.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= PRE-FLIGHT ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Pre-flight check</span>
+    <h2>Antes de <em>apertar play.</em></h2>
+
+    <p>
+      A8 é modular — pré-requisito é só ter o agente respondendo (A1) e Telegram conectado (A1).
+      Não precisa terminar A3-A7 antes. Mas vai render mais se você já tiver workspace mínimo
+      (A6) — porque skill é onde sua memória vira ação.
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> agente respondendo (A1 OK · OAuth ativo · API key válida)</p>
+      <p><span class="check">✓</span> Telegram DM funcionando (A1) — você vai criar skill e ver ela rodando lá</p>
+      <p><span class="check">✓</span> 1 caso real em mente (ex: <em>"toda semana eu peço relatório de comunidade"</em>) — vira sua primeira skill</p>
+      <p><span class="check">✓</span> 5 minutos pro Bloco 6 (criar-skill demo) — separa esse tempo, vai ser sua vitória visível</p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Skill ≠ prompt.</strong> Prompt é uma instrução one-shot. Skill é um SOP executável
+        nomeado — agente carrega quando o gatilho dispara, segue passos definidos, retorna formato
+        consistente. <em>Mesma tarefa, sempre igual, sem você re-explicar.</em>
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= ESTRUTURA ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Estrutura da aula em vídeo</span>
+    <h2>O que você vai aprender em <em>6 blocos.</em></h2>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-time">⏱ 3 min</div>
+        <div class="card-title">Bloco 1 — Conceito de skill</div>
+        <p class="card-desc">
+          Prompt vs SOP executável. Quando usar (toda tarefa que você pede 2+ vezes). Anatomia
+          mínima do <code>SKILL.md</code>: nome · trigger · descrição · passos · output esperado.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 2 min</div>
+        <div class="card-title">Bloco 2 — Capacidades nativas</div>
+        <p class="card-desc">
+          <strong>Você já tem bateria recheada.</strong> PDF · browser · web search (12 providers) ·
+          image-gen · TTS · memória semântica · cron · ClawHub. Lista completa em
+          <code>docs.openclaw.ai/tools</code>.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 5 min</div>
+        <div class="card-title">Bloco 3 — Tour das 6 skills curadas</div>
+        <p class="card-desc">
+          ~50s por skill. Mistura comunidade + Bruno + Anthropic. <strong>using-superpowers</strong>,
+          <strong>criar-skill</strong>, <strong>skill-checkup-openclaw</strong>,
+          <strong>canvas-design</strong>, <strong>last30days</strong>, <strong>pptx</strong>.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1 min</div>
+        <div class="card-title">Bloco 4 — Templates de report do kit</div>
+        <p class="card-desc">
+          3 templates HTML prontos no kit (<code>templates/reports/</code>) — comunidade, executivo,
+          material didático. Visual neutro pro aluno trocar 4 variáveis CSS e adaptar pra marca dele.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 2 min</div>
+        <div class="card-title">Bloco 5 — Onde achar mais</div>
+        <p class="card-desc">
+          3 fontes oficiais pra buscar skill quando precisar: Anthropic Skills (127k stars) ·
+          awesome-openclaw (curado pela comunidade) · ClawHub (app store oficial OpenClaw).
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 5 min</div>
+        <div class="card-title">Bloco 6 — Criar a sua com criar-skill</div>
+        <p class="card-desc">
+          <strong>Demo passo-a-passo.</strong> Aluno descreve workflow em 1 prompt, agente roda
+          <code>criar-skill</code>, devolve skill nomeada e instalada no workspace. Funciona pra
+          sempre. <em>A-ha conquistado.</em>
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ========================= CAPACIDADES NATIVAS ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Aprofundamento do Bloco 2</span>
+    <h2>Capacidades nativas — <em>bateria recheada.</em></h2>
+
+    <p>
+      Antes de sair instalando skill nova, vale entender que o seu agente já chega com um conjunto
+      grande de tools de fábrica. Muito do que aluno PME pensa que "precisa de skill custom" o
+      agente já faz — só precisa pedir.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Capacidade</th>
+          <th>O que faz</th>
+          <th>Quando usar</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>PDF</strong></td>
+          <td>Lê, extrai texto e tabelas, gera novos PDFs</td>
+          <td>Resumo de contrato · relatório formatado · proposta</td>
+        </tr>
+        <tr>
+          <td><strong>Browser</strong></td>
+          <td>Abre site, navega, extrai conteúdo</td>
+          <td>Pesquisa concorrência · monitoramento de página</td>
+        </tr>
+        <tr>
+          <td><strong>Web search</strong></td>
+          <td>12 providers nativos (Google, Brave, Perplexity, etc.)</td>
+          <td>Notícia · validar fato · pesquisa profunda</td>
+        </tr>
+        <tr>
+          <td><strong>Image-gen</strong></td>
+          <td>Gera imagem via DALL-E ou outros modelos</td>
+          <td>Capa de post · ilustração de relatório</td>
+        </tr>
+        <tr>
+          <td><strong>TTS</strong></td>
+          <td>Texto vira áudio (várias vozes)</td>
+          <td>Briefing em áudio · resumo pro carro</td>
+        </tr>
+        <tr>
+          <td><strong>Memória semântica</strong></td>
+          <td>Embeddings + busca · agente lembra de você</td>
+          <td>Recall de decisão antiga · contexto persistente (A7)</td>
+        </tr>
+        <tr>
+          <td><strong>Cron</strong></td>
+          <td>Agendamento nativo pra rodar tarefas no horário</td>
+          <td>Toda A9. Health check, revisão do dia, pesquisas</td>
+        </tr>
+        <tr>
+          <td><strong>ClawHub</strong></td>
+          <td>App store oficial — instala skill com 1 comando</td>
+          <td>Quando quer skill pronta sem clonar repo</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Princípio do bloco:</strong> <em>seu agente lê documentação.</em> Antes de criar
+        skill, pergunta pra ele: <em>"isso aí você já consegue fazer com tool nativa?"</em> Em 80%
+        dos casos a resposta é sim — só precisava pedir certo.
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Lista completa atualizada:</strong> <a href="https://docs.openclaw.ai/tools" target="_blank" rel="noopener">docs.openclaw.ai/tools</a>.
+        Página oficial mantida pela equipe OpenClaw — vale revisitar a cada 30 dias porque saem
+        capacidades novas com frequência.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= TOUR DAS 6 SKILLS ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aprofundamento do Bloco 3</span>
+    <h2>6 skills curadas — <em>tour rápido.</em></h2>
+
+    <p>
+      Não é lista exaustiva. São as 6 que o aluno PME ganha mais cedo se instalar — mistura de
+      utilitário diário (using-superpowers, criar-skill), validação (skill-checkup-openclaw), output
+      visual (canvas-design, pptx) e pesquisa (last30days). Cada uma vale o slot.
+    </p>
+
+    <h3>1. <code>using-superpowers</code> · Comunidade</h3>
+
+    <p>
+      Wrapper meta-skill que orquestra múltiplas capacidades nativas em fluxo brainstorm → PRD →
+      execute. Você diz a ideia, agente faz brainstorm estruturado, transforma em PRD, e roda os
+      passos. Substitui aquele zigue-zague de prompts curtos.
+    </p>
+
+    <p>
+      <strong>Demo de ~50s:</strong> aluno joga ideia bruta ("quero um agente que cuide do meu
+      processo de proposta comercial"), skill conduz brainstorm guiado, gera PRD, executa
+      implementação na sequência.
+    </p>
+
+    <h3>2. <code>criar-skill</code> · Bruno</h3>
+
+    <p>
+      A skill que cria skill. Coração do Bloco 6. Você descreve o workflow em linguagem natural,
+      ela gera <code>SKILL.md</code> com trigger, passos, output esperado, instala no workspace.
+      Próxima vez que você pedir aquela tarefa, agente carrega a skill automaticamente.
+    </p>
+
+    <p>
+      <strong>Demo de ~50s:</strong> aluno fala em 3 frases o que quer ("quando eu mandar link de
+      vídeo Tella, gera 3 posts LinkedIn no meu tom"), agente roda <code>criar-skill</code>,
+      retorna skill nomeada e ativa.
+    </p>
+
+    <h3>3. <code>skill-checkup-openclaw</code> v1.3.0 · Bruno</h3>
+
+    <p>
+      Roda checkup completo no seu workspace · score 0-100 · diagnóstico executivo do agente.
+      Detecta inconsistências, MEMORY desatualizada, skills duplicadas, gaps de contexto. Vale
+      rodar mensal — pega o que você não vê.
+    </p>
+
+    <p>
+      <strong>Demo de ~50s:</strong> agente roda <code>skill-checkup</code>, retorna relatório com
+      score (ex: 78/100), top 3 inconsistências, e plano de fix priorizado.
+    </p>
+
+    <p>
+      Repo: <a href="https://github.com/okjpg/skill-checkup-openclaw" target="_blank" rel="noopener">github.com/okjpg/skill-checkup-openclaw</a>
+    </p>
+
+    <h3>4. <code>canvas-design</code> · Anthropic</h3>
+
+    <p>
+      Gera poster, capa, ilustração ou peça gráfica estática direto em PNG ou PDF. Filosofia de
+      design embutida — você fala briefing, ela escolhe paleta, tipografia, hierarquia. Não é
+      "uma imagem com texto", é peça acabada.
+    </p>
+
+    <p>
+      <strong>Demo de ~50s:</strong> aluno pede "poster A4 do evento mensal de comunidade",
+      <code>canvas-design</code> retorna PDF pronto pra publicar.
+    </p>
+
+    <h3>5. <code>last30days</code> · Comunidade</h3>
+
+    <p>
+      Pesquisa profunda nos últimos 30 dias sobre qualquer tema. Browser + web search + sumarização
+      em camadas. Saída: relatório em markdown com top 10 fontes, pontos-chave, contradições, e
+      recomendação acionável.
+    </p>
+
+    <p>
+      <strong>Demo de ~50s:</strong> aluno pergunta "o que rolou em LLM agentic nos últimos 30
+      dias?", skill devolve relatório de 800 palavras com fontes datadas.
+    </p>
+
+    <h3>6. <code>pptx</code> · Anthropic</h3>
+
+    <p>
+      Gera apresentação <code>.pptx</code> completa em 1 prompt. Você fala tema, público, número
+      de slides, e ela monta — incluindo notas de rodapé e estrutura narrativa. Output abre direto
+      no PowerPoint, Keynote, ou Google Slides.
+    </p>
+
+    <p>
+      <strong>Demo de ~50s:</strong> aluno pede "deck de 10 slides pra investidor sobre meu
+      produto", skill retorna <code>.pptx</code> baixável e abre no celular dele.
+    </p>
+
+    <div class="callout callout-success">
+      <p>
+        <strong>Princípio do tour:</strong> instala primeiro essas 6, vai usando, vê quais
+        encaixam no seu fluxo. Skill que não usa em 30 dias não precisa ficar instalada — desinstala
+        sem culpa.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= TEMPLATES DE REPORT ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Aprofundamento do Bloco 4</span>
+    <h2>Templates de report — <em>3 prontos no kit.</em></h2>
+
+    <p>
+      Toda skill que gera relatório precisa de visual coerente. Em vez de cada aluno reinventar
+      CSS, o kit traz 3 templates HTML prontos em <code>templates/reports/</code>. Visual neutro
+      (Acme Corp / tokens CSS) — você troca 4 variáveis e fica com a sua marca em 30s.
+    </p>
+
+    <h3>O que tem no kit</h3>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Arquivo</th>
+          <th>Pra que serve</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>report-comunidade.html</code></td>
+          <td>Relatório de dúvidas/comunidade semanal</td>
+        </tr>
+        <tr>
+          <td><code>report-executivo.html</code></td>
+          <td>Diagnóstico/auditoria executiva (estilo skill-checkup)</td>
+        </tr>
+        <tr>
+          <td><code>material-didatico.html</code></td>
+          <td>Material de aula/treinamento interno</td>
+        </tr>
+        <tr>
+          <td><code>_shared/tokens.css</code></td>
+          <td>Sistema de design tokens (cores · fontes · spacing)</td>
+        </tr>
+        <tr>
+          <td><code>_shared/logo-placeholder.svg</code></td>
+          <td>Logo neutro pro aluno trocar</td>
+        </tr>
+        <tr>
+          <td><code>_shared/COMO-PERSONALIZAR.md</code></td>
+          <td>1 página: troca 4 variáveis CSS + substitui SVG</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Como usar com seu agente</h3>
+
+    <p>Pede em prompt natural — o agente lê os arquivos, gera o relatório dentro do template, e te devolve HTML pronto:</p>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt · gerar relatório do kit</span>
+        <span class="prompt-card-where">cola no Telegram</span>
+      </div>
+      <div class="prompt-card-body">Usa o template templates/reports/report-comunidade.html
+do starter-kit como base.
+
+Preenche com as dúvidas que rolaram no Telegram do meu
+suporte nos últimos 7 dias. Agrupa por categoria (setup,
+skills, crons, integrações), conta quantas vezes cada
+dúvida apareceu, e escreve recomendação pra próxima
+sprint de conteúdo.
+
+Salva em reports/comunidade-[data].html e me manda o
+arquivo.</div>
+        <div class="prompt-card-tip">
+          💡 Mesma lógica funciona pros outros 2 templates. Se preferir custom, manda o arquivo
+          de marca anexado e pede pro agente personalizar — vira micro-demo de skill que amarra a aula.
+        </div>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Branding sugerido:</strong> visual do template fica neutro. Você troca os tokens
+        CSS pra marca da sua empresa em 30s — sem dilução do brand do curso. Footer mantém crédito
+        discreto com link rastreável pro Hub (você pode remover, mas se manter, ajuda o curso a
+        crescer).
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= ONDE ACHAR MAIS ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aprofundamento do Bloco 5</span>
+    <h2>Onde achar mais — <em>3 fontes oficiais.</em></h2>
+
+    <p>
+      Quando precisar de skill que não tem no kit, vai numa dessas 3 fontes — todas oficiais e
+      atualizadas. Evita repo abandonado, fork de fork, README quebrado.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Fonte</th>
+          <th>O que tem</th>
+          <th>Pra quando</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Anthropic Skills</strong></td>
+          <td>Skills oficiais Anthropic (127k stars) — Creative/Design, Dev, Enterprise, Documents (pdf/docx/xlsx/pptx)</td>
+          <td>Tarefas técnicas, geração de documento, output formatado</td>
+        </tr>
+        <tr>
+          <td><strong>awesome-openclaw</strong></td>
+          <td>Awesome list curado pela comunidade</td>
+          <td>Skill de nicho, integração específica, caso de uso vertical</td>
+        </tr>
+        <tr>
+          <td><strong>ClawHub</strong></td>
+          <td>App store oficial OpenClaw</td>
+          <td>Instalação 1-clique, skill já validada, atualização automática</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Links diretos</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Anthropic Skills:</strong> <a href="https://github.com/anthropics/skills" target="_blank" rel="noopener">github.com/anthropics/skills</a></p>
+      <p><span class="check">✓</span> <strong>awesome-openclaw:</strong> <a href="https://github.com/VoltAgent/awesome-openclaw-skills" target="_blank" rel="noopener">github.com/VoltAgent/awesome-openclaw-skills</a></p>
+      <p><span class="check">✓</span> <strong>ClawHub site:</strong> <a href="https://clawhub.ai/" target="_blank" rel="noopener">clawhub.ai</a></p>
+      <p><span class="check">✓</span> <strong>ClawHub doc:</strong> <a href="https://docs.openclaw.ai/tools/clawhub" target="_blank" rel="noopener">docs.openclaw.ai/tools/clawhub</a></p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Critério pra adotar skill nova:</strong> última atualização &lt;90 dias · README
+        clara com exemplo · autor responde issues · funciona com OpenClaw versão recente. Se
+        falhar em 1 desses 4, pula — provavelmente repo abandonado.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= ANATOMIA DA SKILL ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Aprofundamento do Bloco 1</span>
+    <h2>Anatomia mínima do <em>SKILL.md.</em></h2>
+
+    <p>
+      Skill OpenClaw é um arquivo markdown que o agente carrega quando o gatilho dispara. Tem
+      estrutura mínima — você não precisa decorar, mas vale entender porque toda skill que você
+      vir segue esse padrão.
+    </p>
+
+    <div class="item-icon">
+      <div class="item-icon-box">1</div>
+      <div class="item-icon-content">
+        <h3>Nome</h3>
+        <p>
+          Identificador único, kebab-case (ex: <code>relatorio-comunidade-semanal</code>). É como
+          o agente referencia a skill nas memórias e nos crons.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">2</div>
+      <div class="item-icon-content">
+        <h3>Trigger</h3>
+        <p>
+          Lista de frases que disparam a skill. <em>"Quando eu mandar link de vídeo Tella e pedir
+          posts"</em>. <em>"Toda segunda 9h"</em> (combina com cron). Quanto mais específico, menos
+          falso-positivo.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">3</div>
+      <div class="item-icon-content">
+        <h3>Descrição</h3>
+        <p>
+          1-2 frases sobre o que a skill faz e quando usar. Aparece no <code>skill list</code> —
+          ajuda você a lembrar pra que servia 60 dias depois.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">4</div>
+      <div class="item-icon-content">
+        <h3>Passos</h3>
+        <p>
+          Sequência ordenada do que o agente faz. Pode incluir tools nativas ("usa web search",
+          "lê arquivo X", "salva em Y"). É o coração — quanto mais explícito, mais consistente o output.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">5</div>
+      <div class="item-icon-content">
+        <h3>Output esperado</h3>
+        <p>
+          Formato de saída padronizado (markdown? HTML? mensagem no Telegram?). Sem isso, agente
+          devolve formato diferente cada vez. <strong>Regularidade da saída é o ROI da skill.</strong>
+        </p>
+      </div>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Frase-mãe da A8:</strong> <em>prompt resolve uma vez. Skill resolve mil vezes
+        igual.</em>
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= NUMS ========================= -->
+
+  <section class="nums">
+    <div class="num-card">
+      <div class="n">6</div>
+      <div class="l">Skills curadas no tour</div>
+    </div>
+    <div class="num-card">
+      <div class="n">8+</div>
+      <div class="l">Capacidades nativas de fábrica</div>
+    </div>
+    <div class="num-card">
+      <div class="n">3</div>
+      <div class="l">Templates HTML prontos no kit</div>
+    </div>
+    <div class="num-card">
+      <div class="n">~5min</div>
+      <div class="l">Pra criar sua 1ª skill custom</div>
+    </div>
+  </section>
+
+  <!-- ========================= DEMO CRIAR-SKILL ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aprofundamento do Bloco 6 · A-ha</span>
+    <h2>Criar a sua skill — <em>demo passo-a-passo.</em></h2>
+
+    <p>
+      O melhor jeito de aprender skill é criando uma. Pega um workflow que você pede pro agente
+      direto (relatório semanal, post de divulgação, resumo de reunião) e transforma em skill
+      executável. <code>criar-skill</code> faz o trabalho pesado — você só descreve.
+    </p>
+
+    <h3>Passo 1 — Descreve o workflow em prompt natural</h3>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt · acionar criar-skill</span>
+        <span class="prompt-card-where">cola no Telegram</span>
+      </div>
+      <div class="prompt-card-body">Cria pra mim uma skill chamada relatorio-comunidade-semanal.
+
+O que ela faz:
+1. Toda sexta de manhã, lê as conversas do Telegram do meu
+   suporte dos últimos 7 dias
+2. Agrupa as dúvidas por categoria (setup, skills, crons,
+   integrações, outros)
+3. Conta quantas vezes cada dúvida apareceu
+4. Escreve recomendação pra próxima sprint de conteúdo
+5. Salva em reports/comunidade-[data].html usando o
+   template templates/reports/report-comunidade.html
+6. Me manda o arquivo no Telegram tópico Operação
+
+Roda criar-skill e me mostra o SKILL.md gerado pra eu validar
+antes de instalar.</div>
+        <div class="prompt-card-tip">
+          💡 Note que você descreve passos em ordem, com critério claro de output e onde salva.
+          Quanto mais explícito, menos retrabalho depois.
+        </div>
+    </div>
+
+    <h3>Passo 2 — Agente roda criar-skill e te devolve o SKILL.md</h3>
+
+    <p>
+      O agente vai gerar o arquivo, mostrar pra você revisar, perguntar se tem ajustes. Padrão
+      esperado: <em>"criei a skill `relatorio-comunidade-semanal` com 6 passos. Posso instalar?"</em>
+    </p>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Por que mostra antes de instalar:</strong> revisão humana é princípio do curso.
+        Skill mal-escrita roda mal pra sempre. Vale 30s pra ler o SKILL.md gerado e ajustar antes
+        de fechar.
+      </p>
+    </div>
+
+    <h3>Passo 3 — Aprovar e testar com 1 execução</h3>
+
+    <p>
+      Aprova a instalação. Agente confirma onde salvou (geralmente <code>skills/conteudo/relatorio-comunidade-semanal/SKILL.md</code>).
+      Testa rodando 1x manualmente:
+    </p>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt · testar skill recém-criada</span>
+        <span class="prompt-card-where">cola no Telegram</span>
+      </div>
+      <div class="prompt-card-body">Roda agora a skill relatorio-comunidade-semanal pros
+últimos 7 dias e me manda o resultado pra validar.</div>
+        <div class="prompt-card-tip">
+          💡 Se output bater com o que você esperava, fecha. Se não, pede ajuste em 1 frase
+          ("muda categoria 'outros' pra 'geral'") e agente atualiza o SKILL.md.
+        </div>
+    </div>
+
+    <h3>Passo 4 — Combinar com cron (próxima aula)</h3>
+
+    <p>
+      Skill funcionando? Agora você combina com cron pra rodar sozinha — é o que entra na A9.
+      Combinação skill + cron é o que faz o agente trabalhar enquanto você dorme. <em>Skills dão
+      capacidades; crons dão agendamento.</em>
+    </p>
+
+    <div class="callout callout-success">
+      <p>
+        <strong>A-ha entregue:</strong> você criou skill custom em ~5 minutos, sem editar arquivo,
+        sem decorar sintaxe. Próxima vez que pedir esse relatório, agente carrega a skill e roda
+        os 6 passos. Sem você re-explicar.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= CONVITE ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Convite de fechamento</span>
+    <h2>Comece com uma skill <em>do seu sistema.</em></h2>
+
+    <p>
+      Não copie a primeira skill da galera. Pensa numa tarefa que SÓ FAZ SENTIDO no seu negócio —
+      ninguém vai criar pra você porque ninguém conhece seu sistema. Aí você cria.
+    </p>
+
+    <blockquote>
+      <p>
+        <strong>Exemplo:</strong> <code>workspace-audit</code> que roda mensalmente e te diz se o
+        workspace tá organizado. Esse é o tipo de skill que ninguém vai criar pra você — só você
+        sabe seu sistema.
+      </p>
+    </blockquote>
+
+    <p>
+      Outras ideias pra te inspirar (não copia, adapta):
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <code>resumo-vendas-semanal</code> · agente lê CRM (A12), agrupa por funil, manda no Telegram da equipe</p>
+      <p><span class="check">✓</span> <code>tickets-suporte-classificar</code> · lê novos tickets, classifica por categoria + urgência, sugere resposta</p>
+      <p><span class="check">✓</span> <code>conteudo-do-mes-revisao</code> · lê o que você publicou, mede engajamento, propõe ajustes</p>
+      <p><span class="check">✓</span> <code>backup-decisoes</code> · pega decisões importantes do dia (Slack, Notion, conversas), salva em arquivo permanente</p>
+      <p><span class="check">✓</span> <code>aluno-progresso-cohort</code> · só pra quem tem cohort: lê notas dos alunos e diz onde tem gente travada</p>
+    </div>
+  </section>
+
+  <!-- ========================= TROUBLESHOOTING ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Travou? Antes de pedir ajuda</span>
+    <h2>Top <em>problemas comuns da A8.</em></h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Sintoma</th>
+          <th>Causa provável</th>
+          <th>Ação</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Skill criada não dispara</td>
+          <td>Trigger genérico demais ou frase nova</td>
+          <td>Pede pro agente revisar trigger e listar 5 frases que devem disparar</td>
+        </tr>
+        <tr>
+          <td>Output da skill vem diferente cada vez</td>
+          <td>Passo "Output esperado" vago no SKILL.md</td>
+          <td>Cola exemplo do output ideal e pede pro agente atualizar a skill</td>
+        </tr>
+        <tr>
+          <td><code>criar-skill</code> não está instalada</td>
+          <td>Skill ainda não foi adicionada ao workspace</td>
+          <td>Pede pro agente instalar: <em>"instala criar-skill no meu workspace"</em></td>
+        </tr>
+        <tr>
+          <td>Skill duplicada com nome parecido</td>
+          <td>Você criou 2x sem revisar registry</td>
+          <td>Pede <em>"lista as skills com nome parecido a X e me diz qual usar"</em></td>
+        </tr>
+        <tr>
+          <td>Skill da Anthropic não funciona no OpenClaw</td>
+          <td>Versão antiga ou formato incompatível</td>
+          <td>Atualiza repo, ou usa equivalente da awesome-openclaw</td>
+        </tr>
+        <tr>
+          <td>Agente "não conhece" skill instalada</td>
+          <td>Memória não foi atualizada após instalar</td>
+          <td>Pede <em>"atualiza memória sobre as skills instaladas"</em></td>
+        </tr>
+        <tr>
+          <td>Skill custom funciona local mas não em cron</td>
+          <td>Cron roda em sessão isolada e não vê contexto da sessão atual</td>
+          <td>Aprofundamento na A9. Skill precisa carregar tudo que precisa explicitamente</td>
+        </tr>
+        <tr>
+          <td>Esqueci pra que servia uma skill antiga</td>
+          <td>Descrição vaga no SKILL.md</td>
+          <td>Pede pro agente reescrever descrição com 1-2 frases e exemplo de uso</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Cheatsheet completo:</strong> <a href="../INDICE.md">skills-do-seu-agente.md</a> —
+        anatomia do SKILL.md, comandos detalhados, fluxo completo de criar-skill, lista expandida
+        de exemplos por vertical (vendas, conteúdo, ops, suporte).
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Não conseguiu resolver com a tabela acima?</strong> Joga screenshot/áudio/vídeo
+        no <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">grupo Telegram do
+        curso</a>. openclawzinho responde em &lt;30 segundos · humanos em &lt;5 minutos.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= CTA PRÓXIMA ========================= -->
+
+  <section class="sec sec-alt">
+    <div class="cta-card">
+      <h3>Próximo passo: <em>A9 — Crons + Revisão do Dia</em></h3>
+      <p>
+        13 minutos · modular. Você criou skill na A8 — agora dá agendamento pra ela. Cron =
+        super poderes do agente: trabalha à noite, faz pesquisa enquanto você dorme, audita o
+        próprio trabalho. Demo ao vivo de cron criado em 30s e <strong>Revisão do Dia</strong>
+        (cron-âncora que vira hábito do agente). <em>"Ele trabalha sozinho sem eu chamar."</em>
+      </p>
+      <a href="aula-09-crons.html" class="cta-button">→ Ir pra Aula 9</a>
+    </div>
+  </section>
+
+  <!-- ========================= FOOTER ========================= -->
+
+  <footer class="aula-footer">
+
+    <div class="aula-footer-block">
+      <h4>Travou? Tá no grupo do curso</h4>
+      <p>
+        Comunidade Telegram do curso —
+        <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">t.me/cursoopenclaw</a>
+        — suporte 24/7 (openclawzinho bot + Bruno e equipe presente).
+        Dúvida sobre essa aula, problemas de setup, ou quer compartilhar como aplicou
+        no seu negócio: bora trocar lá.
+      </p>
+    </div>
+
+    <div class="aula-footer-block">
+      <h4>Próximo nível: Pixel AI Hub</h4>
+      <p>
+        Aplicar agente pra empresa toda — equipe, governance, escala?
+        <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=material&utm_campaign=v1" target="_blank" rel="noopener">Pixel AI Hub</a>:
+        segundo cérebro corporativo, comunidade de empreendedores, +50 skills enterprise,
+        encontros mensais ao vivo. Vagas mensais limitadas.
+      </p>
+    </div>
+
+    <div class="aula-footer-credit">
+      Mini-Curso OpenClaw 2026 · Material complementar à gravação · Atualizações conforme kit evolui<br>
+      <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=footer-credit" target="_blank" rel="noopener">Bruno Okamoto · Pixel Educação</a>
+    </div>
+
+  </footer>
+
+</div>
+
+</body>
+</html>

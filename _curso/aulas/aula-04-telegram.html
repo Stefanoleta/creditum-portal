@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A4 — Telegram organizado por tema · Mini-Curso OpenClaw</title>
+<meta name="description" content="Material complementar da Aula 4 — Telegram aprofundado: 4 tópicos por tema (1 contexto = 1 tópico), grupo da equipe com mention-only, allowlist por comando natural, ressalva sobre WhatsApp.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Fraunces:ital,wght@1,400;1,500;1,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="_shared/tokens.css">
+</head>
+
+<body>
+
+<div class="wrap">
+
+  <!-- ========================= HEADER ========================= -->
+
+  <header class="aula-header">
+    <div class="aula-header-brand">Mini-Curso <span class="accent">OpenClaw</span></div>
+    <div class="aula-header-meta">Aula 04 · Telegram</div>
+  </header>
+
+  <!-- ========================= HERO ========================= -->
+
+  <section class="hero">
+    <div class="hero-meta">
+      <span class="hero-meta-item">⏱ <strong>15 min</strong></span>
+      <span class="hero-meta-item">🧩 <strong>Modular</strong></span>
+      <span class="hero-meta-item">🎯 <strong>A-ha #3</strong></span>
+    </div>
+
+    <h1>
+      Telegram organizado
+      <em>por tema.</em>
+    </h1>
+
+    <p class="hero-sub">
+      Em <em>~15min</em> seu agente passa a viver no celular — tópicos por tema (1 contexto = 1
+      tópico), grupo da equipe sem virar spam, allowlist por <em>comando natural</em>. E você
+      entende por que Telegram (e não WhatsApp) — sem ficar achando que tá perdendo algo.
+    </p>
+  </section>
+
+  <!-- ========================= A-HA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">A-ha desta aula</span>
+    <div class="aha-card">
+      <span class="label">A-ha #3 entregue</span>
+      <p class="quote">"Meu agente ganhou endereço no meu celular — falo com ele no Telegram organizado por tema, sem abrir painel."</p>
+    </div>
+  </section>
+
+  <!-- ========================= PRE-FLIGHT ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Pre-flight check</span>
+    <h2>Antes de <em>aprofundar.</em></h2>
+
+    <p>
+      A4 é modular — pré-requisito mínimo é A1 (DM Telegram funcional) e A3 (Starter Kit instalado,
+      pra você ter os tópicos sugeridos prontos pelo agente). Se você fez A1 inteira, já tem bot
+      criado e DM funcionando — A4 aprofunda com tópicos por tema, supergrupo, grupo equipe.
+      Aluno que retoma sem A1 mantém os 15min completos. Aluno que fez A1 termina mais perto de
+      13min (Blocos 2-3 colapsam em recap).
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>A1 + A2 concluídas</strong> — agente respondendo, OAuth ativo, bot Telegram criado, DM funcionando</p>
+      <p><span class="check">✓</span> <strong>Token do BotFather salvo</strong> em local seguro (você gerou na A1)</p>
+      <p><span class="check">✓</span> <strong>Telegram do celular aberto</strong> — você vai criar supergrupo + tópicos ao vivo</p>
+      <p><span class="check">✓</span> <strong>2ª conta Telegram</strong> opcional pra testar grupo da equipe (família, sócio, ou conta secundária)</p>
+      <p><span class="check">✓</span> <strong>Cheatsheet do kit:</strong> <a href="../INDICE.md">outros-canais.md</a> (parcial — A11 cobre completo: Slack, Discord, iMessage, +20)</p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Doc oficial Telegram:</strong>
+        <a href="https://docs.openclaw.ai/channels/telegram" target="_blank" rel="noopener">docs.openclaw.ai/channels/telegram</a> —
+        referência canônica se precisar conferir flags ou troubleshooting. Princípio do curso:
+        <em>"seu agente lê documentação"</em> — se travar, manda <em>"pergunta na doc do OpenClaw
+        como linkar Telegram"</em> que ele resolve.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= ESTRUTURA DA AULA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Estrutura da aula em vídeo</span>
+    <h2>O que você vai fazer em <em>7 blocos.</em></h2>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-time">⏱ 1 min</div>
+        <div class="card-title">Bloco 1 — Por que Telegram, não WhatsApp</div>
+        <p class="card-desc">
+          Recap A1 + A2 · 4 razões em 30s: tópicos nativos · API oficial estável · bot vira admin
+          sem hack · comunidade do curso já tá lá. WhatsApp dá pra conectar <strong>mas com chip
+          dedicado</strong> — explicação no Bloco 7.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1-2 min</div>
+        <div class="card-title">Bloco 2 — Confirmar bot + ressalva sobre token</div>
+        <p class="card-desc">
+          Recap visual @BotFather (pra quem pulou A1) + ressalva forte sobre token: senha do bot ·
+          vai pro <code>.env</code> · NUNCA commita em GitHub · se vazar, <code>/revoke</code> →
+          gera novo → atualiza no agente.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1-2 min</div>
+        <div class="card-title">Bloco 3 — Confirmar conexão do bot</div>
+        <p class="card-desc">
+          Comando exato pra quem ainda não rodou (<code>openclaw channels add --channel telegram
+          --token &lt;token&gt;</code>) · pra quem já rodou: <code>channels list</code> confirma
+          <code>telegram</code> aparece como conectado.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 2 min</div>
+        <div class="card-title">Bloco 4 — DM funcionando + allowlist ⭐ A-ha #3</div>
+        <p class="card-desc">
+          Abre o bot no celular · manda "oi" · bot responde no celular. <strong>Vitória visível.</strong>
+          Allowlist por <em>comando natural pro agente</em>: <em>"você responde só pra mim por
+          enquanto"</em> — agente edita config dele e aplica.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 4 min</div>
+        <div class="card-title">Bloco 5 — Supergrupo + 4 tópicos ⭐ Coração</div>
+        <p class="card-desc">
+          Criar grupo · upgrade pra supergrupo · Topics: Enable · 4 tópicos por tema (📝 Conteúdo ·
+          ⚙️ Operação · 🧠 Aprendizado · 💰 Financeiro). Princípio: <strong>1 tópico = 1 contexto</strong>.
+          3-4 máximo · 8 = agente burro em todos.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 2 min</div>
+        <div class="card-title">Bloco 6 — Grupo da equipe</div>
+        <p class="card-desc">
+          Mesmo bot · segundo grupo (esse pra equipe) · <code>requireMention: true</code> ·
+          allowlist por comando natural: <em>"todos desse grupo podem te marcar. Responde só
+          quando te marcarem (@bot), pra não virar spam"</em>.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 2 min</div>
+        <div class="card-title">Bloco 7 — WhatsApp com chip dedicado + recap</div>
+        <p class="card-desc">
+          Comando: <code>openclaw channels login --channel whatsapp --account dedicado</code>.
+          Recomendação forte: <strong>chip dedicado R$ 15-30/mês pré-pago/MVNO</strong>. Demo: Amora
+          no WhatsApp com número próprio. 4 razões pra preferir Telegram mesmo com chip dedicado.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ========================= POR QUE TELEGRAM ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Bloco 1 · Aprofundamento</span>
+    <h2>Por que Telegram, <em>não WhatsApp.</em></h2>
+
+    <p>
+      Aluno PME quase sempre vem com a pergunta: <em>"posso conectar agente no WhatsApp?"</em>.
+      Sim, dá. Mas Telegram é o default do curso — e por motivos práticos, não preconceito. Tem 4
+      razões fortes que vão aparecer ao longo da aula. Aqui ficam consolidadas pra você revisar.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Razão</th>
+          <th>Telegram</th>
+          <th>WhatsApp</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Tópicos por tema</strong></td>
+          <td>Nativos · 1 grupo = N contextos separados</td>
+          <td>Não existe · grupo único = contexto amassado</td>
+        </tr>
+        <tr>
+          <td><strong>Bot oficial</strong></td>
+          <td>API estável · @BotFather oficial</td>
+          <td>Baileys (não-oficial) · risco de ban</td>
+        </tr>
+        <tr>
+          <td><strong>Bot como admin de grupo</strong></td>
+          <td>Suportado · funciona limpo</td>
+          <td>Hack · vira spammer sem permissionamento decente</td>
+        </tr>
+        <tr>
+          <td><strong>UX do bot</strong></td>
+          <td>Mídia, formatação, status consistentes</td>
+          <td>Inconsistente · depende de cliente, versão, plataforma</td>
+        </tr>
+        <tr>
+          <td><strong>Comunidade do curso</strong></td>
+          <td>Já existe — <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">t.me/cursoopenclaw</a></td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td><strong>Risco operacional</strong></td>
+          <td>Baixo · API oficial não bana</td>
+          <td>Médio-alto · Meta pode banir Baileys sem aviso</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Frase pra colar na geladeira:</strong> <em>"Sem tópicos, contexto vira papel
+        amassado."</em> Esse é o argumento técnico mais forte. Tópico não é feature de UI —
+        é arquitetura de contexto. Sem ele, agente fica burro porque toda conversa entra na mesma
+        pilha.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= TOKEN ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Bloco 2 · Ressalva forte</span>
+    <h2>O token do bot é <em>senha — trate como tal.</em></h2>
+
+    <p>
+      Esse é o ponto que vai ser repetido em A10 (segurança operacional). Quem tem o token, tem o
+      bot. Vazou? Quem encontrar pode mandar mensagem em nome do seu agente, ler tudo que o agente
+      lê, manipular suas conversas. <strong>Não é overkill — é higiene básica.</strong>
+    </p>
+
+    <div class="callout callout-danger">
+      <p>
+        <strong>Token tem 3 destinos legítimos:</strong> (1) <code>.env</code> do agente (gerenciado
+        pelo OpenClaw) · (2) password manager (1Password, Bitwarden, similar) · (3) bloco de notas
+        local temporário durante setup.<br><br>
+        <strong>NUNCA:</strong> em chat público · em GitHub público · em screenshot · em mensagem
+        de Slack/Discord/WhatsApp pra "salvar pra depois" · em código commitado.
+      </p>
+    </div>
+
+    <h3>Vazou? Como rotacionar token</h3>
+
+    <p>
+      Não é o fim do mundo. Telegram facilitou. Sequência completa em ~30 segundos:
+    </p>
+
+    <div class="item-icon">
+      <div class="item-icon-box">1</div>
+      <div class="item-icon-content">
+        <h3>Abre o @BotFather no Telegram</h3>
+        <p>
+          <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> · escolhe
+          <code>/mybots</code> · seleciona o bot afetado.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">2</div>
+      <div class="item-icon-content">
+        <h3>Roda <code>/revoke</code></h3>
+        <p>
+          BotFather invalida o token antigo na hora · gera um novo · te entrega. Token antigo deixa
+          de funcionar imediatamente — qualquer atacante perde acesso.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">3</div>
+      <div class="item-icon-content">
+        <h3>Atualiza no agente</h3>
+        <p>
+          Comando natural pro agente: <em>"token do telegram foi rotacionado · cola aqui o novo:
+          [TOKEN] · atualiza na config e me confirma"</em>. Agente edita config, faz reload, confirma.
+        </p>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Pegadinha A10:</strong> esse é o tipo de fluxo que vai voltar várias vezes no curso.
+        Em A10 você vai aprender o padrão geral pra <em>qualquer credencial sensível</em> — não só
+        token Telegram, mas também API keys, OAuth tokens, senhas de integração. Princípio:
+        <em>"agente é funcionário, não conta compartilhada"</em>.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= CONECTAR ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Bloco 3 · Confirmar conexão</span>
+    <h2>Comando pra <em>linkar (ou validar) o bot.</em></h2>
+
+    <p>
+      Quem fez A1 já rodou esse comando — pula direto pro <code>channels list</code> abaixo pra
+      confirmar. Quem retomou o curso ou pulou A1: cola o comando completo abaixo (substitui
+      <code>&lt;token&gt;</code> pelo token do BotFather).
+    </p>
+
+    <h3>Pra quem nunca rodou</h3>
+
+    <div class="terminal-card">
+      <div class="terminal-card-header">
+        <span class="terminal-card-label">Terminal Managed</span>
+        <span class="terminal-card-where">substitui &lt;token&gt; pelo do BotFather</span>
+      </div>
+      <div class="terminal-card-body"><span class="prompt-symbol">$</span>openclaw channels add --channel telegram --token &lt;token-do-botfather&gt;
+
+<span class="comment"># exemplo:</span>
+<span class="prompt-symbol">$</span>openclaw channels add --channel telegram --token 123456:ABC-DEF...</div>
+      <div class="terminal-card-tip">
+        ▶ Resultado: terminal mostra <code>Telegram conectado</code>. Mensagem do agente já chega
+        no celular se você abrir o bot e mandar qualquer coisa.
+      </div>
+    </div>
+
+    <h3>Pra quem já rodou (validação)</h3>
+
+    <div class="terminal-card">
+      <div class="terminal-card-header">
+        <span class="terminal-card-label">Terminal Managed</span>
+        <span class="terminal-card-where">só validar</span>
+      </div>
+      <div class="terminal-card-body"><span class="prompt-symbol">$</span>openclaw channels list
+
+<span class="comment"># esperado: telegram aparece com status "connected"</span>
+<span class="comment"># se aparecer "disconnected" ou faltando, refaz o channels add</span></div>
+      <div class="terminal-card-tip">
+        ▶ Se aparecer disconnected: token expirou ou foi rotacionado e ninguém atualizou. Refaz o
+        <code>channels add</code> com o token atual.
+      </div>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Travou na sintaxe?</strong> Lembra que <em>seu agente lê documentação</em>. Manda
+        no Telegram (ou Gateway): <em>"pergunta na doc oficial do OpenClaw como conectar Telegram
+        e me mostra o comando exato"</em>. Ele consulta
+        <a href="https://docs.openclaw.ai/channels/telegram" target="_blank" rel="noopener">docs.openclaw.ai/channels/telegram</a>
+        e te traz a resposta calibrada.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= ALLOWLIST ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Bloco 4 · A-ha #3</span>
+    <h2>Allowlist por <em>comando natural.</em></h2>
+
+    <p>
+      Princípio do curso V2: <strong>aluno não edita arquivo de config</strong>. Você fala em
+      português pro agente, ele ajusta a config dele. Allowlist é um exemplo perfeito disso. Em
+      vez de mexer em JSON5 e correr risco de quebrar parsing, manda esse prompt:
+    </p>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #1 · allowlist DM (só você)</span>
+        <span class="prompt-card-where">cola no Telegram</span>
+      </div>
+      <div class="prompt-card-body">você responde só pra mim por enquanto. Se eu adicionar alguém,
+te aviso.
+
+Se outra pessoa mandar mensagem agora, simplesmente ignora — não
+responde, não reclama. Só pra mim.
+
+Confirma o que entendeu antes de aplicar.</div>
+      <div class="prompt-card-tip">
+        💡 Resultado: agente edita o config dele com sua identidade como única allowlist · faz
+        reload · confirma. Próxima mensagem de qualquer outro Telegram é ignorada silenciosamente.
+      </div>
+    </div>
+
+    <h3>Por que isso importa</h3>
+
+    <p>
+      Bot público no Telegram tem URL fácil de descobrir (<code>t.me/seu_bot</code>). Sem
+      allowlist, qualquer pessoa que descobrir o handle pode mandar mensagem e o agente
+      responderia — gastando seu OAuth, vazando contexto, ou pior, executando comandos. Com
+      allowlist por comando natural, agente reconhece quem é você (via Telegram User ID que ele já
+      capturou) e ignora todo o resto.
+    </p>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>Sem allowlist no day 1 não é fim do mundo</strong> — bot recém-criado tem URL que
+        ninguém conhece ainda. Mas conforme você for compartilhando seu agente com gente próxima
+        (mesmo só pra mostrar o que ele faz), allowlist vira essencial. Padrão é ligar ela já no
+        primeiro setup.
+      </p>
+    </div>
+
+    <div class="callout callout-success">
+      <p>
+        <strong>Vitória visível #3:</strong> seu bot respondeu no celular. Você falou, ele
+        respondeu. Saiu do painel. Saiu do terminal. Tá no seu bolso, organizado pelo Telegram.
+        <em>Esse</em> é o A-ha emocional dessa aula — agente vira presença diária, não ferramenta
+        de nicho.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= SUPERGRUPO + TÓPICOS ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Bloco 5 · Coração da aula ⭐</span>
+    <h2>Supergrupo + <em>4 tópicos por tema.</em></h2>
+
+    <p>
+      Esse é o conceito que mais aluno PME nunca usou no Telegram pessoal mas vira game-changer
+      pra trabalhar com agente. <strong>Tópicos = janelas de contexto separadas dentro do mesmo
+      grupo</strong>. Cada tópico tem histórico próprio, atenção própria, missão própria. Agente
+      sabe em qual tá e ajusta resposta.
+    </p>
+
+    <h3>Passo 1 — Criar grupo + virar supergrupo</h3>
+
+    <div class="item-icon">
+      <div class="item-icon-box">1</div>
+      <div class="item-icon-content">
+        <h3>Cria grupo no Telegram</h3>
+        <p>
+          Telegram → Novo grupo → adiciona o bot do agente · qualquer outra pessoa que seja parte
+          do workspace pessoal (família, sócio). Nome sugerido: <em>"Workspace [seu nome]"</em>.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">2</div>
+      <div class="item-icon-content">
+        <h3>Configurações do grupo → Topics: Enable</h3>
+        <p>
+          Telegram converte automaticamente em supergrupo (necessário pra ter tópicos). Se não
+          aparecer essa opção, é porque ainda é grupo simples — vai pra Configurações → Tipo de
+          grupo → Supergrupo.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">3</div>
+      <div class="item-icon-content">
+        <h3>Promove o bot a admin</h3>
+        <p>
+          Sem permissão de admin, bot <strong>não consegue postar em tópicos específicos</strong> —
+          só responde no tópico geral. Configurações → Administradores → adiciona o bot ·
+          permissões mínimas: postar mensagens, gerenciar tópicos.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">4</div>
+      <div class="item-icon-content">
+        <h3>Disable Privacy no @BotFather (CRÍTICO)</h3>
+        <p>
+          Por <strong>default</strong>, bot só recebe mensagens onde é mencionado
+          (<code>@meu_agente_bot</code>) ou comandos (<code>/start</code>). No supergrupo
+          isso significa que o bot vai ficar <strong>cego</strong> — não consegue ler
+          conversa, monitorar contexto, ou aplicar allowlist por tópico. Volta no
+          @BotFather e desabilita privacy ANTES de seguir adiante. Se já tinha feito
+          isso na A1, pula este passo.
+        </p>
+      </div>
+    </div>
+
+    <div class="terminal-card">
+      <div class="terminal-card-header">
+        <span class="terminal-card-label">Telegram · @BotFather</span>
+        <span class="terminal-card-where">conversa direta com o BotFather</span>
+      </div>
+      <div class="terminal-card-body"><span class="prompt-symbol">/</span>setprivacy
+
+<span class="comment"># BotFather pede pra escolher qual bot</span>
+<span class="comment"># escolhe o bot do seu agente</span>
+
+<span class="comment"># BotFather mostra status atual: 'Enabled' (default)</span>
+<span class="comment"># clica em [Disable]</span>
+
+<span class="comment"># confirmação: 'Privacy mode is disabled for &lt;bot&gt;.'</span></div>
+      <div class="terminal-card-tip">
+        ▶ Resultado: bot passa a receber TODAS as mensagens dos grupos onde for
+        adicionado — não só @menções e comandos. Sem isso, agente em supergrupo é cego
+        nos tópicos, não consegue allowlist por contexto, e crons que postam em tópico
+        específico podem falhar.
+      </div>
+    </div>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>Bot já tava no supergrupo antes de você desabilitar privacy?</strong>
+        A mudança só aplica a partir da próxima vez que o bot for adicionado.
+        <strong>Solução:</strong> remove o bot do supergrupo · adiciona de novo · privacy
+        nova passa a valer. Se não fizer isso, vai parecer que disable privacy não funcionou.
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Por que privacy é GLOBAL do bot, não do grupo:</strong> a config
+        <code>setprivacy</code> mora no @BotFather (nível do bot). Vale pra TODOS os grupos
+        onde o bot entrar. Não tem como ter privacy disabled em um supergrupo e enabled em
+        outro com o mesmo bot. Se você quer separar — bot pessoal silencioso, bot equipe
+        ouvinte — cria 2 bots diferentes (token diferente, nome diferente), cada um com
+        privacy ajustada.
+      </p>
+    </div>
+
+    <h3>Passo 2 — Os 4 tópicos default</h3>
+
+    <p>
+      Sugestão do curso, não regra. Você pode usar outros nomes — mas <strong>3-4 tópicos é o
+      máximo</strong>, e a razão é técnica (próxima seção):
+    </p>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-title">📝 Conteúdo</div>
+        <p class="card-desc">
+          Qualquer coisa relacionada à criação de conteúdo — ideias de post, rascunhos, briefings.
+          Aluno criador usa como caderno de produção.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">⚙️ Operação</div>
+        <p class="card-desc">
+          Saúde do agente, crons, alertas, troubleshooting, manutenção. Onde o health check da A2
+          posta toda segunda. Também onde decisões operacionais ficam registradas.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🧠 Aprendizado</div>
+        <p class="card-desc">
+          Insights, lições aprendidas, descobertas técnicas, links pra estudar depois. Histórico
+          do que você aprendeu construindo o agente — e o que ele aprendeu sobre você.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">💰 Financeiro</div>
+        <p class="card-desc">
+          Custos de API, faturas, decisões de stack, projeções de gasto. Aluno PME com agente
+          24/7 precisa de visibilidade aqui — esse tópico vira o resumo mensal automático.
+        </p>
+      </div>
+    </div>
+
+    <h3>Por que 3-4 máximo</h3>
+
+    <p>
+      Cada tópico = janela de contexto separada na cabeça do agente. <strong>8 tópicos = agente
+      burro em todos</strong> (ele nunca tem profundidade em nenhum). 3-4 = afiado em cada. Não é
+      restrição arbitrária — é arquitetura de atenção. Você não pode ter especialista em 8 áreas
+      simultâneas com a mesma cabeça. Mesma lógica.
+    </p>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Princípio reforçado:</strong> <em>"1 tópico = 1 contexto"</em>. Se você está em
+        Operação e quer falar de Conteúdo, troca o tópico — não mistura. O agente respeita a
+        separação. Conversa de Operação não polui memória de Conteúdo. É hygienic.
+      </p>
+    </div>
+
+    <h3>Passo 3 — Allowlist do supergrupo</h3>
+
+    <p>
+      Mesmo padrão da DM: comando natural pro agente. Não edita config:
+    </p>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #2 · allowlist supergrupo workspace</span>
+        <span class="prompt-card-where">cola dentro do supergrupo · qualquer tópico</span>
+      </div>
+      <div class="prompt-card-body">esse grupo é meu workspace.
+
+Responde nos tópicos quando eu te marcar (@bot) ou quando o cron
+mandar você postar (ex: health check no tópico Operação toda
+segunda).
+
+Não responde em outras conversas dos tópicos — só quando marcado
+ou quando for você mesmo postando proativo.
+
+Confirma o que entendeu antes de aplicar.</div>
+      <div class="prompt-card-tip">
+        💡 Resultado: agente identifica o supergrupo · marca como workspace · ativa
+        <code>requireMention: true</code> · pronto pro próximo passo (cron da A2 postando aqui).
+      </div>
+    </div>
+
+    <h3>Demo final · cron da A2 postando aqui</h3>
+
+    <p>
+      Lembra do cron de health check semanal que você criou na A2? Ele já estava configurado pra
+      postar no <strong>tópico Operação</strong>. Se você criou o cron antes desse supergrupo
+      existir, ele tava postando no DM até agora. Pede pro agente realocar:
+    </p>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #3 · realocar cron da A2 pro tópico</span>
+        <span class="prompt-card-where">cola no Telegram</span>
+      </div>
+      <div class="prompt-card-body">o cron de health check semanal que você criou (toda segunda
+09:00 BRT) tá postando no DM. Migra pra postar no tópico Operação
+do meu supergrupo workspace daqui em diante.
+
+Próxima execução já vai pro tópico certo. Confirma quando aplicar.</div>
+      <div class="prompt-card-tip">
+        💡 Resultado: cron atualiza · próxima segunda 09:00 BRT a mensagem aparece no tópico
+        Operação. Demonstra na prática que <em>"agente cuida do próprio ambiente + te avisa onde
+        faz sentido"</em>.
+      </div>
+    </div>
+
+    <div class="callout callout-success">
+      <p>
+        <strong>Vitória visível Bloco 5:</strong> supergrupo bonito com 4 tópicos. Bot como admin.
+        Allowlist por comando natural. Cron da A2 já apontando pro tópico Operação. Próxima
+        segunda 09:00 BRT, primeira mensagem real chega ali — e fica registrada no contexto certo
+        pra sempre.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= GRUPO EQUIPE ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Bloco 6 · Compartilhar com equipe</span>
+    <h2>Grupo da <em>equipe.</em></h2>
+
+    <p>
+      Setup separado do supergrupo do workspace pessoal. Aqui é onde sócios, freelancers, ou time
+      operacional pode marcar o agente pra pedir status, dúvida sobre cliente, ou relatório
+      rápido — sem reabrir painel, sem login extra. Mesmo bot, segundo grupo, allowlist diferente.
+    </p>
+
+    <h3>Setup em 3 passos</h3>
+
+    <div class="item-icon">
+      <div class="item-icon-box">1</div>
+      <div class="item-icon-content">
+        <h3>Cria grupo separado</h3>
+        <p>
+          Telegram → Novo grupo · nome <em>"Equipe [empresa]"</em> · adiciona bot do agente · adiciona
+          time. Pode ser supergrupo com tópicos também (se a equipe é grande), ou grupo simples
+          (equipe pequena, contexto único).
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">2</div>
+      <div class="item-icon-content">
+        <h3>Promove bot a admin</h3>
+        <p>
+          Mesma lógica do supergrupo workspace. Sem admin, bot não posta limpo. Permissões
+          mínimas: postar mensagens.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">3</div>
+      <div class="item-icon-content">
+        <h3>Allowlist por comando natural</h3>
+        <p>
+          Manda no grupo (qualquer pessoa pode mandar — agente reconhece quem é o "dono" pelo seu
+          User ID). Configura mention-only pra não virar spammer.
+        </p>
+      </div>
+    </div>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #4 · allowlist grupo da equipe</span>
+        <span class="prompt-card-where">cola dentro do grupo da equipe</span>
+      </div>
+      <div class="prompt-card-body">esse é o grupo da minha equipe.
+
+Todos os membros desse grupo podem te marcar (@bot) e tu responde
+normal. Mas SÓ quando te marcarem — não comenta proativamente,
+não vira papagaio.
+
+Resposta padrão deve ser sucinta e profissional — equipe vai usar
+pra status, dúvidas operacionais, relatórios rápidos. Não é o
+mesmo tom da minha DM.
+
+Confirma o que entendeu antes de aplicar.</div>
+      <div class="prompt-card-tip">
+        💡 Resultado: agente marca o grupo com <code>requireMention: true</code> · perfil de
+        resposta mais profissional · evita falar sem ser chamado.
+      </div>
+    </div>
+
+    <h3>Quando isso vira útil</h3>
+
+    <p>
+      Casos de uso reais que aluno reporta nas primeiras semanas:
+    </p>
+
+    <ul>
+      <li>Sócio pergunta status de projeto · agente puxa do Notion · responde em 30s</li>
+      <li>Time de suporte com dúvida sobre cliente · agente busca no histórico · entrega contexto</li>
+      <li>Designer pede última versão da brand guideline · agente busca no Drive · manda link</li>
+      <li>Comercial precisa de relatório de vendas da semana · agente roda script · posta resumo</li>
+    </ul>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Em A12 (Integrações)</strong> você vai conectar Notion, GitHub, Calendar, Drive
+        nativamente — aí esses casos de uso ficam automáticos. Aqui na A4, o que importa é o
+        <em>canal</em> estar pronto: equipe consegue marcar agente sem fricção, agente responde
+        pro canal certo.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= WHATSAPP ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Bloco 7 · A pergunta que todo mundo faz</span>
+    <h2>WhatsApp — <em>com chip dedicado.</em></h2>
+
+    <p>
+      Aluno PME insiste no WhatsApp. Faz sentido — é o canal onde tudo acontece no Brasil. Mas
+      tem trade-offs sérios que precisam ficar explícitos antes de você botar agente lá. Comando
+      pra conectar:
+    </p>
+
+    <div class="terminal-card">
+      <div class="terminal-card-header">
+        <span class="terminal-card-label">Terminal Managed</span>
+        <span class="terminal-card-where">cola e dá Enter</span>
+      </div>
+      <div class="terminal-card-body"><span class="prompt-symbol">$</span>openclaw channels login --channel whatsapp --account dedicado
+
+<span class="comment"># --account dedicado separa do canal default</span>
+<span class="comment"># ideal pra chip dedicado não vazar pro número pessoal</span>
+<span class="comment"># fluxo: terminal mostra QR · scan no app · pareamento</span></div>
+      <div class="terminal-card-tip">
+        ▶ Pareamento expira em ~30 dias · você refaz quando expirar. Pairing requests duram 1h ·
+        máx 3 pendentes por canal.
+      </div>
+    </div>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>Recomendação forte:</strong> se você vai mesmo botar WhatsApp, contrata um chip
+        dedicado pro agente. Pré-pago/MVNO qualquer · R$ 15-30/mês · número próprio = identidade
+        própria. Você <em>não</em> risca seu pessoal num ban do Meta. Princípio: <em>"agente é
+        funcionário, não extensão sua"</em>.
+      </p>
+    </div>
+
+    <h3>Por que NÃO usar seu número pessoal</h3>
+
+    <p>
+      Lista honesta dos riscos:
+    </p>
+
+    <ol>
+      <li>
+        <strong>WhatsApp Web/Baileys não é oficial.</strong> Meta pode banir conta sem aviso —
+        sem julgamento de mérito, sem suporte humano, sem reverter. Aconteceu com automações N8N
+        em massa em 2024-2025.
+      </li>
+      <li>
+        <strong>Ban do número = perde TUDO.</strong> Conversas pessoais, grupos de família, grupos
+        de trabalho, comércio local. Um ban com seu pessoal = catástrofe. Um ban com chip dedicado
+        = compra outro chip e refaz.
+      </li>
+      <li>
+        <strong>Identidade misturada.</strong> Cliente que conhece seu número pessoal manda
+        pergunta · agente responde no seu nome sem você ver · você fica responsável por algo que
+        não falou. Em chip dedicado, identidade do agente é separada.
+      </li>
+      <li>
+        <strong>Sem allowlist real.</strong> WhatsApp não tem o equivalente do mention-only do
+        Telegram. Em grupo, agente entende mensagem como direcionada se você mencionar — mas a
+        feature é mais frágil que no Telegram.
+      </li>
+    </ol>
+
+    <h3>4 razões pra preferir Telegram (mesmo com chip dedicado)</h3>
+
+    <p>
+      Mesmo se você for de chip dedicado e remover o risco de ban no número pessoal, Telegram
+      ainda ganha em:
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Fator</th>
+          <th>Por que importa</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>1. Tópicos por tema</strong></td>
+          <td>Sem isso, contexto vira papel amassado · agente burro</td>
+        </tr>
+        <tr>
+          <td><strong>2. Risco de ban</strong></td>
+          <td>Chip dedicado mitiga, não elimina · Telegram não tem esse risco</td>
+        </tr>
+        <tr>
+          <td><strong>3. Permissionamento de grupo</strong></td>
+          <td>Mention-only nativo no Telegram · WhatsApp não tem equivalente robusto</td>
+        </tr>
+        <tr>
+          <td><strong>4. UX consistente</strong></td>
+          <td>Mídia, formatação, status uniformes em todo cliente Telegram</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Caminhos legítimos enterprise:</strong> Cloud API oficial Meta WhatsApp · agente
+        SDR estruturado · suporte com SLA real → cobertura no
+        <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=material&utm_campaign=v1" target="_blank" rel="noopener">Pixel AI Hub</a>.
+        Aqui no MAIN curso é Telegram-first com WhatsApp como exceção bem ressalvada.
+      </p>
+    </div>
+
+    <div class="callout callout-success">
+      <p>
+        <strong>Demo da aula:</strong> Bruno mostra a Amora respondendo no WhatsApp <em>com número
+        próprio dela</em> — header da conversa visível: "Amora · +55 41 9XXX-XXXX". Aluno vê que
+        dá pra ter agente com chip dedicado funcionando bonito. Mesmo demo da A0; foco visual aqui
+        é o número próprio.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= TROUBLESHOOTING ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Travou? Antes de pedir ajuda</span>
+    <h2>Top <em>problemas comuns da A4.</em></h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Sintoma</th>
+          <th>Causa provável</th>
+          <th>Ação</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Bot não posta em tópico específico</td>
+          <td>Bot não é admin do supergrupo</td>
+          <td>Configurações → Administradores → adiciona o bot · permite postar mensagens + gerenciar tópicos</td>
+        </tr>
+        <tr>
+          <td>Tópicos não aparecem na opção do grupo</td>
+          <td>Ainda é grupo simples · não foi convertido em supergrupo</td>
+          <td>Configurações → Tipo de grupo → Supergrupo · depois Topics: Enable</td>
+        </tr>
+        <tr>
+          <td>Group ID errado em config</td>
+          <td>Aluno tentou usar <code>@username</code> em vez do ID negativo</td>
+          <td>Group IDs Telegram são negativos (<code>-1001234567890</code>) · pede pro agente reportar o ID correto</td>
+        </tr>
+        <tr>
+          <td>Bot ignora mensagem em grupo mesmo marcado</td>
+          <td>Privacy mode ativo no @BotFather (default)</td>
+          <td>Default é mention-only · pra agente "ouvinte" que lê tudo, mexe em privacy via @BotFather (caso bônus)</td>
+        </tr>
+        <tr>
+          <td>Mudou privacy mode mas bot ainda não lê</td>
+          <td>Telegram só aplica change com remove + re-add</td>
+          <td>Remove o bot do grupo · adiciona de novo · privacy nova ativa</td>
+        </tr>
+        <tr>
+          <td>Bun é incompatível com gateway Telegram/WhatsApp</td>
+          <td>Conhecido · Managed roda Node por padrão · não é problema do aluno</td>
+          <td>Não muda nada se você não tentar trocar runtime · ignora</td>
+        </tr>
+        <tr>
+          <td><code>getUpdates 409</code></td>
+          <td>Outro gateway/poller usando o mesmo token</td>
+          <td>Geralmente aluno tem 2 OpenClaws com mesmo bot · desliga duplicado · só 1 OpenClaw por bot</td>
+        </tr>
+        <tr>
+          <td>Pairing WhatsApp expira muito rápido</td>
+          <td>Demora pra escanear o QR (validade de 1h)</td>
+          <td>Refaz <code>channels login</code> · escaneia em &lt;5min · prepara o app antes</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Cheatsheet do kit:</strong> <a href="../INDICE.md">outros-canais.md</a> —
+        cobre Telegram completo + preview de Slack, Discord, iMessage. Cobertura total dos 26
+        canais nativos só na A11.
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Não conseguiu resolver com a tabela acima?</strong> Joga screenshot/áudio/vídeo
+        no <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">grupo Telegram do
+        curso</a>. openclawzinho responde em &lt;30 segundos · humanos em &lt;5 minutos.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= CTA PRÓXIMA ========================= -->
+
+  <section class="sec">
+    <div class="cta-card">
+      <h3>Próximo passo: <em>A5 — Identidade do agente</em></h3>
+      <p>
+        14 minutos · modular · primeira aula da fase 2 do curso. Você organizou Telegram, agora
+        bora dar <strong>personalidade e contexto pessoal</strong> pro agente — SOUL.md (quem ele
+        é) · IDENTITY.md (o papel) · USER.md (você) · AGENTS.md (organograma se tiver vários).
+        Aqui ele para de ser genérico e começa a ser <em>seu</em>.
+      </p>
+      <a href="aula-05-identidade.html" class="cta-button">→ Ir pra Aula 5</a>
+    </div>
+  </section>
+
+  <!-- ========================= FOOTER ========================= -->
+
+  <footer class="aula-footer">
+
+    <div class="aula-footer-block">
+      <h4>Travou? Tá no grupo do curso</h4>
+      <p>
+        Comunidade Telegram do curso —
+        <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">t.me/cursoopenclaw</a>
+        — suporte 24/7 (openclawzinho bot + Bruno e equipe presente).
+        Dúvida sobre essa aula, problemas de setup, ou quer compartilhar como aplicou
+        no seu negócio: bora trocar lá.
+      </p>
+    </div>
+
+    <div class="aula-footer-block">
+      <h4>Próximo nível: Pixel AI Hub</h4>
+      <p>
+        Aplicar agente pra empresa toda — equipe, governance, escala?
+        <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=material&utm_campaign=v1" target="_blank" rel="noopener">Pixel AI Hub</a>:
+        segundo cérebro corporativo, comunidade de empreendedores, +50 skills enterprise,
+        encontros mensais ao vivo. Vagas mensais limitadas.
+      </p>
+    </div>
+
+    <div class="aula-footer-credit">
+      Mini-Curso OpenClaw 2026 · Material complementar à gravação · Atualizações conforme kit evolui<br>
+      <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=footer-credit" target="_blank" rel="noopener">Bruno Okamoto · Pixel Educação</a>
+    </div>
+
+  </footer>
+
+</div>
+
+</body>
+</html>

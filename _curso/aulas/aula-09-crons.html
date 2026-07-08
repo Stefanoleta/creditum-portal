@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A9 — Crons + Revisão do Dia · Mini-Curso OpenClaw</title>
+<meta name="description" content="Material complementar da Aula 9 — cron como super poder do agente, criação por comando natural, 4 categorias com 10+ exemplos, Revisão do Dia, demo ao vivo e meta-cron de auditoria.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Fraunces:ital,wght@1,400;1,500;1,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="_shared/tokens.css">
+</head>
+
+<body>
+
+<div class="wrap">
+
+  <!-- ========================= HEADER ========================= -->
+
+  <header class="aula-header">
+    <div class="aula-header-brand">Mini-Curso <span class="accent">OpenClaw</span></div>
+    <div class="aula-header-meta">Aula 09 · Modular</div>
+  </header>
+
+  <!-- ========================= HERO ========================= -->
+
+  <section class="hero">
+    <div class="hero-meta">
+      <span class="hero-meta-item">⏱ <strong>12 min</strong></span>
+      <span class="hero-meta-item">🧩 <strong>Modular</strong></span>
+      <span class="hero-meta-item">🎯 <strong>A-ha #4</strong></span>
+    </div>
+
+    <h1>
+      Crons + Heartbeat — proatividade do
+      <em>agente.</em>
+    </h1>
+
+    <p class="hero-sub">
+      Em <em>~12min</em> seu agente passa de <em>"responde quando chamado"</em> pra <em>"trabalha
+      enquanto você dorme"</em>. Os <strong>2 mecanismos de proatividade</strong> que o OpenClaw te dá:
+      <em>cron</em> (timing exato · entrega no canal) e <em>heartbeat</em> (drift OK · agente decide
+      se age ou fica quieto). Cron criado por comando natural · 4 categorias com 10+ exemplos ·
+      <strong>Revisão do Dia</strong> rodando sozinha às 18h · heartbeat batendo a cada 30min ·
+      meta-cron que audita os próprios crons. Sem editar crontab, sem decorar sintaxe.
+    </p>
+  </section>
+
+  <!-- ========================= A-HA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">A-ha desta aula</span>
+    <div class="aha-card">
+      <span class="label">A-ha #4 entregue</span>
+      <p class="quote">"Ele trabalha sozinho sem eu chamar."</p>
+    </div>
+  </section>
+
+  <!-- ========================= PRE-FLIGHT ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Pre-flight check</span>
+    <h2>Antes de <em>apertar play.</em></h2>
+
+    <p>
+      A9 é modular — pré-requisito mínimo é A1 (agente respondendo) e A2 (você já criou seu primeiro
+      cron de health check semanal). A8 ajuda mas não é obrigatória — se ainda não fez skills, o
+      cron continua funcionando, só fica menos poderoso.
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> agente respondendo (A1) com OAuth ativo</p>
+      <p><span class="check">✓</span> Telegram conectado com pelo menos 1 tópico (idealmente <em>Operação</em>) — A1 cobre DM básico · tópicos vêm da A4 (modular)</p>
+      <p><span class="check">✓</span> health check semanal já rodando (A2) — você vai usar como recap visual</p>
+      <p><span class="check">✓</span> 1 caso real em mente: <em>"o que eu queria que ele fizesse sozinho toda semana?"</em></p>
+      <p><span class="check">✓</span> Telegram aberto em paralelo na hora de assistir — Bloco 4B cria cron ao vivo, você vai querer ver junto</p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Cron ≠ skill ≠ heartbeat.</strong> Skill é o <em>O QUE</em> (capacidade reutilizável).
+        Cron é o <em>QUANDO exato</em> (agendamento determinístico). Heartbeat é o <em>RESPIRAR</em>
+        (poll periódico onde o agente decide se age ou fica quieto). A9 amarra os 3 — skill da A8 +
+        cron + heartbeat = agente proativo. Sem cron nem heartbeat, agente é assistente. Com os dois,
+        é operação 24/7.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= ESTRUTURA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Estrutura da aula em vídeo</span>
+    <h2>O que você vai aprender em <em>5 blocos.</em></h2>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-time">⏱ 2 min</div>
+        <div class="card-title">Bloco 1 — Cron = super poderes</div>
+        <p class="card-desc">
+          Cron é o que separa <strong>agente autônomo</strong> de cloud agent (tipo ChatGPT). Cloud
+          agent só responde. Agente com cron trabalha sozinho — de noite, no fim de semana,
+          enquanto você dorme. Lista dos 10 super poderes que cron destrava.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1.5 min</div>
+        <div class="card-title">Bloco 2 — Criar por comando natural</div>
+        <p class="card-desc">
+          <strong>Esquece terminal.</strong> Esquece crontab. Esquece cron expression. 4 comandos
+          naturais que cobrem 100% do uso: criar · listar · apagar · rodar agora. Você fala
+          natural, agente cuida da técnica.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 3 min</div>
+        <div class="card-title">Bloco 3 — 4 categorias típicas</div>
+        <p class="card-desc">
+          Quase todo cron cai em 1 dessas 4: <strong>monitoramento</strong>, <strong>pesquisa &amp;
+          estudo</strong>, <strong>sumarização &amp; relatórios</strong>, <strong>planejamento &amp;
+          reflexão</strong>. 10+ exemplos práticos pra inspirar.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 4 min</div>
+        <div class="card-title">Bloco 4 — Revisão do Dia + demo</div>
+        <p class="card-desc">
+          ⭐ Coração da aula. Parte A: o que é Revisão do Dia (recap A7). Parte B: <strong>cron
+          criado ao vivo</strong> · você vê output no Telegram. Parte C: insight de meta-cron —
+          <em>"funcionário também precisa de supervisor"</em>.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1.5 min</div>
+        <div class="card-title">Bloco 5 — Recap + amarração A10</div>
+        <p class="card-desc">
+          Recap dos 4 blocos. Frase de fechamento: <em>"agora você tem funcionário 24/7. Não paga
+          overtime. E ele se audita."</em> A10: agora ele trabalha sozinho · próxima é segurança
+          operacional pra ele não virar problema.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ========================= SUPER PODERES ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aprofundamento do Bloco 1</span>
+    <h2>10 super poderes que cron <em>destrava.</em></h2>
+
+    <p>
+      A diferença entre cloud agent e agente OpenClaw com cron não é técnica — é de papel. Cloud
+      agent é caixa. Agente com cron é funcionário com agenda. Lista do que cron permite — fica
+      claro porque sem isso o agente nunca sai do estado "ferramenta de chat":
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Trabalhar à noite</strong> sem você ligado</p>
+      <p><span class="check">✓</span> <strong>Executar tarefas</strong> em horário definido (não só quando lembrar)</p>
+      <p><span class="check">✓</span> <strong>Fazer pesquisas</strong> recorrentes (conteúdo · tendências · concorrência)</p>
+      <p><span class="check">✓</span> <strong>Revisar</strong> o que você pediu antes (recall ativo, não passivo)</p>
+      <p><span class="check">✓</span> <strong>Auditar</strong> o próprio trabalho (workspace · skills · crons)</p>
+      <p><span class="check">✓</span> <strong>Ler ferramentas</strong> (e-mail · calendar · CRM) sem você abrir</p>
+      <p><span class="check">✓</span> <strong>Estudar</strong> documentações novas e te avisar do relevante</p>
+      <p><span class="check">✓</span> <strong>Analisar próprias memórias</strong> pra aprender mais sobre você</p>
+      <p><span class="check">✓</span> <strong>Detectar padrões</strong> em comportamento e dados que você nem viu</p>
+      <p><span class="check">✓</span> <strong>Invocar outros agentes</strong> quando precisa de ajuda especializada (A13)</p>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Frase-mãe da A9:</strong> <em>cron = onde você dá super poderes ao agente. Sem cron,
+        ele é assistente. Com cron, ele é operação.</em>
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Recap A2:</strong> você já criou seu primeiro cron na A2 — o health check semanal
+        que valida saúde do sistema toda segunda. Hoje você aprende a criar muito mais.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= COMANDO NATURAL ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Aprofundamento do Bloco 2</span>
+    <h2>Cron por comando natural — <em>esquece terminal.</em></h2>
+
+    <p>
+      Aluno tradicional aprende cron escrevendo <code>0 9 * * 1</code> e jurando que vai decorar.
+      Não decora. No OpenClaw V2, você fala natural pro agente — ele cuida da sintaxe, da sessão
+      isolada, do delivery channel. <strong>Princípio: você fala natural. Ele cuida da técnica.</strong>
+    </p>
+
+    <h3>4 comandos naturais que cobrem 100% do uso</h3>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #1 · criar cron</span>
+        <span class="prompt-card-where">cola no Telegram</span>
+      </div>
+      <div class="prompt-card-body">cria um cron toda manhã 8h que olha minhas pendências
+e me manda priorizadas</div>
+        <div class="prompt-card-tip">
+          💡 Agente interpreta horário, escolhe sessão isolada (default), define delivery, confirma.
+          Você não decora cron expression.
+        </div>
+    </div>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #2 · listar crons</span>
+        <span class="prompt-card-where">cola no Telegram</span>
+      </div>
+      <div class="prompt-card-body">me lista os crons que eu tenho</div>
+        <div class="prompt-card-tip">
+          💡 Saída esperada: nome · horário · próxima execução · status (ativo/pausado).
+          Vale rodar 1x por mês pra revisar.
+        </div>
+    </div>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #3 · apagar cron</span>
+        <span class="prompt-card-where">cola no Telegram</span>
+      </div>
+      <div class="prompt-card-body">apaga o cron das pendências</div>
+        <div class="prompt-card-tip">
+          💡 Agente confirma antes de apagar (princípio defensivo). Se você tiver 2 crons parecidos,
+          ele pergunta qual.
+        </div>
+    </div>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #4 · rodar agora</span>
+        <span class="prompt-card-where">cola no Telegram</span>
+      </div>
+      <div class="prompt-card-body">roda o cron de revisão do dia agora</div>
+        <div class="prompt-card-tip">
+          💡 Útil pra testar cron novo sem esperar o horário oficial. Output sai na mesma hora,
+          mesmo canal de entrega que rodaria automático.
+        </div>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Princípio do bloco:</strong> aluno PME nunca precisa entender cron expression.
+        Toda sintaxe técnica fica em Tier 2 (cheatsheet) pra quem quer aprofundar. Default do
+        curso é comando natural.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= 4 CATEGORIAS ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aprofundamento do Bloco 3</span>
+    <h2>4 categorias típicas — <em>10+ exemplos.</em></h2>
+
+    <p>
+      Quase todo cron útil cai em 1 dessas 4 categorias. Antes de criar cron novo, pensa em qual
+      categoria ele vive — ajuda a manter o painel de crons organizado e evita duplicar tarefa
+      entre crons.
+    </p>
+
+    <h3>1. Monitoramento (saúde do sistema)</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Health check semanal</strong> (recap A2) · valida que API key, OAuth, canais e crons tão OK</p>
+      <p><span class="check">✓</span> <strong>Auditar workspace mensal</strong> (gancho A6) · agente checa MAPAs, MEMORY, skills e relata o que tá fora do padrão</p>
+      <p><span class="check">✓</span> <strong>Auditar os próprios crons</strong> ⭐ · cron que checa se os outros crons rodaram OK nas últimas 24h (Bloco 4C)</p>
+    </div>
+
+    <h3>2. Pesquisa &amp; estudo</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Pesquisas de conteúdo</strong> · tendências do dia no seu nicho · pauta de newsletter</p>
+      <p><span class="check">✓</span> <strong>Ler documentação nova</strong> de ferramenta que você usa · agente avisa do que mudou</p>
+      <p><span class="check">✓</span> <strong>Analisar próprias memórias</strong> pra aprender padrões sobre você (recap A7)</p>
+    </div>
+
+    <h3>3. Sumarização &amp; relatórios</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Relatório semanal</strong> (vendas · KPIs · métricas operacionais)</p>
+      <p><span class="check">✓</span> <strong>Analisar fluxos</strong> (operacionais · conteúdo · comunicação) e propor otimização</p>
+      <p><span class="check">✓</span> <strong>Tickets de suporte</strong> · agente lê novos tickets, classifica por categoria + urgência</p>
+      <p><span class="check">✓</span> <strong>Newsletter da comunidade</strong> · caso real do openclawzinho — agente compila dúvidas e respostas da semana</p>
+    </div>
+
+    <h3>4. Planejamento &amp; reflexão</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Revisão do Dia</strong> ⭐ · próprio Bloco 4 — cron que dispara fim de tarde e relata o dia</p>
+      <p><span class="check">✓</span> <strong>Auditar notas das pessoas</strong> pra ver o que aprenderam · útil pra cohort de mentoria</p>
+      <p><span class="check">✓</span> <strong>Toda semana faz uma pergunta</strong> pra te conhecer melhor — agente curador da relação humano-máquina</p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Princípio do bloco:</strong> antes de criar cron, identifica em qual das 4
+        categorias ele vive. Se não couber em nenhuma, provavelmente não é cron — é skill que você
+        roda manualmente.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= REVISÃO DO DIA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Aprofundamento do Bloco 4 · Parte A</span>
+    <h2>Revisão do Dia — <em>cron-âncora.</em></h2>
+
+    <p>
+      Revisão do Dia é o cron que vira hábito do agente — equivalente do "fechamento do dia" do
+      empreendedor humano. Roda fim de tarde, agente audita o próprio dia, manda no Telegram tópico
+      Operação. <strong>Você chega de manhã e o agente já preparou amanhã pra você.</strong>
+    </p>
+
+    <h3>O que a Revisão do Dia faz</h3>
+
+    <div class="item-icon">
+      <div class="item-icon-box">1</div>
+      <div class="item-icon-content">
+        <h3>Lê a daily note do dia</h3>
+        <p>
+          Cruza com memória semântica (recap A7) — agente sabe o que rolou. Se você usou o agente
+          em algum momento do dia, fica registrado.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">2</div>
+      <div class="item-icon-content">
+        <h3>Lista o que ficou pendente</h3>
+        <p>
+          Cruza decisões do dia com pendências — destaca o que foi prometido e ainda não saiu.
+          Sem dramatização: lista direta.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">3</div>
+      <div class="item-icon-content">
+        <h3>Alerta sobre amanhã</h3>
+        <p>
+          Lê calls, deadlines, prazos do dia seguinte. Se tiver call importante, lembra de revisar
+          contexto antes. <em>Memória externa preventiva.</em>
+        </p>
+      </div>
+    </div>
+
+    <h3>Output típico no Telegram tópico Operação</h3>
+
+    <blockquote>
+      <p>✅ <strong>Hoje fiz:</strong> X, Y, Z.</p>
+      <p>⏳ <strong>Aberto:</strong> A, B.</p>
+      <p>📅 <strong>Amanhã:</strong> call Cayo 14h sobre VSL — lembrei de revisar antes.</p>
+    </blockquote>
+
+    <div class="callout callout-success">
+      <p>
+        <strong>Princípio:</strong> aluno chega de manhã, não precisa lembrar de nada — o agente
+        já preparou. Recap A2/A6 (<em>"agente cuida do próprio ambiente"</em>) ganha aqui versão
+        completa: cuida + relata pra você.
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Skill <code>revisao-do-dia</code>:</strong> existe no kit (verificar
+        <code>starter-kit/skills/</code> da release ativa). Se não estiver instalada, o agente cria
+        sob demanda usando <code>criar-skill</code> (recap A8).
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= DEMO AO VIVO ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aprofundamento do Bloco 4 · Parte B (A-ha)</span>
+    <h2>Cron criado <em>ao vivo.</em></h2>
+
+    <p>
+      Demo central da aula. Aluno fala em prompt natural, agente configura, confirma em &lt;30s.
+      Você vê na tela o cron sendo criado — momento A-ha emocional: <em>"ele vai trabalhar enquanto
+      eu durmo"</em>.
+    </p>
+
+    <h3>Prompt da demo</h3>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt · criar cron de pendências matinais</span>
+        <span class="prompt-card-where">cola no Telegram</span>
+      </div>
+      <div class="prompt-card-body">cria um cron toda segunda 9h que olha minhas pendências,
+identifica as 3 mais urgentes pelo prazo, e me manda
+priorizadas no Telegram. Sessão isolada.</div>
+        <div class="prompt-card-tip">
+          💡 Note os 4 elementos: gatilho ("toda segunda 9h"), entrada ("minhas pendências"),
+          processo ("identifica as 3 mais urgentes"), entrega ("Telegram + sessão isolada").
+        </div>
+    </div>
+
+    <h3>Resposta esperada do agente</h3>
+
+    <blockquote>
+      <p>
+        Criado: <code>pendencias-matinal</code>. Roda toda segunda 9h em sessão isolada. Vou postar
+        no tópico Operação. <strong>Próxima execução:</strong> segunda 09:00 BRT.
+      </p>
+    </blockquote>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>A-ha emocional:</strong> aluno escreveu 3 linhas e ganhou agente que vai entregar
+        prioridades toda segunda pra sempre. Sem editar arquivo. Sem decorar sintaxe. Sem abrir
+        crontab. <em>Você fala natural. Ele cuida da técnica.</em>
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= META-CRON ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Aprofundamento do Bloco 4 · Parte C (Insight)</span>
+    <h2>Meta-cron — <em>quando crons quebram.</em></h2>
+
+    <p>
+      Crons às vezes quebram — modelo retorna erro, ferramenta externa fica fora, prompt não
+      funciona como esperado. Sem auditoria, você só descobre quando alguém reclama (ou pior,
+      quando o relatório que ia chegar segunda não chegou).
+    </p>
+
+    <h3>Solução — cron de auditoria dos crons</h3>
+
+    <p>
+      Toda manhã 7h, agente roda auditoria em todos os crons das últimas 24h. Reporta o que rodou
+      OK, o que falhou, e por quê. Você abre o Telegram e vê resumo direto. <strong>Funcionário
+      precisa de supervisor — mesmo se o supervisor for ele mesmo.</strong>
+    </p>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt · criar meta-cron de auditoria</span>
+        <span class="prompt-card-where">cola no Telegram</span>
+      </div>
+      <div class="prompt-card-body">cria um cron toda manhã 7h que checa todos os crons que
+rodaram nas últimas 24h, lista os que deram OK e os que
+falharam, e me manda resumo no Telegram tópico Operação.
+
+Se algum falhou, inclui o erro pra eu poder corrigir.</div>
+        <div class="prompt-card-tip">
+          💡 Esse cron é o supervisor dos outros. Roda às 7h porque a maioria dos crons matinais
+          dispara entre 8h-10h — o relatório das 7h pega o que rodou na noite anterior.
+        </div>
+    </div>
+
+    <h3>Comando técnico (Tier 2)</h3>
+
+    <p>
+      Se quiser inspecionar histórico de cron específico no terminal Managed (uso avançado), o
+      comando OpenClaw é:
+    </p>
+
+    <div class="terminal-card">
+      <div class="terminal-card-header">
+        <span class="terminal-card-label">Terminal Managed</span>
+        <span class="terminal-card-where">uso avançado · Tier 2</span>
+      </div>
+      <div class="terminal-card-body"><span class="prompt-symbol">$</span>openclaw cron list
+
+<span class="comment"># lista todos os crons configurados</span>
+
+<span class="prompt-symbol">$</span>openclaw cron runs --id &lt;id-do-cron&gt;
+
+<span class="comment"># mostra histórico de execuções: data · status · output</span></div>
+      <div class="terminal-card-tip">
+        ▶ Você não precisa decorar isso. Cheatsheet completo cobre todos os comandos.
+        O default do curso continua sendo comando natural pro agente.
+      </div>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Frase de fechamento do bloco:</strong> <em>você não confia 100% em cron. Mas você
+        confia em cron que audita cron.</em>
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= HEARTBEAT ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Aprofundamento extra · 2º mecanismo de proatividade</span>
+    <h2>Heartbeat — o agente que <em>respira.</em></h2>
+
+    <p>
+      Cron é poderoso pra timing exato (<em>"toda segunda 9h"</em>) e tarefa isolada. Mas tem casos
+      em que você quer o agente <strong>respirando o dia</strong> — checando 2-3 coisas de leve a
+      cada 30min, decidindo sozinho se vale te interromper ou ficar quieto. Pra isso existe heartbeat.
+    </p>
+
+    <p>
+      <strong>Como funciona:</strong> heartbeat é um poll periódico. A cada N minutos o agente recebe
+      uma "batida" — uma mensagem do tipo "tô vivo, alguma coisa nova?". Ele rotaciona checagens
+      curtas (inbox · calendar · mentions · pendências), e tem 2 saídas possíveis: ou ele <strong>te
+      escreve algo de valor</strong>, ou ele responde <code>HEARTBEAT_OK</code> e fica quieto.
+    </p>
+
+    <h3>Os 2 arquivos que fazem heartbeat funcionar</h3>
+
+    <p>
+      Heartbeat não é só uma regra solta. Ele se sustenta em 2 arquivos com papéis distintos —
+      entender essa separação é o que evita confusão clássica:
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Arquivo</th>
+          <th>Função</th>
+          <th>Quem mantém</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>HEARTBEAT.md</code></td>
+          <td><strong>COMO ele vigia</strong> — frequência do poll, quais checks rotacionar, regras de silêncio, quiet hours</td>
+          <td>Aluno (raro · só quando muda comportamento)</td>
+        </tr>
+        <tr>
+          <td><code>memory/hot.md</code></td>
+          <td><strong>O QUE ele vigia</strong> — prioridades da semana, prazos críticos, negociações ativas, decisões recentes</td>
+          <td>Agente (auto · pipeline + skill <code>/salve</code>)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Por que separar:</strong> <code>hot.md</code> muda toda hora (você decide algo,
+        agente atualiza). <code>HEARTBEAT.md</code> raramente muda (você define comportamento uma
+        vez e ajusta só se ficar barulhento ou silencioso demais). Misturar os 2 = arquivo gigante
+        que ninguém edita. <strong>Aprofundamento:</strong> A7 cobre <code>hot.md</code>. A5 amarra
+        com identidade do agente. <code>HEARTBEAT.md</code> tem template no Kit pronto pra usar.
+      </p>
+    </div>
+
+    <h3>Heartbeat vs Cron — quando usar cada um</h3>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Dimensão</th>
+          <th>Heartbeat</th>
+          <th>Cron</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Timing</strong></td>
+          <td>Drift OK (~30min de janela)</td>
+          <td>Exato ("segunda 9h sharp")</td>
+        </tr>
+        <tr>
+          <td><strong>Tarefa</strong></td>
+          <td>Múltiplas checks pequenas em batch</td>
+          <td>1 task isolada</td>
+        </tr>
+        <tr>
+          <td><strong>Contexto</strong></td>
+          <td>Usa histórico de mensagens recentes</td>
+          <td>Sessão isolada (default)</td>
+        </tr>
+        <tr>
+          <td><strong>Custo API</strong></td>
+          <td>Reduz chamadas (1 turno = N checks)</td>
+          <td>1 chamada por trigger</td>
+        </tr>
+        <tr>
+          <td><strong>Output</strong></td>
+          <td>Conversa contigo (ou silêncio)</td>
+          <td>Entrega direto no canal</td>
+        </tr>
+        <tr>
+          <td><strong>Exemplo</strong></td>
+          <td>"a cada 30min checa inbox + calendar + mentions"</td>
+          <td>"toda segunda 9h roda doctor"</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Regra de bolso:</strong> se você quer <em>"que ele me avise SE acontecer X"</em>,
+        é heartbeat. Se você quer <em>"que ele faça X no horário Y"</em>, é cron. Os dois convivem
+        — agente bom usa os 2.
+      </p>
+    </div>
+
+    <h3>7 ideias de heartbeat pra você experimentar</h3>
+
+    <p>
+      O agente sorteia 2-4 dessas por dia (não checa todas em todo heartbeat — senão fica chato).
+      Cada uma é 1 linha em <code>HEARTBEAT.md</code> na seção <em>"## Checks rotacionáveis"</em>
+      (template do Kit já vem com lista pronta — você comenta as que não quer):
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Inbox triage</strong> — abre Gmail, lista emails não-lidos das últimas 4h, classifica em [urgente / pode esperar / lixo], me avisa só os urgentes</p>
+      <p><span class="check">✓</span> <strong>Calendário próximo</strong> — checa próximas 24-48h, me lembra do que tem amanhã 1 dia antes às 18h se eu ainda não confirmei</p>
+      <p><span class="check">✓</span> <strong>Mention sweep</strong> — checa LinkedIn/Twitter por menções desde a última checagem, manda só as relevantes pro negócio</p>
+      <p><span class="check">✓</span> <strong>Pendências paradas</strong> — lê <code>pendencias.md</code>, identifica itens com nome de terceiro parado há 3+ dias, sugere mensagem de follow-up</p>
+      <p><span class="check">✓</span> <strong>Memory maintenance</strong> — a cada 3 dias lê últimos <code>memory/YYYY-MM-DD.md</code>, extrai aprendizados duráveis pra <code>MEMORY.md</code>, remove ruído</p>
+      <p><span class="check">✓</span> <strong>Weather guard</strong> — se eu tiver evento externo hoje, checa previsão e me avisa só se tem chance real de chuva</p>
+      <p><span class="check">✓</span> <strong>News watch</strong> — checa 2-3 fontes que importam pro meu negócio (newsletters · RSS · feeds), só manda se tiver algo realmente novo desde a última checagem</p>
+    </div>
+
+    <h3>Quando o agente DEVE ficar quieto</h3>
+
+    <p>
+      Heartbeat sem regras de silêncio vira spam. Bom heartbeat é silencioso a maior parte do tempo —
+      só fala quando agrega valor real. Estas regras já vêm prontas no <code>HEARTBEAT.md</code> do
+      template do Kit — você adapta o tom mas mantém a lógica:
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Quiet hours 23h–8h</strong> — só interrompe se for urgência real (ex: deadline em 2h)</p>
+      <p><span class="check">✓</span> <strong>Já checou nos últimos 30min?</strong> — não checa de novo, responde <code>HEARTBEAT_OK</code> direto</p>
+      <p><span class="check">✓</span> <strong>Nada novo desde a última checagem?</strong> — silêncio (não manda "tudo certo!" gratuito)</p>
+      <p><span class="check">✓</span> <strong>Você tá em modo focado</strong> (call · trabalho profundo) — segura mensagem não-urgente pro próximo break</p>
+      <p><span class="check">✓</span> <strong>Reach out só quando:</strong> email importante chegou · evento &lt;2h · achou algo genuinamente interessante · faz &gt;8h sem dizer nada</p>
+    </div>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>Anti-padrão:</strong> heartbeat configurado pra "me manda resumo do dia toda hora".
+        Vira ruído. <strong>Bom heartbeat parece silêncio</strong> — você só percebe que ele tá vivo
+        quando ele te alerta de algo real. Se sentir que tá enchendo o saco, abre o <code>HEARTBEAT.md</code>
+        e aperta as regras de silêncio.
+      </p>
+    </div>
+
+    <h3>Configurando heartbeat no seu agente</h3>
+
+    <p>
+      Diferente de cron (que é <code>openclaw cron add</code>), heartbeat configura via prompt
+      natural — o agente cria/edita <code>HEARTBEAT.md</code> e ativa o poll. Cola este prompt:
+    </p>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt · ativar heartbeat</span>
+        <span class="prompt-card-where">cola no Telegram do seu agente</span>
+      </div>
+      <div class="prompt-card-body">Quero ativar heartbeat pra você ficar mais proativo no meu dia.
+
+Faz o seguinte:
+
+1. Cria/atualiza `HEARTBEAT.md` na raiz do workspace (template do Kit
+   já tem base — copia se ainda não existe). Estrutura:
+   - Frequência: poll a cada 30min entre 8h-22h
+   - Quiet hours: 22h-8h (só urgência real)
+   - Checks rotacionáveis (sorteia 2 por heartbeat, nunca todos juntos):
+     · Inbox triage (emails das últimas 4h, só urgentes)
+     · Pendências paradas (itens com nome de terceiro parado 3+ dias)
+     · Mention sweep (LinkedIn/Twitter, só se for relevante pro negócio)
+   - Regras de silêncio padrão (não checa 2x em 30min · silêncio se
+     nada novo · reach out só com valor real)
+
+2. Pra cada heartbeat, lê `memory/hot.md` pra entender contexto da
+   semana (prioridades, prazos, negociações ativas) antes de decidir
+   se age ou fica quieto.
+
+3. Mostra como ficou o `HEARTBEAT.md` antes de salvar — eu confirmo.
+
+Depois de aplicado, confirma que tá rodando: me manda
+`HEARTBEAT_OK` no próximo poll mesmo se não tiver nada novo,
+só pra eu saber que tá funcionando.</div>
+      <div class="prompt-card-tip">
+        💡 Antes de ativar todos os checks, testa por 1 dia com 1 check só (ex: só inbox triage).
+        Vê se a frequência tá boa, se as mensagens são úteis. Depois liga os outros 2. Heartbeat
+        agressivo no day 1 é o jeito mais rápido de odiar a feature.
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Heartbeat + cron juntos:</strong> a Amora (segundo cérebro do Bruno) usa os 2.
+        <em>Cron</em> pra Revisão do Dia (18h sharp) + health check (segunda 9h) + backup workspace
+        (sexta 17h). <em>Heartbeat</em> a cada 30min lendo <code>hot.md</code> e checando inbox +
+        pendências + mentions. Cron garante o que <strong>tem</strong> que acontecer. Heartbeat
+        captura o que <strong>pode</strong> valer a pena.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= NUMS ========================= -->
+
+  <section class="nums">
+    <div class="num-card">
+      <div class="n">10+</div>
+      <div class="l">Super poderes que cron destrava</div>
+    </div>
+    <div class="num-card">
+      <div class="n">4</div>
+      <div class="l">Comandos naturais cobrem 100%</div>
+    </div>
+    <div class="num-card">
+      <div class="n">4</div>
+      <div class="l">Categorias típicas de cron</div>
+    </div>
+    <div class="num-card">
+      <div class="n">&lt;30s</div>
+      <div class="l">Pra criar cron via natural</div>
+    </div>
+  </section>
+
+  <!-- ========================= COMANDOS OPENCLAW ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Referência técnica</span>
+    <h2>Comandos OpenClaw de cron — <em>tabela.</em></h2>
+
+    <p>
+      Você não precisa decorar — agente roda por trás. Mas se quiser inspecionar ou debugar no
+      terminal Managed em algum momento, é bom saber que existe.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Comando</th>
+          <th>O que faz</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>openclaw cron add</code></td>
+          <td>Adiciona cron novo (sintaxe Unix ou flag <code>--at</code>)</td>
+        </tr>
+        <tr>
+          <td><code>openclaw cron list</code></td>
+          <td>Lista todos os crons configurados</td>
+        </tr>
+        <tr>
+          <td><code>openclaw cron run --id &lt;id&gt;</code></td>
+          <td>Executa cron agora (sem esperar horário)</td>
+        </tr>
+        <tr>
+          <td><code>openclaw cron runs --id &lt;id&gt;</code></td>
+          <td>Histórico de execuções de cron específico</td>
+        </tr>
+        <tr>
+          <td><code>openclaw cron edit --id &lt;id&gt;</code></td>
+          <td>Edita prompt, horário ou flags</td>
+        </tr>
+        <tr>
+          <td><code>openclaw cron rm --id &lt;id&gt;</code></td>
+          <td>Remove cron</td>
+        </tr>
+        <tr>
+          <td><code>openclaw cron enable / disable</code></td>
+          <td>Pausa ou retoma cron sem deletar</td>
+        </tr>
+        <tr>
+          <td><code>openclaw cron status</code></td>
+          <td>Saúde geral do sistema de crons</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Flags úteis</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <code>--session isolated</code> · cron roda em sessão limpa (default · evita poluir contexto atual)</p>
+      <p><span class="check">✓</span> <code>--light-context</code> · carrega só o essencial (mais rápido, custo menor)</p>
+      <p><span class="check">✓</span> <code>--no-deliver</code> · executa mas não envia output (útil pra teste)</p>
+      <p><span class="check">✓</span> <code>--at &lt;datetime&gt;</code> · cron de execução única (em vez de cron expression Unix)</p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Princípio do curso:</strong> 95% dos casos não precisa abrir terminal. Você fala
+        natural pro agente — ele monta as flags certas. Esses comandos ficam aqui pra debugar caso
+        algo dê errado.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= O QUE A AULA NÃO COBRE ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Escopo da aula</span>
+    <h2>O que A9 <em>não cobre</em> (e por quê).</h2>
+
+    <p>
+      A9 fica enxuta de propósito — 12min cobrem fundamento + Revisão do Dia + meta-cron. Tudo o
+      mais entra em aula dedicada onde encaixa melhor:
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Tópico</th>
+          <th>Onde aparece</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Skills custom (criar a sua)</td>
+          <td>A8 · pré-requisito desta aula</td>
+        </tr>
+        <tr>
+          <td>Permissões e segurança operacional</td>
+          <td>A10 · próxima aula</td>
+        </tr>
+        <tr>
+          <td>Multi-agentes e orquestração</td>
+          <td>A13</td>
+        </tr>
+        <tr>
+          <td>Crons avançados (light-context · keep-after-run · sessão custom)</td>
+          <td>Bônus YouTube · Tier 2</td>
+        </tr>
+        <tr>
+          <td>Mission Control (observar crons em tempo real)</td>
+          <td>A14</td>
+        </tr>
+        <tr>
+          <td>Cron acionado por evento (Calendar · Email)</td>
+          <td>A12 (integrações)</td>
+        </tr>
+        <tr>
+          <td>Commit diário automático</td>
+          <td>A12 · backup + commit cron</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ========================= TROUBLESHOOTING ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Travou? Antes de pedir ajuda</span>
+    <h2>Top <em>problemas comuns da A9.</em></h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Sintoma</th>
+          <th>Causa provável</th>
+          <th>Ação</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Cron criado mas não disparou no horário</td>
+          <td>Timezone errado ou agente offline na hora</td>
+          <td>Pede <em>"checa o status do cron X e me diz se rodou"</em></td>
+        </tr>
+        <tr>
+          <td>Output do cron não chega no Telegram</td>
+          <td>Tópico não definido ou bot sem permissão de postar</td>
+          <td>Confere allowlist do tópico (A4) · refaz cron com tópico explícito</td>
+        </tr>
+        <tr>
+          <td>Cron poluiu sessão atual com contexto novo</td>
+          <td>Esqueceu de pedir sessão isolada</td>
+          <td>Pede <em>"reedita esse cron pra rodar em sessão isolada"</em></td>
+        </tr>
+        <tr>
+          <td>2 crons rodam tarefa parecida</td>
+          <td>Você criou novo sem revisar lista</td>
+          <td>Pede <em>"me lista todos os crons e me diz se algum tá duplicado"</em></td>
+        </tr>
+        <tr>
+          <td>Cron quebrou com erro de modelo</td>
+          <td>OAuth caducou ou API key sem crédito</td>
+          <td>Roda <code>openclaw status</code> · recarrega API se preciso (recap A1)</td>
+        </tr>
+        <tr>
+          <td>Revisão do Dia vem vazia</td>
+          <td>Daily note do dia não foi alimentada</td>
+          <td>Pede <em>"o que rolou no nosso dia hoje?"</em> antes da Revisão · agente popula a memória</td>
+        </tr>
+        <tr>
+          <td>Meta-cron de auditoria não detecta falhas</td>
+          <td>Janela de 24h muito longa pra cron horário</td>
+          <td>Reduz janela de auditoria pra 6h ou roda meta-cron 4x/dia</td>
+        </tr>
+        <tr>
+          <td>Cron usa skill que mudou e quebra</td>
+          <td>Skill foi editada após o cron ser criado</td>
+          <td>Roda cron manualmente pra ver erro · pede agente pra atualizar referência</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Cheatsheet completo:</strong> <a href="../INDICE.md">crons-do-seu-agente.md</a> —
+        4 categorias com 10+ exemplos · 4 comandos naturais · sintaxe técnica <code>cron add</code>
+        (Tier 2) · meta-cron de auditoria.
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Não conseguiu resolver com a tabela acima?</strong> Joga screenshot/áudio/vídeo
+        no <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">grupo Telegram do
+        curso</a>. openclawzinho responde em &lt;30 segundos · humanos em &lt;5 minutos.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= FRASE DE FECHAMENTO ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Fechamento</span>
+    <h2>Frase pra colar na <em>geladeira.</em></h2>
+
+    <div class="aha-card">
+      <span class="label">Frase-mãe da A9</span>
+      <p class="quote">"Cron = super poderes do agente. Cloud agent só responde. Agente com cron trabalha enquanto você dorme — e se audita."</p>
+    </div>
+
+    <p>
+      Você sai da A9 com: cron de pendências matinal · Revisão do Dia rodando às 18h · meta-cron
+      de auditoria às 7h. <strong>3 crons são suficientes pra começar.</strong> Vai adicionando
+      conforme aparecer repetição na sua semana.
+    </p>
+
+    <blockquote>
+      <p>
+        <strong>Anti-hype:</strong> não cria 15 crons no day 1. Maioria fica órfã, ninguém revisa,
+        vira ruído no Telegram. <em>3 crons úteis &gt; 15 crons enroscados.</em>
+      </p>
+    </blockquote>
+  </section>
+
+  <!-- ========================= CTA PRÓXIMA ========================= -->
+
+  <section class="sec">
+    <div class="cta-card">
+      <h3>Próximo passo: <em>A10 — Segurança operacional</em></h3>
+      <p>
+        8 minutos · modular. Agora ele trabalha sozinho — e isso é exatamente onde a maioria dos
+        problemas reais aparece. A10 cobre os <strong>5 jeitos do seu agente quebrar você de
+        verdade</strong> e como blindar cada um: secrets, APIs externas, canais públicos, prompt
+        injection, recovery. Não é teoria — é checklist defensivo pra agente autônomo.
+      </p>
+      <a href="aula-10-seguranca.html" class="cta-button">→ Ir pra Aula 10</a>
+    </div>
+  </section>
+
+  <!-- ========================= FOOTER ========================= -->
+
+  <footer class="aula-footer">
+
+    <div class="aula-footer-block">
+      <h4>Travou? Tá no grupo do curso</h4>
+      <p>
+        Comunidade Telegram do curso —
+        <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">t.me/cursoopenclaw</a>
+        — suporte 24/7 (openclawzinho bot + Bruno e equipe presente).
+        Dúvida sobre essa aula, problemas de setup, ou quer compartilhar como aplicou
+        no seu negócio: bora trocar lá.
+      </p>
+    </div>
+
+    <div class="aula-footer-block">
+      <h4>Próximo nível: Pixel AI Hub</h4>
+      <p>
+        Aplicar agente pra empresa toda — equipe, governance, escala?
+        <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=material&utm_campaign=v1" target="_blank" rel="noopener">Pixel AI Hub</a>:
+        segundo cérebro corporativo, comunidade de empreendedores, +50 skills enterprise,
+        encontros mensais ao vivo. Vagas mensais limitadas.
+      </p>
+    </div>
+
+    <div class="aula-footer-credit">
+      Mini-Curso OpenClaw 2026 · Material complementar à gravação · Atualizações conforme kit evolui<br>
+      <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=footer-credit" target="_blank" rel="noopener">Bruno Okamoto · Pixel Educação</a>
+    </div>
+
+  </footer>
+
+</div>
+
+</body>
+</html>

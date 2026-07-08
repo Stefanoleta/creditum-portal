@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A2 — Cockpit do terminal · Mini-Curso OpenClaw</title>
+<meta name="description" content="Material complementar da Aula 2 — terminal como cockpit do agente: 10 comandos essenciais, autopilot, health check semanal automático, plano de restore. Mata o medo de quebrar.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Fraunces:ital,wght@1,400;1,500;1,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="_shared/tokens.css">
+</head>
+
+<body>
+
+<div class="wrap">
+
+  <!-- ========================= HEADER ========================= -->
+
+  <header class="aula-header">
+    <div class="aula-header-brand">Mini-Curso <span class="accent">OpenClaw</span></div>
+    <div class="aula-header-meta">Aula 02 · Cockpit</div>
+  </header>
+
+  <!-- ========================= HERO ========================= -->
+
+  <section class="hero">
+    <div class="hero-meta">
+      <span class="hero-meta-item">⏱ <strong>14 min</strong></span>
+      <span class="hero-meta-item">📚 <strong>Sequencial</strong></span>
+      <span class="hero-meta-item">🎯 <strong>Mata o medo</strong></span>
+    </div>
+
+    <h1>
+      Terminal é
+      <em>cockpit, não Linux.</em>
+    </h1>
+
+    <p class="hero-sub">
+      Em <em>~14min</em> você vira piloto do próprio agente. 10 comandos pra dominar · autopilot
+      pra ele resolver sozinho · health check semanal automático no Telegram · plano de restore se
+      algo quebrar. Sai daqui sabendo que <em>tem rede de segurança</em> — tudo o que vier depois é
+      evolução, não risco.
+    </p>
+  </section>
+
+  <!-- ========================= A-HA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">A-ha desta aula</span>
+    <div class="aha-card">
+      <span class="label">A-ha entregue</span>
+      <p class="quote">"Sei consertar se quebrar + tenho rede de segurança + agente avisa antes que algo dê errado."</p>
+    </div>
+  </section>
+
+  <!-- ========================= PRE-FLIGHT ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Pre-flight check</span>
+    <h2>Antes de abrir o <em>terminal.</em></h2>
+
+    <p>
+      A2 assume que você terminou a A1 inteira — agente respondendo, OAuth ativo, Telegram DM
+      funcionando. Sem isso, vários comandos da aula vão dar erro.
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>A1 concluída</strong> — agente responde, OAuth ChatGPT ativo, Telegram DM linkado</p>
+      <p><span class="check">✓</span> <strong>Painel Hostinger aberto</strong> — você vai precisar voltar nele algumas vezes</p>
+      <p><span class="check">✓</span> <strong>Celular do lado</strong> com Telegram aberto pra ver health check chegar</p>
+      <p><span class="check">✓</span> <strong>Reserva 20-25 min</strong> sem interrupção (aula 14min + você executa em paralelo)</p>
+      <p><span class="check">✓</span> <strong>Cheatsheet completo do kit:</strong> <a href="../INDICE.md">comandos-completos-openclaw.md</a> — sintaxe, flags e exemplos dos 10 comandos cobertos aqui</p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Reframe importante:</strong> esse terminal NÃO é Linux profundo. É <code>lshell</code>
+        (limited shell) que só aceita comandos <code>openclaw *</code>. Você não tem como quebrar o
+        servidor com comando errado — o sistema bloqueia tudo que não é OpenClaw. Pensa nele como
+        controle remoto da TV: 10 botões úteis, o resto não existe.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= ESTRUTURA DA AULA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Estrutura da aula em vídeo</span>
+    <h2>O que você vai dominar em <em>9 blocos.</em></h2>
+
+    <p>
+      A2 é a aula que <strong>mata o medo</strong>. Sai daqui sabendo que tem cockpit, autopilot,
+      monitoramento e plano B. Toda lógica é pesada nos blocos 4 (10 comandos) e 7 (cron de saúde
+      semanal) — esses 2 são o coração.
+    </p>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-time">⏱ 1 min</div>
+        <div class="card-title">Bloco 1 — Abertura amarrando A1</div>
+        <p class="card-desc">
+          Recap: na A1 você entrou no terminal só pra rodar 1 comando OAuth. Agora vai morar nele
+          15min e descobrir que é o <strong>cockpit do agente</strong>. Não é Linux, não é VPS — é
+          uma janela do navegador.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 2 min</div>
+        <div class="card-title">Bloco 2 — Tour painel Hostinger</div>
+        <p class="card-desc">
+          Onde está o OpenClaw · onde fica o terminal Managed · onde fica snapshot/backups (Bloco
+          7+8) · onde fica o suporte (chat com agente Hostinger no painel · última saída).
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1 min</div>
+        <div class="card-title">Bloco 3 — Terminal = cockpit</div>
+        <p class="card-desc">
+          Reframe: CLI ≠ Linux profundo. É só o <em>jeito mais direto de falar com seu agente</em>.
+          Não precisa decorar — só os 10 comandos do cheatsheet (Tier 1+2). O resto vai pro kit.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 5 min</div>
+        <div class="card-title">Bloco 4 — 10 comandos com tiering</div>
+        <p class="card-desc">
+          <strong>Tier 1</strong> (5 essenciais com demo na tela): status · doctor · doctor --fix ·
+          agent --message · exec-policy preset yolo. <strong>Tier 2</strong> (5 úteis com menção +
+          cheatsheet): devices · security audit · config · restart.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 30 s</div>
+        <div class="card-title">Bloco 5 — Autopilot framing</div>
+        <p class="card-desc">
+          <code>exec-policy preset yolo</code> libera autonomia operacional dentro do Docker. Agente
+          não vira root do servidor — só mexe em workspace, config, skills, credenciais. Se preferir
+          conservador, pula esse passo. Liga depois.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1 min</div>
+        <div class="card-title">Bloco 6 — Tranquilidade Managed</div>
+        <p class="card-desc">
+          Hostinger só serve versões estáveis do OpenClaw. Eles testam antes. Você não precisa se
+          preocupar com update quebrando tudo do nada. <strong>Não rode <code>openclaw update</code>
+          sem motivo</strong> — bypassa o filtro de estáveis.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 2 min</div>
+        <div class="card-title">Bloco 7 — Cron de health check ⭐</div>
+        <p class="card-desc">
+          <strong>Coração da aula.</strong> Prompt único pro agente criar cron semanal (segunda
+          09:00 BRT) que roda <code>openclaw doctor</code> e te avisa pelo Telegram (tópico
+          Operação) se algo está errado. <em>Você não vai checar saúde — ele faz isso por você.</em>
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1 min</div>
+        <div class="card-title">Bloco 8 — Restore + suporte</div>
+        <p class="card-desc">
+          Se algo quebrar: painel Hostinger → restaura snapshot. Última saída: chat com agente
+          Hostinger no painel. Limite Managed: 1 OpenClaw por plano — quer outro? Upgrade ou bônus
+          VPS (R1-R4).
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1 min</div>
+        <div class="card-title">Bloco 9 — Recap + amarração A3</div>
+        <p class="card-desc">
+          Você tem: terminal dominado · Tier 1 com demo · autopilot ativo (ou conservador) · health
+          check semanal · plano de restore. <strong>Próxima (A3):</strong> meta-aula do curso —
+          joga o zip do Starter Kit pro agente, ele lê os prompts e te avisa no Telegram quando
+          termina cada item da checklist. <em>A-ha #0 — o mais forte do produto inteiro.</em>
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ========================= TIER 1 COMANDOS ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Bloco 4 · Tier 1 (essenciais)</span>
+    <h2>Os 5 comandos que <em>seu agente já usa.</em></h2>
+
+    <p>
+      <strong>Inversão importante:</strong> esses comandos não são o seu trabalho do dia a dia.
+      Quem roda eles é o seu agente — ele faz <code>openclaw doctor</code> toda segunda 9h via
+      cron de health check (Bloco 7), aplica fixes seguros sozinho, e te avisa pelo Telegram só
+      quando precisa de você. <strong>Você só conhece esses 5 pra 2 momentos:</strong> (1)
+      curiosidade — ver o que ele tá fazendo · (2) emergência — quando ele tá com problema e
+      você precisa diagnosticar manual. Decorar não é necessário — cheatsheet completo tá no Kit.
+    </p>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Default operacional:</strong> agente cuida do próprio ambiente. Cron semanal +
+        auto-fix + alerta no Telegram = você só age quando ele te chama. Os comandos abaixo são
+        fallback manual — não rotina.
+      </p>
+    </div>
+
+    <h3>1. <code>openclaw status</code> — vê se tá tudo OK</h3>
+
+    <p>
+      Comando padrão de "tá tudo bem aí?". Mostra estado dos módulos críticos (gateway, modelos,
+      canais, skills) num resumo de 1 tela. É o primeiro comando que você roda quando algo parece
+      estranho.
+    </p>
+
+    <div class="terminal-card">
+      <div class="terminal-card-header">
+        <span class="terminal-card-label">Terminal Managed</span>
+        <span class="terminal-card-where">cola e dá Enter</span>
+      </div>
+      <div class="terminal-card-body"><span class="prompt-symbol">$</span>openclaw status
+
+<span class="comment"># esperado: gateway OK, model provider OK, channels OK</span>
+<span class="comment"># se algo aparecer com [WARN] ou [ERROR], roda doctor em seguida</span></div>
+      <div class="terminal-card-tip">
+        ▶ Usa quando: sentiu algo travado, agente não respondeu, ou simplesmente quer confirmação
+        rápida que tudo está saudável antes de operar.
+      </div>
+    </div>
+
+    <h3>2. <code>openclaw doctor</code> — diagnóstico</h3>
+
+    <p>
+      Vai mais fundo que status. Lista tudo que está quebrado ou meio quebrado, com explicação do
+      problema. Não conserta nada — só diagnostica. É o segundo comando da sequência <em>status →
+      doctor → doctor --fix</em>.
+    </p>
+
+    <div class="terminal-card">
+      <div class="terminal-card-header">
+        <span class="terminal-card-label">Terminal Managed</span>
+        <span class="terminal-card-where">cola e dá Enter</span>
+      </div>
+      <div class="terminal-card-body"><span class="prompt-symbol">$</span>openclaw doctor
+
+<span class="comment"># lista issues categorizadas: critical / warning / info</span>
+<span class="comment"># cada item mostra: o que tá quebrado + sugestão de fix</span></div>
+      <div class="terminal-card-tip">
+        ▶ Resultado típico: lista de issues com sugestão pra cada um. Lê com calma antes de pular
+        pro <code>--fix</code>.
+      </div>
+    </div>
+
+    <h3>3. <code>openclaw doctor --fix</code> — auto-conserta</h3>
+
+    <p>
+      Aplica os fixes seguros automaticamente. Faz <strong>backup do config antes</strong> — se
+      algo der errado, dá pra reverter. Não tenta consertar coisas sensíveis sem aviso (token
+      revogado, credencial expirada). Pra isso, agente humano (você) decide.
+    </p>
+
+    <div class="terminal-card">
+      <div class="terminal-card-header">
+        <span class="terminal-card-label">Terminal Managed</span>
+        <span class="terminal-card-where">cola e dá Enter</span>
+      </div>
+      <div class="terminal-card-body"><span class="prompt-symbol">$</span>openclaw doctor --fix
+
+<span class="comment"># aplica remediações seguras automaticamente</span>
+<span class="comment"># mostra: o que foi corrigido + o que precisa de ação manual</span>
+<span class="comment"># config anterior salvo em backup automático antes do fix</span></div>
+      <div class="terminal-card-tip">
+        ▶ Reverter: o backup do config fica salvo automaticamente. Se algo virou pior depois do
+        fix, manda pro agente: <em>"reverte o último doctor --fix"</em> e ele restaura.
+      </div>
+    </div>
+
+    <h3>4. <code>openclaw agent --message "..."</code> — fala com agente direto</h3>
+
+    <p>
+      Manda mensagem pro agente sem precisar abrir Gateway/Telegram. Útil em scripts, debug, ou
+      quando você quer testar uma resposta direto do terminal. Saída sai inline no próprio
+      terminal.
+    </p>
+
+    <div class="terminal-card">
+      <div class="terminal-card-header">
+        <span class="terminal-card-label">Terminal Managed</span>
+        <span class="terminal-card-where">cola e dá Enter</span>
+      </div>
+      <div class="terminal-card-body"><span class="prompt-symbol">$</span>openclaw agent --message "tá tudo bem aí? roda doctor e me explica o resultado"
+
+<span class="comment"># agente recebe a mensagem, executa doctor internamente,</span>
+<span class="comment"># e responde no terminal com o diagnóstico em português</span></div>
+      <div class="terminal-card-tip">
+        ▶ Caso de uso favorito: pedir pro agente diagnosticar problema sem você ler raw output.
+        <em>"explica em português o que tá errado e o que devo fazer"</em>.
+      </div>
+    </div>
+
+    <h3>5. <code>openclaw exec-policy preset yolo</code> — autopilot</h3>
+
+    <p>
+      Libera o agente pra executar qualquer comando dentro do Docker dele. <strong>NÃO vira root do
+      servidor</strong> — só mexe em workspace, config, skills, credenciais. Como tudo está
+      containerizado, risco real é baixo. Trade-off: mais autonomia × menos controle granular.
+    </p>
+
+    <div class="terminal-card">
+      <div class="terminal-card-header">
+        <span class="terminal-card-label">Terminal Managed</span>
+        <span class="terminal-card-where">cola e dá Enter (opcional)</span>
+      </div>
+      <div class="terminal-card-body"><span class="prompt-symbol">$</span>openclaw exec-policy preset yolo
+
+<span class="comment"># libera autonomia operacional do agente dentro do container</span>
+<span class="comment"># reverter: openclaw exec-policy preset conservative</span></div>
+      <div class="terminal-card-tip">
+        ▶ Recomendação: liga se você quer agente resolvendo coisas sozinho (criar arquivo, instalar
+        skill, ajustar cron). Pula se prefere aprovar caso a caso. Pode ligar depois — não é
+        decisão definitiva.
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Autopilot framing</strong> (do Bloco 5 da aula): <em>"yolo libera o agente pra
+        executar qualquer comando dentro do Docker. Ele NÃO vira root do servidor — só mexe em
+        workspace, config, skills e credenciais. Como tudo está containerizado, risco real é
+        baixo. Se preferir começar conservador, pula esse passo. Liga depois."</em>
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= TIER 2 ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Bloco 4 · Tier 2 (úteis)</span>
+    <h2>Os 5 comandos que <em>aparecem na aula com menção rápida.</em></h2>
+
+    <p>
+      Esses 5 ficam na aula só com 1 frase de explicação cada — a sintaxe completa, flags e
+      exemplos avançados estão no <a href="../INDICE.md">cheatsheet do kit</a>.
+      Reconhece o nome, sabe quando vai precisar.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Comando</th>
+          <th>Pra que serve</th>
+          <th>Quando usa</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>openclaw devices list</code></td>
+          <td>Lista mac/mobile/browser conectados ao seu agente</td>
+          <td>Auditar quem fala com agente</td>
+        </tr>
+        <tr>
+          <td><code>openclaw devices approve &lt;id&gt;</code></td>
+          <td>Aprova device novo (ex: novo celular)</td>
+          <td>Adicionar dispositivo à allowlist</td>
+        </tr>
+        <tr>
+          <td><code>openclaw security audit</code></td>
+          <td>Análise de segurança · permissões, tokens, exposição</td>
+          <td>Mensal · ou antes de conectar coisa nova</td>
+        </tr>
+        <tr>
+          <td><code>openclaw security audit --fix</code></td>
+          <td>Aplica remediações seguras de segurança</td>
+          <td>Após audit identificar issues conhecidas</td>
+        </tr>
+        <tr>
+          <td><code>openclaw config file</code></td>
+          <td>Mostra o caminho do arquivo de config atual</td>
+          <td>Quando agente pede pra editar config manualmente</td>
+        </tr>
+        <tr>
+          <td><code>openclaw config get &lt;key&gt;</code></td>
+          <td>Lê valor de uma chave específica do config</td>
+          <td>Debug · validar configuração</td>
+        </tr>
+        <tr>
+          <td><code>openclaw config set &lt;key&gt; &lt;val&gt;</code></td>
+          <td>Define valor de uma chave do config</td>
+          <td>Mudança pontual sem editar arquivo</td>
+        </tr>
+        <tr>
+          <td><code>openclaw restart</code></td>
+          <td>Reinicia gateway · aplica mudanças pendentes</td>
+          <td>Após mudança de config que pede reload</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Princípio do curso:</strong> <em>"seu agente lê documentação"</em>. Se travar em
+        algum desses, manda pro agente <em>"explica como funciona <code>openclaw security
+        audit</code> e me dá um exemplo"</em> — ele consulta a doc oficial e te ensina.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= MANAGED TRANQUILIDADE ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Bloco 6 · Tranquilidade Managed</span>
+    <h2>Por que você <em>não precisa se preocupar com update.</em></h2>
+
+    <p>
+      Aluno PME geralmente chega aqui com medo de "atualizar e quebrar tudo". No Managed, esse
+      medo é desnecessário — Hostinger só serve versões estáveis do OpenClaw. Eles testam antes.
+      Quando uma atualização chega no seu painel, é porque já passou pelo filtro deles.
+    </p>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>NÃO rode <code>openclaw update</code> sem motivo.</strong> O comando funciona, mas
+        <em>bypassa o filtro de estáveis</em> da Hostinger. Você pode pegar uma versão broken que
+        ainda não foi promovida. Default é estável — deixa quieto.
+      </p>
+    </div>
+
+    <h3>Se algo travar pós-update</h3>
+
+    <p>
+      Pode acontecer (raro, mas acontece) que você ou a Hostinger empurrem nova versão e algo
+      quebre. Rollback é via CLI: <code>openclaw update --tag &lt;versão-anterior&gt;</code>. O
+      cheatsheet <a href="../INDICE.md">comandos-completos-openclaw.md</a>
+      cobre o fluxo completo de rollback.
+    </p>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Boa notícia bônus:</strong> Hostinger está lançando atualização do painel Managed
+        com <strong>snapshot/backup nativo</strong> — restore em 1 clique pelo painel. Quando essa
+        feature ativar, esse material vai ser atualizado pra cobrir o fluxo. Por enquanto,
+        snapshot fica via comando + skill <code>backup-workspace-github</code> (próximo passo do
+        curso, ativada via Item Integrações da CHECKLIST do Kit).
+      </p>
+    </div>
+
+    <div class="callout callout-success">
+      <p>
+        <strong>Princípio que entra aqui:</strong> Managed te protege do que dá pra automatizar
+        (testes de versão, isolamento Docker, rede), mas você fica responsável pelo que <em>só
+        humano decide</em> — quando ligar autopilot, quando fazer snapshot manual, quando aprovar
+        device novo. Boas notícias por enquanto.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= HEALTH CHECK CRON ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Bloco 7 · Coração da aula ⭐</span>
+    <h2>Cron semanal de <em>health check.</em></h2>
+
+    <p>
+      Esse é o entregável mais forte da A2. Em vez de você lembrar de checar saúde do agente,
+      <strong>ele checa sozinho toda segunda às 09:00 BRT</strong> e te avisa pelo Telegram. Se
+      tudo OK, manda 1 linha. Se tiver issue, detalha e sugere fix. Você só age quando ele te chama.
+    </p>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Princípio reforçado:</strong> <em>"Seu agente cuida do próprio ambiente."</em>
+        Versão Managed: monitora + avisa, você decide quando agir. Versão VPS (R1-R4): monitora +
+        aplica fixes seguros automaticamente. Aqui no curso MAIN, ficamos no Managed-first.
+      </p>
+    </div>
+
+    <h3>Prompt pro agente criar o cron</h3>
+
+    <p>
+      Cola esse prompt no Telegram (ou Gateway, mas Telegram é melhor pra ver resultado depois).
+      O agente lê, entende, propõe configuração, pede confirmação, e cria o cron. Não precisa
+      mexer em arquivo nenhum.
+    </p>
+
+    <div class="prompt-card">
+      <div class="prompt-card-header">
+        <span class="prompt-card-label">Prompt #1 · cron de health check semanal</span>
+        <span class="prompt-card-where">cola no Telegram (ou Gateway)</span>
+      </div>
+      <div class="prompt-card-body">Cria um cron semanal (toda segunda 09:00 BRT) que:
+
+1. Roda `openclaw doctor` e me manda o resultado pelo Telegram
+   (tópico Operação)
+2. Se tudo OK: 1 linha "tudo certo, agente saudável"
+3. Se tiver issue: detalha o que tá errado e sugere fix
+4. Lembra: "se passou de 30 dias sem backup do workspace pro GitHub,
+   roda skill backup-workspace-github" (snapshot Hostinger nativo no
+   painel chega numa atualização futura — quando vier, atualizo este
+   prompt pra mencionar restore em 1 clique pelo painel)
+
+NUNCA aplicar fix automaticamente em coisa sensível — só me avisar.
+Confirma comigo antes de criar o cron.</div>
+      <div class="prompt-card-tip">
+        💡 Resultado: agente confirma o plano, mostra como vai ficar a mensagem de exemplo, e cria
+        o cron. Próxima segunda 09:00 BRT você recebe o primeiro health check no Telegram.
+      </div>
+    </div>
+
+    <h3>Por que o tópico Operação</h3>
+
+    <p>
+      Adiantei pra você: na A3 (próxima aula) você vai aprender a estruturar Telegram com
+      <strong>4 tópicos por tema</strong> — Conteúdo, Operação, Aprendizado, Financeiro. Health
+      check é assunto de <em>Operação</em>. Esse cron já tá pronto pra postar no tópico certo
+      quando você criar — ou no DM, se preferir começar simples e migrar depois.
+    </p>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Aluno que ainda não viu A3:</strong> tudo bem. O agente vai postar no DM padrão
+        do Telegram por enquanto. Quando você criar o supergrupo + tópicos na A3, é só pedir
+        <em>"move o cron de health check pra postar no tópico Operação"</em> que ele ajusta sem
+        recriar nada.
+      </p>
+    </div>
+
+    <div class="callout callout-success">
+      <p>
+        <strong>Vitória visível:</strong> próxima segunda 09:00 BRT, mensagem do agente chega
+        no seu Telegram com o status. Você não precisou lembrar. Não precisou abrir o painel. Não
+        precisou rodar comando. <em>Esse</em> é o tipo de relacionamento que o curso constrói com
+        seu agente.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= RESTORE + SUPORTE ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Bloco 8 · Plano B</span>
+    <h2>Se algo <em>quebrar.</em></h2>
+
+    <p>
+      Em ordem do mais comum pro mais raro. Pra cada cenário, ação clara — sem você ter que
+      pesquisar.
+    </p>
+
+    <div class="item-icon">
+      <div class="item-icon-box">1</div>
+      <div class="item-icon-content">
+        <h3>Algo soa estranho · agente lento ou meio confuso</h3>
+        <p>
+          Roda <code>openclaw status</code> · se aparecer warning, vai pra <code>openclaw
+          doctor</code> · aplica <code>openclaw doctor --fix</code> se as issues forem seguras
+          (auto-corrigíveis). Resolve 80% dos casos sem você precisar de mais nada.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">2</div>
+      <div class="item-icon-content">
+        <h3>Doctor não resolve · agente não responde</h3>
+        <p>
+          Roda <code>openclaw restart</code> · reinicia gateway. 99% dos travamentos somem aqui.
+          Se ainda assim não voltar, vai pro próximo passo.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">3</div>
+      <div class="item-icon-content">
+        <h3>Restart não resolve · suspeita que é problema de versão</h3>
+        <p>
+          Cheatsheet do kit cobre rollback: <code>openclaw update --tag &lt;versão-anterior&gt;</code>.
+          Volta pra última versão estável que você sabia que funcionava. Anota qual versão você
+          tava antes em algum lugar — vale a pena.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">4</div>
+      <div class="item-icon-content">
+        <h3>Restore via snapshot</h3>
+        <p>
+          Painel Hostinger → seu OpenClaw → área de backups/snapshots → restore. Volta pro estado
+          anterior. <strong>Snapshot nativo do painel chega numa atualização futura</strong> —
+          atualmente snapshots ficam via comando + skill <code>backup-workspace-github</code> do
+          kit.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">5</div>
+      <div class="item-icon-content">
+        <h3>Última saída · suporte Hostinger</h3>
+        <p>
+          Painel Hostinger tem chat com agente da Hostinger. Resposta &lt;5min. É a saída pra
+          quando algo do <em>servidor</em> quebrou (não do OpenClaw). Cobre 100% dos casos que
+          você não consegue resolver no terminal.
+        </p>
+      </div>
+    </div>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>Limite Managed:</strong> 1 OpenClaw por plano. Quer rodar um segundo agente
+        independente (ex: agente de cliente diferente, ou separar pessoal × trabalho)? Caminhos:
+        upgrade pro plano superior da Hostinger OU bônus VPS standalone (R1-R4 do curso). MAIN
+        cobre 1 OpenClaw multi-agente — vários papéis no mesmo workspace.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= TROUBLESHOOTING ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Travou? Antes de pedir ajuda</span>
+    <h2>Top <em>problemas comuns da A2.</em></h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Sintoma</th>
+          <th>Causa provável</th>
+          <th>Ação</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>openclaw status</code> mostra channels OFFLINE</td>
+          <td>Token expirado ou outro gateway disputando bot</td>
+          <td><code>openclaw doctor</code> · refazer <code>channels add</code> se necessário</td>
+        </tr>
+        <tr>
+          <td><code>doctor --fix</code> reportou "ações manuais necessárias"</td>
+          <td>Issues sensíveis (token revogado, credencial expirada)</td>
+          <td>Lê o que ele listou · age item por item · pergunta pro agente se não souber</td>
+        </tr>
+        <tr>
+          <td>Cron de health check não postou na segunda</td>
+          <td>Cron criou mas timezone errado · ou Telegram não ligado</td>
+          <td><code>openclaw agent --message "lista os crons ativos"</code> · valida BRT</td>
+        </tr>
+        <tr>
+          <td>Telegram health check chegou mas tá em inglês raw</td>
+          <td>Prompt do cron não pediu pra explicar em português</td>
+          <td>Pede pro agente reescrever o prompt do cron mencionando "em português simples"</td>
+        </tr>
+        <tr>
+          <td><code>exec-policy preset yolo</code> reverteu sozinho</td>
+          <td>Default Managed reaplicou conservative em update</td>
+          <td>Reaplica · fala pro agente lembrar de revalidar pós-update</td>
+        </tr>
+        <tr>
+          <td><code>restart</code> trava em "starting..."</td>
+          <td>Container Docker no Managed travou</td>
+          <td>Suporte Hostinger via chat do painel (cenário raro)</td>
+        </tr>
+        <tr>
+          <td><code>lshell: forbidden character</code></td>
+          <td>Tentou comando bash arbitrário (com <code>|</code>, <code>&gt;</code>, <code>;</code>, etc)</td>
+          <td>Terminal Managed só aceita <code>openclaw *</code> — joga a tarefa pro agente via mensagem</td>
+        </tr>
+        <tr>
+          <td>Doctor reporta "credencial OpenAI inválida"</td>
+          <td>API key da Fase A foi rotacionada na OpenAI sem atualizar painel</td>
+          <td>Gera nova key em platform.openai.com · cola no painel OpenClaw</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Cheatsheet completo:</strong> <a href="../INDICE.md">comandos-completos-openclaw.md</a> —
+        sintaxe e flags dos 10 comandos · exemplos avançados · troubleshooting profundo.
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Não conseguiu resolver com a tabela acima?</strong> Joga screenshot/áudio/vídeo
+        no <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">grupo Telegram do
+        curso</a>. openclawzinho responde em &lt;30 segundos · humanos em &lt;5 minutos.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= CTA PRÓXIMA ========================= -->
+
+  <section class="sec">
+    <div class="cta-card">
+      <h3>Próximo passo: <em>A3 — Como o Starter Kit funciona</em></h3>
+      <p>
+        8 minutos · sequencial · <strong>fim das 4 aulas obrigatórias</strong>. Você dominou
+        Hostinger, OAuth, terminal e cockpit — agora bora ver a meta-aula: <em>joga o zip pro
+        agente, ele lê os prompts e te avisa no Telegram quando termina cada item da checklist</em>.
+        A-ha #0 — o mais forte do produto inteiro. Daqui em diante o curso é modular: você pula
+        pra qualquer aula.
+      </p>
+      <a href="aula-03-starter-kit.html" class="cta-button">→ Ir pra Aula 3</a>
+    </div>
+  </section>
+
+  <!-- ========================= FOOTER ========================= -->
+
+  <footer class="aula-footer">
+
+    <div class="aula-footer-block">
+      <h4>Travou? Tá no grupo do curso</h4>
+      <p>
+        Comunidade Telegram do curso —
+        <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">t.me/cursoopenclaw</a>
+        — suporte 24/7 (openclawzinho bot + Bruno e equipe presente).
+        Dúvida sobre essa aula, problemas de setup, ou quer compartilhar como aplicou
+        no seu negócio: bora trocar lá.
+      </p>
+    </div>
+
+    <div class="aula-footer-block">
+      <h4>Próximo nível: Pixel AI Hub</h4>
+      <p>
+        Aplicar agente pra empresa toda — equipe, governance, escala?
+        <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=material&utm_campaign=v1" target="_blank" rel="noopener">Pixel AI Hub</a>:
+        segundo cérebro corporativo, comunidade de empreendedores, +50 skills enterprise,
+        encontros mensais ao vivo. Vagas mensais limitadas.
+      </p>
+    </div>
+
+    <div class="aula-footer-credit">
+      Mini-Curso OpenClaw 2026 · Material complementar à gravação · Atualizações conforme kit evolui<br>
+      <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=footer-credit" target="_blank" rel="noopener">Bruno Okamoto · Pixel Educação</a>
+    </div>
+
+  </footer>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,204 @@
+{
+  "skill": "wizard-agente",
+  "version": "1.0",
+  "description": "4 cenários cobrindo: criação do zero, detecção de pré-existente, parcial, comando exemplo durante",
+  "scenarios": [
+    {
+      "id": "criacao-do-zero",
+      "name": "Caminho feliz — sem nada pré-existente",
+      "description": "Aluno chega ao passo 1 com workspace limpo. Faz entrevista, cria os 3 arquivos.",
+      "setup": {
+        "workspace_state": "sem IDENTITY, SOUL, AGENTS",
+        "memory_flags": {
+          "kit_intro_done": true,
+          "whisper_configured": true,
+          "onboarding_current_step": 1
+        }
+      },
+      "interaction_flow": [
+        {
+          "user": "[despachado pela onboarding-checklist]",
+          "expected_agent_behavior": [
+            "executa Princípio 11 — checa IDENTITY, SOUL, AGENTS",
+            "encontra todos ausentes",
+            "narra promessa do passo (4min, 3 arquivos, SOUL stub)",
+            "começa entrevista pela pergunta 1 (nome)"
+          ]
+        },
+        {
+          "user": "Atlas",
+          "expected_agent_behavior": [
+            "salva nome_agente=Atlas",
+            "vai pra pergunta 2 (gênero)"
+          ]
+        },
+        {
+          "user": "neutro",
+          "expected_agent_behavior": [
+            "salva genero=neutro",
+            "vai pra pergunta 3 (tom)"
+          ]
+        },
+        {
+          "user": "casual + direto + brasileiro",
+          "expected_agent_behavior": [
+            "salva tom",
+            "vai pra pergunta 4 (anti-pattern)"
+          ]
+        },
+        {
+          "user": "nunca usa linguagem de coach",
+          "expected_agent_behavior": [
+            "mostra resumo de tudo que vai criar",
+            "pede confirmação antes de criar arquivos"
+          ],
+          "must_not": [
+            "criar arquivos sem mostrar resumo",
+            "criar arquivos sem aluno confirmar"
+          ]
+        },
+        {
+          "user": "vai",
+          "expected_agent_behavior": [
+            "checa Princípio 1 (backup) — não tem nada existente, pula backup",
+            "cria IDENTITY.md, SOUL.md (stub), AGENTS.md a partir dos templates",
+            "substitui placeholders ({NOME_AGENTE}=Atlas, etc)",
+            "confirma criação com tamanhos",
+            "roda pergunta-âncora"
+          ]
+        },
+        {
+          "user": "automático",
+          "expected_agent_behavior": [
+            "valida resposta correta",
+            "menciona Aula 5 + grupo",
+            "marca agente_configured=true",
+            "atualiza onboarding_current_step=2",
+            "devolve controle pra onboarding-checklist"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "IDENTITY, SOUL, AGENTS criados com placeholders substituídos",
+        "agente_configured=true em MEMORY.md",
+        "decisão (nome, gênero, tom, anti-pattern) registrada",
+        "onboarding_current_step=2",
+        "Aula 5 mencionada"
+      ]
+    },
+    {
+      "id": "ja-configurado-detecta-e-pula",
+      "name": "Aluno já tem os 3 arquivos preenchidos",
+      "description": "Cenário comum quando aluno seguiu Aula 5 antes do kit, ou rodou wizard antes em sessão anterior.",
+      "setup": {
+        "workspace_state": "IDENTITY+SOUL+AGENTS preenchidos",
+        "memory_flags": {}
+      },
+      "interaction_flow": [
+        {
+          "user": "[despachado pela onboarding-checklist]",
+          "expected_agent_behavior": [
+            "lê IDENTITY.md, SOUL.md, AGENTS.md",
+            "valida que estão preenchidos (não placeholder)",
+            "narra '✓ Detectei seu agente já configurado: nome={extraído}, etc'",
+            "NÃO faz entrevista",
+            "NÃO sobrescreve nada",
+            "vai direto pra pergunta-âncora"
+          ],
+          "must_not": [
+            "sobrescrever arquivos existentes",
+            "fazer entrevista",
+            "duplicar info no MEMORY"
+          ]
+        },
+        {
+          "user": "automático",
+          "expected_agent_behavior": [
+            "valida, marca agente_configured=true",
+            "decisões já existem no MEMORY (preserva, não duplica)"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "wizard rodou em <30s",
+        "0 arquivos modificados",
+        "agente_configured=true sem fazer entrevista"
+      ]
+    },
+    {
+      "id": "parcial-tem-identity-falta-resto",
+      "name": "Workspace parcial — IDENTITY existe mas SOUL/AGENTS não",
+      "description": "Aluno criou IDENTITY manual mas parou. Wizard completa o que falta.",
+      "setup": {
+        "workspace_state": "IDENTITY existe e preenchido, SOUL e AGENTS ausentes",
+        "memory_flags": {}
+      },
+      "interaction_flow": [
+        {
+          "user": "[despachado pela onboarding-checklist]",
+          "expected_agent_behavior": [
+            "detecção: IDENTITY ✓, SOUL ⏳, AGENTS ⏳",
+            "lê nome, gênero etc do IDENTITY existente",
+            "narra estado parcial: '✓ IDENTITY pronto, vou criar SOUL e AGENTS sem mexer no IDENTITY'",
+            "pula perguntas que já tem resposta no IDENTITY",
+            "pergunta só tom + anti-pattern (pra SOUL)"
+          ],
+          "must_not": [
+            "modificar IDENTITY existente",
+            "perguntar nome/gênero (já tem)"
+          ]
+        },
+        {
+          "user": "casual / nunca abre com Ótima pergunta",
+          "expected_agent_behavior": [
+            "cria SOUL.md (stub) e AGENTS.md",
+            "preserva IDENTITY",
+            "pergunta-âncora",
+            "marca configurado"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "IDENTITY.md NÃO foi modificado",
+        "SOUL e AGENTS criados",
+        "agente_configured=true"
+      ]
+    },
+    {
+      "id": "comando-exemplo-meio-entrevista",
+      "name": "Aluno trava na pergunta de tom e pede exemplo",
+      "description": "Testa que comando exemplo carrega trecho da Amora e volta pra pergunta sem perder contexto.",
+      "setup": {
+        "workspace_state": "limpo",
+        "memory_flags": {}
+      },
+      "interaction_flow": [
+        {
+          "user": "[entrevista no momento da pergunta sobre tom]",
+          "expected_agent_behavior": ["pergunta sobre tom"]
+        },
+        {
+          "user": "exemplo",
+          "expected_agent_behavior": [
+            "carrega seção Tom de exemplos/SOUL-amora.md",
+            "mostra com header 'esse é o jeito que a Amora fala'",
+            "lembra que não é pra copiar",
+            "volta pra pergunta original ('agora que viu, me manda como o {nome} fala')"
+          ]
+        },
+        {
+          "user": "casual mas não corporativo, fala como amigo de boteco",
+          "expected_agent_behavior": [
+            "salva tom",
+            "vai pra próxima pergunta normalmente"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "exemplo foi mostrado",
+        "fluxo voltou pra pergunta sem reset",
+        "tom_agente foi salvo no final"
+      ]
+    }
+  ]
+}

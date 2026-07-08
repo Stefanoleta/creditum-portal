@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vitrine — 3 agentes do Bruno · Mini-Curso OpenClaw</title>
+<meta name="description" content="Aula de abertura — 3 cases reais que você vai poder construir: Amora (Chief of Staff pessoal) · openclawzinho (suporte da comunidade) · Léo (gestor de equipe). Custo total ~R$ 500/mês substitui ~R$ 4k em assistente humana.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Fraunces:ital,wght@1,400;1,500;1,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="_shared/tokens.css">
+</head>
+
+<body>
+
+<div class="wrap">
+
+  <!-- ========================= HEADER ========================= -->
+
+  <header class="aula-header">
+    <div class="aula-header-brand">Mini-Curso <span class="accent">OpenClaw</span></div>
+    <div class="aula-header-meta">Vitrine · Abertura</div>
+  </header>
+
+  <!-- ========================= HERO ========================= -->
+
+  <section class="hero">
+    <div class="hero-meta">
+      <span class="hero-meta-item">⏱ <strong>6 min</strong></span>
+      <span class="hero-meta-item">🎬 <strong>Abertura</strong></span>
+      <span class="hero-meta-item">🎯 <strong>O que você vai construir</strong></span>
+    </div>
+
+    <h1>
+      3 agentes que mostram o que
+      <em>dá pra construir.</em>
+    </h1>
+
+    <p class="hero-sub">
+      Antes de descer no setup, vê 3 cases <em>reais</em> rodando hoje no ecossistema do Bruno —
+      <strong>Amora</strong> (Chief of Staff pessoal · 7 canais · 60 crons), <strong>openclawzinho</strong>
+      (suporte da comunidade · +1.000 alunos no WhatsApp · resposta &lt;30s) e <strong>Léo</strong>
+      (gestor de equipe Pixel · 8 sócios · agenda comum). Os 3 juntos custam <strong>~R$ 500/mês</strong>
+      e substituem o que antes era ~<strong>R$ 4k/mês</strong> em assistente + tempo do Bruno.
+    </p>
+  </section>
+
+  <!-- ========================= A-HA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">A-ha desta aula</span>
+    <div class="aha-card">
+      <span class="label">A-ha entregue</span>
+      <p class="quote">"Vejo o que vou conseguir construir antes de aprender como."</p>
+    </div>
+  </section>
+
+  <!-- ========================= POR QUE VITRINE PRIMEIRO ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Por que abrir o curso assim</span>
+    <h2>Porque <em>resultado</em> ensina melhor que conceito.</h2>
+
+    <p>
+      Curso de IA pra empreendedor PME que abre com <em>"o que é um agente"</em> falha em
+      90% dos casos — aluno fecha o vídeo antes de entender pra que serve. Aqui é o
+      contrário: você vê <strong>3 agentes funcionando hoje</strong>, em produção real, atendendo
+      clientes reais, gerando resultado mensurável. Aí você decide se vale o investimento de
+      tempo nas próximas 16 aulas.
+    </p>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Anti-promessa:</strong> esses 3 agentes não nasceram em 1 semana. A Amora levou
+        90 dias pra chegar onde tá hoje. openclawzinho nasceu de necessidade (comunidade do curso
+        cresceu de 100 → 1000 alunos em 2 meses, Amora começou a confundir contexto). Léo entrou
+        quando o time da Pixel passou de 8 sócios. <em>Você começa com 1 agente. Os outros 2
+        você só cria quando o uso justificar.</em>
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= AGENTE 1: AMORA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Case 1 · Chief of Staff pessoal</span>
+    <h2>Amora — o <em>segundo cérebro do Bruno.</em></h2>
+
+    <p>
+      A Amora é onde tudo começou. Ela é o agente pessoal do Bruno — Chief of Staff que cuida do
+      dia a dia operacional dele. Não atende cliente final, não fala com comunidade, não opera
+      com a equipe. <strong>É só do Bruno.</strong>
+    </p>
+
+    <h3>O que ela faz</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Briefing matinal</strong> · às 8h roda Revisão do Dia · puxa Slack + Calendar + Gmail + Notion · entrega digest no Telegram com 5min de leitura</p>
+      <p><span class="check">✓</span> <strong>Pendências da semana</strong> · auto-mantidas em <code>pendencias.md</code> · cron weekly verifica itens parados há 3+ dias e sugere follow-up</p>
+      <p><span class="check">✓</span> <strong>Decisões registradas</strong> · toda decisão importante gravada automaticamente em <code>decisoes/2026-MM.md</code> sem o Bruno precisar pedir</p>
+      <p><span class="check">✓</span> <strong>Heartbeat a cada 30min</strong> · checa inbox + mentions + prazos · só interrompe se for urgente</p>
+      <p><span class="check">✓</span> <strong>60+ crons rodando</strong> · health check semanal, backup de workspace, monitoramento de comunidade, limpeza de memória</p>
+      <p><span class="check">✓</span> <strong>7 canais simultâneos</strong> · Telegram pessoal, Telegram do curso, Slack interno, Discord, iMessage, Gmail, Calendar</p>
+    </div>
+
+    <h3>Antes vs depois</h3>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Rotina</th>
+          <th>Antes da Amora</th>
+          <th>Com Amora</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Briefing matinal</strong></td>
+          <td>45min em 4 ferramentas</td>
+          <td><strong>5min</strong> revisando digest no Telegram</td>
+        </tr>
+        <tr>
+          <td><strong>Follow-ups com cliente</strong></td>
+          <td>Esquecia 30-40% dos casos</td>
+          <td><strong>Heartbeat</strong> detecta itens parados e sugere mensagem</td>
+        </tr>
+        <tr>
+          <td><strong>Tempo recuperado</strong></td>
+          <td>—</td>
+          <td><strong>~10h/semana</strong></td>
+        </tr>
+        <tr>
+          <td><strong>Custo mensal</strong></td>
+          <td>R$ 4-6k assistente humana</td>
+          <td><strong>~R$ 200/mês</strong> (modelo + APIs)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Frase do Bruno:</strong> <em>"A Amora tá sempre lendo tudo, por isso ela me ajuda
+        de verdade. Ela conhece meu negócio melhor que eu nos detalhes operacionais — eu fico
+        com a estratégia."</em>
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= AGENTE 2: OPENCLAWZINHO ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Case 2 · Suporte da comunidade</span>
+    <h2>openclawzinho — <em>+1.000 alunos atendidos.</em></h2>
+
+    <p>
+      openclawzinho nasceu de necessidade. A comunidade do curso anterior do Bruno passou de
+      100 → 1.000 alunos em 2 meses. Amora começou a confundir contexto pessoal do Bruno com
+      perguntas técnicas de aluno. <strong>Decisão:</strong> agente novo dedicado a 1 canal só
+      (WhatsApp da comunidade), com identidade própria, escopo restrito, tom adequado.
+    </p>
+
+    <h3>O que ele faz</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Atende +1.000 alunos</strong> no WhatsApp da comunidade · resposta &lt;30s · 24/7 sem dia de descanso</p>
+      <p><span class="check">✓</span> <strong>Tom próprio</strong> · alegre, casual, paciente · diferente da Amora (que é direta operacional pro Bruno)</p>
+      <p><span class="check">✓</span> <strong>Lê documentação OpenClaw</strong> · responde questão técnica sem inventar · cita link da doc oficial quando aluno pede aprofundamento</p>
+      <p><span class="check">✓</span> <strong>Escala pra humanos quando trava</strong> · se identifica que é caso complexo (bug · refund · pagamento), marca <code>@bruno</code> ou <code>@equipe</code></p>
+      <p><span class="check">✓</span> <strong>Workspace isolado</strong> · não vê Slack interno do Bruno · não vê pendências pessoais · não acessa USER.md do Bruno</p>
+      <p><span class="check">✓</span> <strong>Heartbeat com checks de comunidade</strong> · monitora alunos parados há 7+ dias · sugere reengajamento · detecta tópicos repetidos pra criar FAQ</p>
+    </div>
+
+    <h3>Setup que demorou 1 hora</h3>
+
+    <p>
+      A criação dele foi 1 prompt natural pra Amora — ela fez bot novo no @BotFather, criou
+      pasta isolada em <code>~/.openclaw/agents/openclawzinho/</code> com SOUL/IDENTITY/MEMORY
+      próprios, conectou ao grupo de WhatsApp da comunidade, configurou heartbeat, registrou em
+      <code>AGENTS.md</code>. <strong>1h de setup</strong>, monitoramento próximo nos primeiros
+      30 dias, depois rodando sozinho.
+    </p>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Caso clássico de multi-agente:</strong> agente principal saturado por mistura de
+        contextos → spawn de agente dedicado por canal/escopo. Aprofundamento na A13. Esse é o
+        padrão que cabe pra <em>suporte de cliente · grupo de equipe · atendimento de comunidade ·
+        DM de cliente VIP</em>.
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Custo:</strong> ~R$ 150/mês (modelo + APIs · usa Haiku pra triagem rápida + Sonnet
+        pras respostas técnicas · Whisper pra áudios da comunidade). <strong>Substitui:</strong>
+        SDR júnior (~R$ 3k/mês) que faria triagem + respostas básicas.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= AGENTE 3: LEO ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Case 3 · Gestor de equipe</span>
+    <h2>Léo — agente <em>compartilhado da Pixel.</em></h2>
+
+    <p>
+      Quando o time da Pixel cresceu pra 8 sócios + colaboradores, Bruno percebeu que precisava
+      de agente <strong>compartilhado entre os sócios</strong> — calendário comum, decisões
+      registradas, contexto da empresa centralizado. Diferente da Amora (pessoal do Bruno) e do
+      openclawzinho (público da comunidade): Léo é <strong>interno corporativo</strong>.
+    </p>
+
+    <h3>O que ele faz</h3>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>Agenda da empresa</strong> · cruza calendars de todos os sócios · sugere horários de reunião · resolve conflitos sem ping-pong</p>
+      <p><span class="check">✓</span> <strong>Decisões corporativas registradas</strong> · weekly de sócios é gravada (Granola) · Léo extrai decisões + responsáveis + prazos · auto-arquiva em Notion empresa</p>
+      <p><span class="check">✓</span> <strong>Status de iniciativas</strong> · todo sócio pergunta <code>@leo status iniciativa X</code> · responde com último update + DRI + próximo marco</p>
+      <p><span class="check">✓</span> <strong>Onboarding de novo sócio/colaborador</strong> · agente apresenta contexto da empresa · histórico de decisões · pessoas-chave · ferramentas</p>
+      <p><span class="check">✓</span> <strong>Slack como canal principal</strong> · vive no Slack interno · responde mention <code>@leo</code> em qualquer canal · NÃO interrompe DM dos sócios</p>
+      <p><span class="check">✓</span> <strong>Permissões granulares</strong> · sócio sênior vê tudo · colaborador vê só o que é do escopo dele · auditoria mensal automática</p>
+    </div>
+
+    <h3>Diferença crítica vs Amora</h3>
+
+    <p>
+      Amora é <strong>1 dono</strong> (Bruno). Tudo que ela sabe é do contexto dele. Léo é
+      <strong>N donos</strong> (todos os sócios). Cada um pode falar com ele, mas o contexto é
+      <em>da empresa</em>, não de uma pessoa específica. USER.md vira <code>USERS.md</code> com
+      perfil de cada sócio + permissões. Isso muda como ele responde — neutro corporativo, não
+      personalizado pessoal.
+    </p>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Custo:</strong> ~R$ 200/mês (modelo + APIs · Slack workspace separado · Notion da
+        empresa). <strong>Substitui:</strong> chief of staff corporativo júnior (~R$ 8-12k/mês)
+        que faria coordenação de agenda + tracking de iniciativas.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= COMPARATIVO ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Os 3 lado a lado</span>
+    <h2>Comparativo dos <em>3 agentes.</em></h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Dimensão</th>
+          <th>Amora</th>
+          <th>openclawzinho</th>
+          <th>Léo</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Tipo</strong></td>
+          <td>Pessoal</td>
+          <td>Público</td>
+          <td>Corporativo</td>
+        </tr>
+        <tr>
+          <td><strong>Usuário</strong></td>
+          <td>1 (Bruno)</td>
+          <td>+1.000 (alunos)</td>
+          <td>8 (sócios + colab)</td>
+        </tr>
+        <tr>
+          <td><strong>Canal principal</strong></td>
+          <td>Telegram pessoal + 6 outros</td>
+          <td>WhatsApp comunidade</td>
+          <td>Slack interno</td>
+        </tr>
+        <tr>
+          <td><strong>Tom</strong></td>
+          <td>Direto operacional</td>
+          <td>Alegre paciente</td>
+          <td>Neutro corporativo</td>
+        </tr>
+        <tr>
+          <td><strong>Escopo</strong></td>
+          <td>Tudo do Bruno</td>
+          <td>Suporte do curso · só</td>
+          <td>Empresa Pixel · só</td>
+        </tr>
+        <tr>
+          <td><strong>Risco se vazar</strong></td>
+          <td>Alto (dados pessoais)</td>
+          <td>Médio (alunos)</td>
+          <td>Alto (decisões empresa)</td>
+        </tr>
+        <tr>
+          <td><strong>Mitigação principal</strong></td>
+          <td>Workspace isolado · token rotation</td>
+          <td>Escopo de canal restrito · cap de custo</td>
+          <td>Permissões granulares por sócio</td>
+        </tr>
+        <tr>
+          <td><strong>Custo /mês</strong></td>
+          <td>~R$ 200</td>
+          <td>~R$ 150</td>
+          <td>~R$ 200</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Total:</strong> ~R$ 550/mês pelos 3. <strong>Substitui:</strong> assistente
+        humana sênior (R$ 4-6k) + SDR júnior (R$ 3k) + chief of staff corporativo júnior (R$ 8-12k)
+        = R$ 15-21k/mês em equipe equivalente. <strong>ROI honesto:</strong> ~30x antes de contar
+        tempo do Bruno recuperado.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= NUMS ========================= -->
+
+  <section class="nums">
+    <div class="num-card">
+      <div class="n">3</div>
+      <div class="l">agentes em produção</div>
+    </div>
+    <div class="num-card">
+      <div class="n">+1.000</div>
+      <div class="l">alunos atendidos pelo openclawzinho</div>
+    </div>
+    <div class="num-card">
+      <div class="n">~R$ 550</div>
+      <div class="l">total /mês pelos 3</div>
+    </div>
+    <div class="num-card">
+      <div class="n">~10h</div>
+      <div class="l">semana recuperada (Bruno)</div>
+    </div>
+  </section>
+
+  <!-- ========================= COMECE COM 1 ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Aviso importante</span>
+    <h2>Você <em>NÃO começa com 3.</em></h2>
+
+    <p>
+      Esses 3 agentes do Bruno levaram 6 meses pra existirem. Não nasceram juntos. Cada um
+      apareceu quando o uso justificou — e <strong>multi-agente sem necessidade real é
+      overengineering caro</strong>. A13 cobre isso em detalhe.
+    </p>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-time">📅 Janeiro</div>
+        <div class="card-title">Amora primeiro</div>
+        <p class="card-desc">
+          Bruno usou só Amora por 3 meses. Resolveu 90% das dores operacionais dele. Custou
+          ~R$ 200/mês. <strong>É AQUI que você começa</strong> — A1 a A15 te ensinam a montar
+          ela.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">📅 Março</div>
+        <div class="card-title">openclawzinho quando saturou</div>
+        <p class="card-desc">
+          Comunidade cresceu, Amora começou a confundir contexto. <strong>Sintomas claros</strong>:
+          tom errado pra aluno, esquecimento de briefing, mistura de threads. Aí spawnou
+          dedicado.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">📅 Abril</div>
+        <div class="card-title">Léo quando o time cresceu</div>
+        <p class="card-desc">
+          Pixel passou de 4 → 8 sócios. Coordenação manual virou caos. Léo entrou pra
+          centralizar. <strong>De novo: necessidade gerou agente</strong>, não vontade de ter
+          mais agentes.
+        </p>
+      </div>
+    </div>
+
+    <div class="callout callout-warning">
+      <p>
+        <strong>Anti-padrão clássico:</strong> aluno sai dessa aula achando que vai criar 3
+        agentes na primeira semana. <em>NÃO faz isso.</em> Curso ensina 1 agente bem-feito (A0 a
+        A12). Multi-agente entra na A13 só pra quem chegou em sintomas reais de saturação.
+        Começa com 1. Os outros 2 (se vier a precisar) você cria depois com a aula certa.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= CTA PRÓXIMA ========================= -->
+
+  <section class="sec">
+    <div class="cta-card">
+      <h3>Próximo passo: <em>A0 — Visão, stack e investimento</em></h3>
+      <p>
+        Agora que você viu <strong>onde dá pra chegar</strong>, bora descer pro <em>como</em>.
+        A0 cobre visão do produto, stack do curso (Hostinger Managed + ChatGPT Plus + OpenAI
+        API), investimento mensal (R$ 160-190 pra começar) e mapa das 16 aulas. <strong>21min</strong>
+        sequencial. Saindo dela você sabe exatamente o que vai construir e quanto vai custar.
+      </p>
+      <a href="aula-00-visao-stack.html" class="cta-button">→ Ir pra Aula 0</a>
+    </div>
+  </section>
+
+  <!-- ========================= FOOTER ========================= -->
+
+  <footer class="aula-footer">
+
+    <div class="aula-footer-block">
+      <h4>Travou? Tá no grupo do curso</h4>
+      <p>
+        Comunidade Telegram do curso —
+        <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">t.me/cursoopenclaw</a>
+        — suporte 24/7 (openclawzinho bot + Bruno e equipe presente).
+        Dúvida sobre essa aula, problemas de setup, ou quer compartilhar como aplicou
+        no seu negócio: bora trocar lá.
+      </p>
+    </div>
+
+    <div class="aula-footer-block">
+      <h4>Próximo nível: Pixel AI Hub</h4>
+      <p>
+        Aplicar agente pra empresa toda — equipe, governance, escala?
+        <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=material&utm_campaign=v1" target="_blank" rel="noopener">Pixel AI Hub</a>:
+        segundo cérebro corporativo, comunidade de empreendedores, +50 skills enterprise,
+        encontros mensais ao vivo. Vagas mensais limitadas.
+      </p>
+    </div>
+
+    <div class="aula-footer-credit">
+      Mini-Curso OpenClaw 2026 · Material complementar à gravação · Atualizações conforme kit evolui<br>
+      <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=footer-credit" target="_blank" rel="noopener">Bruno Okamoto · Pixel Educação</a>
+    </div>
+
+  </footer>
+
+</div>
+
+</body>
+</html>

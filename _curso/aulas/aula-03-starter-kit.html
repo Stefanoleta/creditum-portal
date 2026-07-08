@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A3 — Como o Starter Kit funciona · Mini-Curso OpenClaw</title>
+<meta name="description" content="Material complementar da Aula 3 — meta-aula do curso: você joga o zip pro agente, ele lê os prompts e te avisa no Telegram. A-ha #0 — o mais forte do produto inteiro. Fim das aulas sequenciais.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Fraunces:ital,wght@1,400;1,500;1,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="_shared/tokens.css">
+</head>
+
+<body>
+
+<div class="wrap">
+
+  <!-- ========================= HEADER ========================= -->
+
+  <header class="aula-header">
+    <div class="aula-header-brand">Mini-Curso <span class="accent">OpenClaw</span></div>
+    <div class="aula-header-meta">Aula 03 · Starter Kit</div>
+  </header>
+
+  <!-- ========================= HERO ========================= -->
+
+  <section class="hero">
+    <div class="hero-meta">
+      <span class="hero-meta-item">⏱ <strong>8 min</strong></span>
+      <span class="hero-meta-item">📚 <strong>Meta-aula</strong></span>
+      <span class="hero-meta-item">🎯 <strong>A-ha #0</strong></span>
+    </div>
+
+    <h1>
+      Joga o zip,
+      <em>ele assume.</em>
+    </h1>
+
+    <p class="hero-sub">
+      Em <em>~8min</em> você entende como esse curso funciona na prática — e por que é seguro.
+      Você não decora passos. <em>Joga o starter kit no agente</em>, ele lê os prompts e te avisa
+      no Telegram quando termina cada item da checklist. Daqui em diante, modular: pula pra
+      qualquer aula.
+    </p>
+  </section>
+
+  <!-- ========================= A-HA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">A-ha desta aula</span>
+    <div class="aha-card">
+      <span class="label">A-ha #0 entregue · o mais forte do curso inteiro</span>
+      <p class="quote">"Joguei um arquivo, ele assumiu."</p>
+    </div>
+  </section>
+
+  <!-- ========================= PRE-FLIGHT ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Pre-flight check</span>
+    <h2>Antes de <em>jogar o zip.</em></h2>
+
+    <p>
+      A3 é a última aula sequencial. Tudo o que vier depois é modular. Por isso essa aula assume
+      que A1 e A2 estão completas — kit precisa de Telegram DM funcionando (já entregue na A1)
+      pra receber o zip, e precisa de agente saudável (cockpit da A2) pra processar.
+    </p>
+
+    <div class="bullet-card">
+      <p><span class="check">✓</span> <strong>A1 + A2 concluídas</strong> — agente ativo, OAuth, Telegram DM funcional, terminal dominado</p>
+      <p><span class="check">✓</span> <strong>Acesso à página Hotmart pós-compra</strong> ou pasta Google Drive de alunos (mirror)</p>
+      <p><span class="check">✓</span> <strong>Celular com Telegram</strong> aberto · você vai mandar o zip do celular pro próprio bot</p>
+      <p><span class="check">✓</span> <strong>~30 minutos</strong> reservados — aula tem 8min, mas o agente vai processar a checklist em background depois (você não fica preso esperando)</p>
+      <p><span class="check">✓</span> <strong>Cheatsheet do kit:</strong> <a href="../INDICE.md">starter-kit-faq.md</a> — anatomia completa do zip, perguntas frequentes, troubleshooting de boot</p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Quer organizar Telegram em tópicos antes?</strong> A4 (modular · 15min) aprofunda
+        Telegram com tópicos por tema, grupo da equipe, allowlist por comando natural. <strong>Não
+        é pré-requisito</strong> — DM da A1 já basta pro Kit. Mas se você gosta de tudo organizado
+        antes de instalar, faz A4 primeiro e volta aqui.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= ESTRUTURA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Estrutura da aula em vídeo</span>
+    <h2>O que você vai entender em <em>7 blocos.</em></h2>
+
+    <p>
+      A3 é meta-aula. As 3 aulas anteriores construíram a base; A3 é onde o método do curso fica
+      óbvio. Daqui em diante o aluno entende que <strong>aulas explicam o porquê, kit faz o
+      como</strong> — e ele pode pular pra qualquer aula a partir de agora.
+    </p>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-time">⏱ 1 min</div>
+        <div class="card-title">Bloco 1 — Tese do produto</div>
+        <p class="card-desc">
+          <strong>Primeiro curso do mundo feito pra humanos + agentes.</strong> 2 partes: aulas
+          (mental model) + Starter Kit (zip executável). Aluno NÃO decora passos — agente lê o kit
+          e conduz.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1.5 min</div>
+        <div class="card-title">Bloco 2 — Anatomia do zip</div>
+        <p class="card-desc">
+          Tela com árvore do zip aberta · narração rápida (sem detalhar arquivo por arquivo · isso
+          tá no cheatsheet). README · CHECKLIST · CHANGELOG · skills · templates · prompts ·
+          cheatsheets · workspace-starter.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1 min</div>
+        <div class="card-title">Bloco 3 — Por que isso é seguro ⭐</div>
+        <p class="card-desc">
+          Anti-objeção. 5 pontos em 1min: <strong>é só texto</strong> · agente não ganha permissão
+          nova · sem prompt injection · tudo em Docker · kit é seu, não público (mesmo que Pixel
+          usa internamente).
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1.5 min</div>
+        <div class="card-title">Bloco 4 — Como o agente assume</div>
+        <p class="card-desc">
+          Aluno baixa zip · manda pro próprio bot Telegram (Gateway não aceita upload de arquivo —
+          por isso A1 já fez Telegram). Agente desempacota · lê README · executa <strong>prompt
+          único de boot</strong> · gera checklist viva.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1 min</div>
+        <div class="card-title">Bloco 5 — Telegram como linha de update</div>
+        <p class="card-desc">
+          Amarração com A3: agente posta no tópico Operação quando termina cada item. Aluno faz
+          outra coisa, agente trabalha, Telegram avisa. <em>"agente cuida do próprio ambiente +
+          te avisa por canal humano"</em>.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1 min</div>
+        <div class="card-title">Bloco 6 — Demo ao vivo ⭐ A-ha #0</div>
+        <p class="card-desc">
+          <strong>Momento mais forte do curso inteiro.</strong> Bruno manda zip pro bot · agente
+          assume · primeira resposta em ~30s. <em>"Olha o que ele fez — leu seu kit, entendeu onde
+          você tá, criou checklist customizada e tá começando o item 1.1 agora."</em>
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-time">⏱ 1 min</div>
+        <div class="card-title">Bloco 7 — Recap + amarração A5</div>
+        <p class="card-desc">
+          A partir daqui, <strong>modular</strong>. 11 aulas que sobram são consultáveis quando
+          travar. <strong>A5 é o conceito mais importante:</strong> identidade. Sem ela, kit é
+          genérico. Com ela, agente vira <em>seu</em>.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ========================= TESE ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Bloco 1 · Tese do produto</span>
+    <h2>Primeiro curso do mundo feito pra <em>humanos + agentes.</em></h2>
+
+    <p>
+      A maioria dos cursos online assume que o aluno é o único agente operando. Você assiste, você
+      aprende, você executa. Aqui é diferente. <strong>Aluno + agente operam juntos</strong>. Você
+      assiste a aula, o agente executa o procedimento que a aula explica. As 2 partes têm papéis
+      distintos:
+    </p>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-title">Aulas explicam o <em>porquê</em></div>
+        <p class="card-desc">
+          Mental model. Por que tópicos por tema, por que <code>.env first</code>, por que
+          permissão por papel, por que mention-only em grupo, por que <code>doctor --fix</code>
+          fez backup antes de aplicar. <strong>Você precisa entender pra confiar.</strong>
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Kit faz o <em>como</em></div>
+        <p class="card-desc">
+          Zip executável. Agente lê os prompts, executa procedimento, te avisa quando termina. Você
+          não cola comando, não edita config, não decora sintaxe. <strong>Procedimento é
+          delegação real.</strong>
+        </p>
+      </div>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Frase recorrente do curso:</strong> <em>"Seu agente lê documentação. O kit é o que
+        ele lê primeiro."</em> Isso já apareceu na A0 e na A2. Em A3 a frase ganha sentido
+        completo — você vê o agente fazendo isso ao vivo.
+      </p>
+    </div>
+
+    <h3>Por que isso é diferente</h3>
+
+    <p>
+      Curso tradicional de IA pra empreendedor: 50 vídeos, você anota, copia comando, faz config
+      manual, perde 1h por aula em setup, esquece em 2 semanas. Aqui: você assiste a aula
+      (entende), joga o kit (delega), agente faz (executa), Telegram avisa (você acompanha). 80%
+      do "trabalho operacional" sai da sua agenda.
+    </p>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Princípio do curso:</strong> aluno PME tem tempo escasso. Curso que toma 1-2h por
+        aula em setup manual é curso que aluno abandona. A3 prova que dá pra ter resultado em
+        ~8min de aula + agente operando em paralelo.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= ANATOMIA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Bloco 2 · Anatomia do zip</span>
+    <h2>O que tem dentro do <em>starter-kit-openclaw.zip.</em></h2>
+
+    <p>
+      Você não precisa abrir o zip pra usar — agente faz isso. Mas é bom saber o que tem,
+      especialmente porque o Bloco 3 (segurança) depende de você confiar que <em>tudo que está aí
+      é só texto</em>. Estrutura atual:
+    </p>
+
+    <pre><code>starter-kit-openclaw-v1.1.2/
+├── README.md           ← prompt único de boot
+├── CHECKLIST.md        ← 7 blocos numerados
+│                         (1.x identidade · 2.x memória ·
+│                          3.x segurança · 4.x canais ·
+│                          5.x skills · 6.x crons ·
+│                          7.x integrações)
+├── CHANGELOG.md        ← log de versões (semver: v1, v1.1, v1.1.2...)
+├── skills/             ← 7 skills de conduta
+├── templates/          ← SOUL · IDENTITY · AGENTS · USER · MEMORY ·
+│                         HEARTBEAT (config de proatividade · não log)
+├── prompts/            ← meta-prompts pra cenários comuns
+├── cheatsheets/        ← debug, oauth, segurança
+└── workspace-starter/  ← estrutura inicial</code></pre>
+
+    <h3>O que cada pasta faz</h3>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>O que é</th>
+          <th>Quando entra em ação</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>README.md</strong></td>
+          <td>Prompt único de boot · tudo começa aqui</td>
+          <td>Primeira coisa que agente lê ao desempacotar</td>
+        </tr>
+        <tr>
+          <td><strong>CHECKLIST.md</strong></td>
+          <td>7 blocos numerados (1.1, 1.2, 2.1, 2.2...)</td>
+          <td>Roteiro do que vai ser feito · agente edita em tempo real</td>
+        </tr>
+        <tr>
+          <td><strong>CHANGELOG.md</strong></td>
+          <td>Histórico semver de versões</td>
+          <td>Atualizações futuras (v1.1.2 → v1.2 → v2)</td>
+        </tr>
+        <tr>
+          <td><strong>skills/</strong></td>
+          <td>7 skills de conduta (onboarding, revisão do dia, backup workspace etc)</td>
+          <td>Aulas A5-A12 ativam cada uma</td>
+        </tr>
+        <tr>
+          <td><strong>templates/</strong></td>
+          <td>SOUL · IDENTITY · AGENTS · USER · MEMORY · HEARTBEAT (configuração do mecanismo de proatividade)</td>
+          <td>A5 (identidade) · A7 (memória + <code>hot.md</code>) · A9 (heartbeat aprofundado)</td>
+        </tr>
+        <tr>
+          <td><strong>prompts/</strong></td>
+          <td>Meta-prompts pra cenários comuns</td>
+          <td>Cola direto · agente executa · você revisa</td>
+        </tr>
+        <tr>
+          <td><strong>cheatsheets/</strong></td>
+          <td>Debug, OAuth, segurança, comandos completos, outros canais</td>
+          <td>Consulta quando travar em algo</td>
+        </tr>
+        <tr>
+          <td><strong>workspace-starter/</strong></td>
+          <td>Estrutura de pastas inicial · org de memória do agente</td>
+          <td>Esqueleto do que vai virar A6 (workspace + MAPAs)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>HEARTBEAT.md ≠ memory/hot.md.</strong> Confusão clássica do dia 1:
+        são 2 coisas distintas, ligadas mas com papéis diferentes.
+        <code>HEARTBEAT.md</code> é a <strong>configuração</strong> do mecanismo —
+        com que frequência o agente faz poll, quais checks ele rotaciona, quando
+        fica quieto. <code>memory/hot.md</code> é o <strong>contexto quente</strong>
+        que ele consulta — prioridades da semana, prazos críticos, negociações ativas.
+        Pensa: HEARTBEAT.md é COMO ele vigia. hot.md é O QUE ele vigia. A9 cobre
+        o mecanismo · A7 cobre o contexto · A5 amarra com identidade.
+      </p>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Princípio que entra aqui:</strong> <code>.env first</code>. Todas as skills do kit
+        leem credencial de <code>.env</code> · nunca pedem token cru no chat. Em A10 você vai ver
+        o padrão completo de gestão de credencial. Aqui é só pra entender que <em>kit não pede
+        senha em chat</em>.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= SEGURANÇA ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Bloco 3 · Anti-objeção ⭐</span>
+    <h2>Por que isso é <em>seguro.</em></h2>
+
+    <blockquote>
+      <p>
+        <em>"Antes de jogar isso no seu agente, deixa eu te mostrar exatamente o que esse kit é —
+        e o que ele não é."</em>
+      </p>
+    </blockquote>
+
+    <p>
+      Aluno PME chega com pé atrás. Faz sentido — você tá prestes a delegar boot do agente pra um
+      arquivo que veio do nada. 5 pontos em 1min na aula. Aqui ficam consolidados pra você
+      revisar.
+    </p>
+
+    <h3>1. É só texto</h3>
+
+    <p>
+      Markdown · prompts · templates · JSON. Sem <code>.exe</code>, sem binário, sem código
+      compilado. Você pode abrir cada arquivo no notepad e ler antes — nada escondido. Se você
+      duvidar de algum prompt específico, abre, lê, decide se cola.
+    </p>
+
+    <h3>2. Agente não ganha permissão nova</h3>
+
+    <p>
+      Kit é manual de procedimento, não escala poder. As permissões da A2 (autopilot ligado ou
+      não, Docker isolado) continuam <strong>exatamente as mesmas</strong>. Kit não tem capacidade
+      de elevar privilégio — isso é defesa do próprio OpenClaw, não do kit.
+    </p>
+
+    <h3>3. Sem prompt injection</h3>
+
+    <p>
+      Kit é limpo — não tem instrução escondida tentando burlar seu agente, vazar dados ou agir
+      contra você. Cada prompt foi auditado pra ter <strong>só intenção declarada</strong>.
+      Manutenção do kit é interna da Pixel — Bruno e time revisam cada release antes de publicar.
+    </p>
+
+    <h3>4. Tudo isolado em Docker</h3>
+
+    <p>
+      Roda dentro do container Managed (recap A0). Não toca seu computador, sua conta, seus
+      arquivos pessoais. Mesmo que aconteça algo absolutamente inesperado, blast radius é o
+      container — não o servidor, não sua máquina, não suas contas.
+    </p>
+
+    <h3>5. Kit é seu, não público</h3>
+
+    <p>
+      Você comprou; não tá em repo aberto. Mesmo kit que a <strong>Pixel usa internamente pra
+      treinar nossos funcionários digitais</strong> — Amora, openclawzinho, agentes do Cayo e
+      Matheus. Não é versão de aluno simplificada — é o kit real que opera o ecossistema da
+      Pixel há meses.
+    </p>
+
+    <div class="callout callout-success">
+      <p>
+        <strong>Frase-mãe da segurança:</strong> <em>"Pior caso possível: kit ruim = agente
+        confuso. Não é 'kit ruim = sua máquina invadida'. Kit é manual de procedimento — não
+        malware."</em> Diferenciação que mata 90% do medo legítimo de aluno PME.
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Curiosidade transparente:</strong> kit é versionado em semver (v1.1.2 atual ·
+        próximo v1.2). CHANGELOG.md tem histórico de toda mudança. Pixel tem documentação
+        cirúrgica interna do que mudou em cada release. Você sempre consegue saber exatamente o
+        que veio com qual versão.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= COMO ASSUME ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Bloco 4 · Mecânica do boot</span>
+    <h2>Como o agente <em>assume.</em></h2>
+
+    <p>
+      Sequência completa do momento "comprou o curso" até "agente executando checklist". Cada
+      passo é explícito — sem mágica, sem caixa preta.
+    </p>
+
+    <div class="item-icon">
+      <div class="item-icon-box">1</div>
+      <div class="item-icon-content">
+        <h3>Você baixa o zip</h3>
+        <p>
+          2 lugares: <strong>página Hotmart pós-compra</strong> (link direto) ou <strong>pasta
+          Google Drive de alunos</strong> (mirror). Os 2 estão sempre na versão mais recente —
+          quando sair v1.2, ambos atualizam.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">2</div>
+      <div class="item-icon-content">
+        <h3>Manda o zip pro próprio bot do Telegram</h3>
+        <p>
+          Setup feito na A1 Bloco 5. <strong>Por que só Telegram, não o Gateway:</strong> o chat
+          do painel Hostinger não aceita upload de arquivo. Por isso A1 já fez você conectar
+          Telegram — pra esse momento aqui. <strong>Vantagem real:</strong> você manda o zip do
+          celular sem abrir computador.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">3</div>
+      <div class="item-icon-content">
+        <h3>Agente recebe → desempacota → lê README</h3>
+        <p>
+          Agente identifica que é o starter kit · descompacta no workspace · primeiro arquivo que
+          abre é o <code>README.md</code> · lê o prompt único de boot · começa a executar.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">4</div>
+      <div class="item-icon-content">
+        <h3>Detecção automática do estado do aluno</h3>
+        <p>
+          Prompt único faz triagem: <strong>NOVO</strong> (primeira vez aplicando kit) ·
+          <strong>MERGE</strong> (já tem agente configurado, kit precisa preservar trabalho atual) ·
+          <strong>AVANÇADO</strong> (já tem outro kit aplicado, novo kit precisa fazer upgrade
+          inteligente). Aluno não escolhe — agente detecta.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">5</div>
+      <div class="item-icon-content">
+        <h3>Pergunta âncora</h3>
+        <p>
+          <em>"Onde você tá no curso?"</em> Customiza a checklist gerada. Se você só assistiu A1+A2,
+          checklist começa do bloco 1.1. Se você já tem identidade configurada, ele pula 1.x e vai
+          pra 2.x. Inteligência mínima — não checklist genérica.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">6</div>
+      <div class="item-icon-content">
+        <h3>Gera checklist customizada e <em>viva</em></h3>
+        <p>
+          Não é arquivo estático. <strong>Agente edita em tempo real conforme você avança.</strong>
+          Item completou? Marca check. Você pulou item 2.3? Anotou e segue pro 2.4. Você voltou
+          pra refazer 1.5? Reseta o check. Estado vivo, sempre fiel ao que tá pronto.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">7</div>
+      <div class="item-icon-content">
+        <h3>Última coisa: arquivamento</h3>
+        <p>
+          Quando termina toda checklist, agente arquiva o kit em
+          <code>archive/starter-kit-v1.1.2-aplicado-{data}/</code>. Workspace fica limpo. Pasta
+          <code>starter-kit-openclaw/</code> desaparece da raiz — sinal claro de "terminou".
+          Princípio: <em>"setup termina e some"</em>.
+        </p>
+      </div>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Princípio novo (transversal):</strong> <em>"Setup termina e some."</em> Kit faz o
+        trabalho dele · sai do caminho. Você não fica com pastas órfãs no workspace. Quando você
+        for ver o workspace na A6 (próxima oportunidade), ele tá organizado — não bagunçado por
+        artefatos de instalação que sobraram.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= TELEGRAM UPDATES ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Bloco 5 · Linha de update</span>
+    <h2>Telegram como <em>linha de comunicação.</em></h2>
+
+    <p>
+      Amarração direta com A3. Lembra do tópico Operação que você criou? Aqui ele entra em ação.
+      Conforme agente trabalha na checklist, ele posta updates lá — você não fica olhando terminal
+      esperando, você faz outra coisa e o Telegram te avisa.
+    </p>
+
+    <h3>Exemplo de updates que você vai ver</h3>
+
+    <blockquote>
+      <p>
+        <strong>09:42 · #Operação</strong><br>
+        ✅ Item 1.2 — IDENTITY.md criado · próximo: 1.3 USER.md
+      </p>
+      <p>
+        <strong>09:47 · #Operação</strong><br>
+        ✅ Item 1.3 — USER.md criado com seu contexto · próximo: 1.4 SOUL.md (vou precisar de
+        info de você — pergunta âncora chegando em 30s)
+      </p>
+      <p>
+        <strong>09:48 · #Operação</strong><br>
+        🟡 Item 1.4 — me responde 3 perguntas pra eu calibrar SOUL.md: (1) que tom você quer · (2)
+        agente formal ou casual · (3) que NÃO fazer (limites). Quando responder, sigo.
+      </p>
+    </blockquote>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Estados que o agente comunica:</strong> ✅ feito · 🟡 esperando você (precisa de
+        info) · 🔴 travou (precisa de decisão sua). Cada status é claro · você sabe se pode focar
+        em outra coisa ou se precisa voltar pro Telegram.
+      </p>
+    </div>
+
+    <div class="callout callout-success">
+      <p>
+        <strong>Vitória visível Bloco 5:</strong> aluno entende que <em>não precisa olhar
+        terminal</em>. Faz outra coisa, agente trabalha, Telegram avisa. <strong>Esse</strong> é o
+        relacionamento que o curso constrói com seu agente — não tela cheia, não micro-management.
+        Delegação real.
+      </p>
+    </div>
+
+    <h3>Princípio reforçado</h3>
+
+    <p>
+      <em>"Agente cuida do próprio ambiente + te avisa por canal humano."</em> Princípio que
+      apareceu na A2 (cron de health check) e ganha continuidade aqui. Tudo que ele faz, você sabe.
+      Tudo que ele decide, você decide se quer reverter. <strong>Visibilidade total · esforço
+      mínimo.</strong>
+    </p>
+  </section>
+
+  <!-- ========================= DEMO AO VIVO ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Bloco 6 · A-ha #0 ⭐</span>
+    <h2>Demo <em>ao vivo.</em></h2>
+
+    <p>
+      Esse é o momento mais forte do curso inteiro. Não pode diluir em "espera carregar". Toda
+      iluminação, foco visual e energia da gravação concentra aqui. Aluno PME que estava em
+      dúvida se valia a pena <strong>sai daqui sem dúvida</strong>.
+    </p>
+
+    <h3>O que acontece na tela</h3>
+
+    <div class="item-icon">
+      <div class="item-icon-box">1</div>
+      <div class="item-icon-content">
+        <h3>Bruno mostra o celular</h3>
+        <p>
+          Telegram aberto · DM com o bot do agente · zip do starter kit pronto pra enviar (ele já
+          tava no celular, baixado da Hotmart minutos antes da gravação). Tela em primeiro plano.
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">2</div>
+      <div class="item-icon-content">
+        <h3>Manda o zip pro bot</h3>
+        <p>
+          Anexa arquivo · envia. Conversa do bot mostra o arquivo entregue. Aluno PME que nunca
+          viu isso percebe pela primeira vez: <em>"ah, é literalmente só mandar arquivo no
+          Telegram."</em>
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">3</div>
+      <div class="item-icon-content">
+        <h3>Agente assume em ~30 segundos</h3>
+        <p>
+          Bot responde no Telegram: <em>"Recebi o starter kit v1.1.2. Desempacotando · lendo
+          README · gerando checklist customizada... Aguenta 20 segundos."</em>
+        </p>
+      </div>
+    </div>
+
+    <div class="item-icon">
+      <div class="item-icon-box">4</div>
+      <div class="item-icon-content">
+        <h3>Primeira resposta</h3>
+        <p>
+          Bot retorna com checklist viva renderizada · primeiro item começa execução · status
+          inicial. Aluno vê na cara que <strong>funcionou</strong>.
+        </p>
+      </div>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Frase no momento (Bruno na gravação):</strong> <em>"Olha o que ele fez — leu seu
+        kit, entendeu onde você tá, criou checklist customizada e tá começando o item 1.1 agora.
+        E você não fez nada além de mandar um zip no Telegram."</em>
+      </p>
+    </div>
+
+    <div class="callout callout-success">
+      <p>
+        <strong>A-ha emocional:</strong> aluno vê concretamente "<em>ah, então é assim que
+        funciona</em>". Esse é o momento que justifica tudo o que veio antes (A0-A3) e abre tudo o
+        que vem depois (A5-A15). 90% do produto inteiro está nesses 30 segundos de demo.
+      </p>
+    </div>
+
+    <h3>Backup pra demo</h3>
+
+    <p>
+      Bruno tem vídeo gravado em backup · conta demo com kit pré-jogado pra fallback. Demo ao
+      vivo NUNCA pode falhar. Internet caiu? Roda backup. Gateway travou? Roda backup. Aluno
+      sente firmeza, não improvisação.
+    </p>
+  </section>
+
+  <!-- ========================= ROI QUANTIFICADO ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">ROI real do Kit · case Bruno</span>
+    <h2>Antes vs depois — <em>case do Bruno.</em></h2>
+
+    <p>
+      Pra calibrar expectativa, antes/depois real do Bruno usando Amora (segundo cérebro montado
+      com Starter Kit equivalente):
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Rotina</th>
+          <th>Antes do agente</th>
+          <th>Com Amora (kit + 30d)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Briefing matinal</strong></td>
+          <td>45min checando Slack + Notion + Calendar + Gmail</td>
+          <td><strong>5min</strong> revisando digest da Amora no Telegram</td>
+        </tr>
+        <tr>
+          <td><strong>Pendências da semana</strong></td>
+          <td>Memória + post-its + ad-hoc</td>
+          <td>Auto-mantido em <code>pendencias.md</code> + cron weekly</td>
+        </tr>
+        <tr>
+          <td><strong>Follow-ups com cliente</strong></td>
+          <td>Esquecia 30-40% (sem sistema)</td>
+          <td>Heartbeat detecta itens parados 3+ dias e sugere mensagem</td>
+        </tr>
+        <tr>
+          <td><strong>Decisões registradas</strong></td>
+          <td>Perdidas em chat ou só na cabeça</td>
+          <td>Auto-arquivadas em <code>decisoes/YYYY-MM.md</code></td>
+        </tr>
+        <tr>
+          <td><strong>Tempo recuperado</strong></td>
+          <td>—</td>
+          <td><strong>~10h/semana</strong></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Calibração honesta:</strong> esses números são do Bruno após 90 dias usando Amora
+        em produção. Day 1 não é assim — primeiras 2 semanas são treinamento (princípio A0). 30
+        dias depois você tá pegando 30-40% do ROI. 90 dias depois, você tá perto desse benchmark.
+        <strong>Sem dor não tem ganho — primeiro mês exige você ensinando o agente seu contexto.</strong>
+      </p>
+    </div>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Como medir o teu:</strong> antes de começar, anota 3 rotinas que mais te consomem
+        tempo (ex: "checar Slack 8x/dia · responder lead 30min · revisar pipeline 1h/sex"). Mede
+        com timer 1 semana. 30 dias depois de usar o agente, mede de novo. <strong>Esse delta é
+        seu ROI real</strong> — e geralmente surpreende pra cima.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= QUE ITEM EXPLICA ========================= -->
+
+  <section class="sec sec-alt">
+    <span class="sec-label">Item da CHECKLIST que A3 explica</span>
+    <h2>A3 explica a <em>CHECKLIST inteira como artefato + método.</em></h2>
+
+    <p>
+      A3 não cobre <strong>um item</strong> da checklist do kit — cobre <strong>a checklist
+      inteira como artefato + método</strong>. É meta-aula. O paradigma "kit + agente assumindo +
+      checklist viva + Telegram avisando + auto-arquivamento" é o que rege todas as 12 aulas
+      modulares que vêm depois (A4 a A15).
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Aula</th>
+          <th>Bloco da CHECKLIST</th>
+          <th>Conceito explicado</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>A4</strong></td><td>4.x canais (Telegram)</td><td>Tópicos · grupo equipe · allowlist natural</td></tr>
+        <tr><td><strong>A5</strong></td><td>1.x identidade</td><td>SOUL · IDENTITY · AGENTS · USER</td></tr>
+        <tr><td><strong>A6</strong></td><td>(workspace · paralelo a 2.x)</td><td>Mapas distribuídos</td></tr>
+        <tr><td><strong>A7</strong></td><td>2.x memória</td><td>Higiene de contexto</td></tr>
+        <tr><td><strong>A8</strong></td><td>5.x skills</td><td>6 curadas + criar a sua</td></tr>
+        <tr><td><strong>A9</strong></td><td>6.x crons</td><td>Proatividade + Revisão do Dia</td></tr>
+        <tr><td><strong>A10</strong></td><td>3.x segurança</td><td>Permissão por papel</td></tr>
+        <tr><td><strong>A11</strong></td><td>4.x canais</td><td>26 nativos · Slack, Discord, iMessage, +20</td></tr>
+        <tr><td><strong>A12</strong></td><td>7.x integrações</td><td>Notion · GitHub · Calendar · Drive</td></tr>
+        <tr><td><strong>A13</strong></td><td>(multi-agente · paralelo a 1.x)</td><td>Subagentes</td></tr>
+        <tr><td><strong>A14</strong></td><td>(observabilidade · transversal)</td><td>Mission Control</td></tr>
+        <tr><td><strong>A15</strong></td><td>(wrap)</td><td>Cases dos 3 agentes · próximos passos</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Modular daqui em diante:</strong> agente conduz pela checklist e te avisa quando
+        precisar de você. Você consulta a aula correspondente quando travar em algum item. <em>Não
+        precisa assistir as 11 aulas em ordem</em> — é referência. Estuda só o que vai usar agora.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= TROUBLESHOOTING ========================= -->
+
+  <section class="sec">
+    <span class="sec-label">Travou? Antes de pedir ajuda</span>
+    <h2>Top <em>problemas comuns da A3.</em></h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Sintoma</th>
+          <th>Causa provável</th>
+          <th>Ação</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Mandei o zip mas agente não respondeu</td>
+          <td>Bot não reconheceu arquivo zip · ou Telegram bloqueou tamanho</td>
+          <td>Pergunta no DM: <em>"recebeu o kit?"</em> · se não, redownload + reenvia</td>
+        </tr>
+        <tr>
+          <td>Agente desempacotou mas não gerou checklist</td>
+          <td>README.md não foi lido (kit corrompido na transferência)</td>
+          <td>Baixa de novo · prefere Hotmart sobre Drive (link primário)</td>
+        </tr>
+        <tr>
+          <td>Agente perguntou onde estou no curso e eu errei</td>
+          <td>Detecção NOVO/MERGE/AVANÇADO ficou ambígua</td>
+          <td>Pede pro agente refazer triagem: <em>"reseta a checklist e me pergunta de novo"</em></td>
+        </tr>
+        <tr>
+          <td>Checklist tá postando no DM, não no tópico Operação</td>
+          <td>A3 não foi feita · não há tópico configurado</td>
+          <td>Faz A3 (cria supergrupo + tópicos) · pede pro agente migrar updates</td>
+        </tr>
+        <tr>
+          <td>Update do agente é em inglês raw técnico</td>
+          <td>Skill de comunicação ainda não calibrou</td>
+          <td>Pede: <em>"posta updates em português simples, sem jargão técnico"</em></td>
+        </tr>
+        <tr>
+          <td>Agente travou no item 1.4 (SOUL.md) esperando minha resposta</td>
+          <td>Pergunta âncora ficou sem resposta sua</td>
+          <td>Volta no Telegram · responde as 3 perguntas que ele mandou · ele continua</td>
+        </tr>
+        <tr>
+          <td>Acabou a checklist mas pasta starter-kit ainda tá lá</td>
+          <td>Auto-arquivamento não disparou (raro)</td>
+          <td>Pede: <em>"arquiva a pasta starter-kit no archive com data"</em> · ele faz</td>
+        </tr>
+        <tr>
+          <td>Tô com kit v1.1.0 antigo · acabou de sair v1.1.2</td>
+          <td>Você pegou versão antiga · tem novidade no novo</td>
+          <td>Baixa novo · joga pro bot · agente detecta upgrade · faz merge inteligente sem perder trabalho</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-tip">
+      <p>
+        <strong>Cheatsheet do kit:</strong> <a href="../INDICE.md">starter-kit-faq.md</a> —
+        anatomia completa, perguntas frequentes (NOVO vs MERGE vs AVANÇADO), troubleshooting de
+        boot, fluxo de upgrade entre versões.
+      </p>
+    </div>
+
+    <div class="callout callout-info">
+      <p>
+        <strong>Não conseguiu resolver com a tabela acima?</strong> Joga screenshot/áudio/vídeo
+        no <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">grupo Telegram do
+        curso</a>. openclawzinho responde em &lt;30 segundos · humanos em &lt;5 minutos.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================= CTA PRÓXIMA ========================= -->
+
+  <section class="sec sec-alt">
+    <div class="cta-card">
+      <h3>Próximo passo: <em>A5 — Identidade do agente</em></h3>
+      <p>
+        14 minutos · <strong>primeira aula modular</strong> — fim das sequenciais. A5 é o conceito
+        mais importante que rege tudo: <em>identidade</em>. Quem é seu agente, quem é você. SOUL ·
+        IDENTITY · AGENTS · USER. <strong>Sem identidade, kit é genérico — com identidade, agente
+        vira seu.</strong> Quanto mais contexto, mais ele orquestra sua vida.
+      </p>
+      <a href="aula-05-identidade.html" class="cta-button">→ Ir pra Aula 5</a>
+    </div>
+  </section>
+
+  <!-- ========================= FOOTER ========================= -->
+
+  <footer class="aula-footer">
+
+    <div class="aula-footer-block">
+      <h4>Travou? Tá no grupo do curso</h4>
+      <p>
+        Comunidade Telegram do curso —
+        <a href="https://t.me/cursoopenclaw" target="_blank" rel="noopener">t.me/cursoopenclaw</a>
+        — suporte 24/7 (openclawzinho bot + Bruno e equipe presente).
+        Dúvida sobre essa aula, problemas de setup, ou quer compartilhar como aplicou
+        no seu negócio: bora trocar lá.
+      </p>
+    </div>
+
+    <div class="aula-footer-block">
+      <h4>Próximo nível: Pixel AI Hub</h4>
+      <p>
+        Aplicar agente pra empresa toda — equipe, governance, escala?
+        <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=material&utm_campaign=v1" target="_blank" rel="noopener">Pixel AI Hub</a>:
+        segundo cérebro corporativo, comunidade de empreendedores, +50 skills enterprise,
+        encontros mensais ao vivo. Vagas mensais limitadas.
+      </p>
+    </div>
+
+    <div class="aula-footer-credit">
+      Mini-Curso OpenClaw 2026 · Material complementar à gravação · Atualizações conforme kit evolui<br>
+      <a href="https://aihub.pixeleducacao.com.br?utm_source=curso-openclaw&utm_medium=footer-credit" target="_blank" rel="noopener">Bruno Okamoto · Pixel Educação</a>
+    </div>
+
+  </footer>
+
+</div>
+
+</body>
+</html>

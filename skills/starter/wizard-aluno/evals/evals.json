@@ -1,0 +1,192 @@
+{
+  "skill": "wizard-aluno",
+  "version": "1.0",
+  "description": "4 cenários cobrindo: criação do zero, USER já preenchido, cidade ambígua, aluno relutante em dar nome real",
+  "scenarios": [
+    {
+      "id": "criacao-do-zero",
+      "name": "Caminho feliz",
+      "description": "Aluno chega ao passo 2 sem USER.md, faz entrevista, cria.",
+      "setup": {
+        "workspace_state": "sem USER.md",
+        "memory_flags": {
+          "aluno_configured": false,
+          "agente_configured": true,
+          "onboarding_current_step": 2
+        }
+      },
+      "interaction_flow": [
+        {
+          "user": "[despachado pela onboarding-checklist]",
+          "expected_agent_behavior": [
+            "checa USER.md (não existe)",
+            "narra promessa (3min, 1 arquivo, 4 perguntas)",
+            "pergunta nome"
+          ]
+        },
+        {
+          "user": "Carlos Eduardo Silva. Pode me chamar de Carlos.",
+          "expected_agent_behavior": [
+            "salva nome_completo + como_chamar",
+            "pergunta cidade"
+          ]
+        },
+        {
+          "user": "Curitiba, Brasil",
+          "expected_agent_behavior": [
+            "infere timezone=America/Sao_Paulo",
+            "salva cidade + timezone",
+            "pergunta o que faz"
+          ]
+        },
+        {
+          "user": "tenho uma padaria pequena, 8 funcionários",
+          "expected_agent_behavior": [
+            "salva o_que_faz",
+            "pergunta tom"
+          ]
+        },
+        {
+          "user": "casual, direto, sem formalidade",
+          "expected_agent_behavior": [
+            "salva tom",
+            "mostra resumo, pede confirmação"
+          ]
+        },
+        {
+          "user": "vai",
+          "expected_agent_behavior": [
+            "Princípio 1 (sem backup, não existia)",
+            "cria USER.md com placeholders substituídos",
+            "confirma criação",
+            "roda pergunta-âncora"
+          ]
+        },
+        {
+          "user": "USER.md no workspace, sim automático",
+          "expected_agent_behavior": [
+            "valida resposta",
+            "menciona Aula 5 + grupo",
+            "marca aluno_configured=true",
+            "salva nome_aluno=Carlos em MEMORY",
+            "atualiza onboarding_current_step=3",
+            "devolve controle"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "USER.md criado e preenchido",
+        "aluno_configured=true",
+        "nome_aluno=Carlos em MEMORY",
+        "onboarding_current_step=3"
+      ]
+    },
+    {
+      "id": "user-ja-existe-detecta",
+      "name": "USER.md já preenchido",
+      "description": "Aluno fez antes ou seguiu B1 antes do kit. Wizard detecta e pula.",
+      "setup": {
+        "workspace_state": "USER.md preenchido com nome real",
+        "memory_flags": {}
+      },
+      "interaction_flow": [
+        {
+          "user": "[despachado pela onboarding-checklist]",
+          "expected_agent_behavior": [
+            "lê USER.md, detecta nome preenchido",
+            "narra '✓ Detectei seu USER.md já preenchido (nome: {extraído})'",
+            "NÃO faz entrevista",
+            "vai direto pra pergunta-âncora",
+            "marca aluno_configured=true"
+          ],
+          "must_not": [
+            "fazer entrevista",
+            "sobrescrever USER.md",
+            "duplicar info no MEMORY"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "wizard rodou em <30s",
+        "0 arquivos modificados",
+        "aluno_configured=true sem entrevista"
+      ]
+    },
+    {
+      "id": "cidade-ambigua",
+      "name": "Aluno mandou cidade ambígua",
+      "description": "Belo Horizonte (Brasil) ou Belo Horizonte (Espírito Santo / EUA?). Wizard pergunta antes de inferir.",
+      "setup": {
+        "workspace_state": "limpo",
+        "memory_flags": {}
+      },
+      "interaction_flow": [
+        {
+          "user": "[entrevista, no momento da cidade]",
+          "expected_agent_behavior": ["pergunta cidade"]
+        },
+        {
+          "user": "Belo Horizonte",
+          "expected_agent_behavior": [
+            "detecta ambiguidade (BH-Brasil vs BH-USA)",
+            "pergunta qual: 'Belo Horizonte do Brasil (MG) ou outro?'",
+            "NÃO assume Brasil silenciosamente"
+          ],
+          "must_not": [
+            "inferir timezone sem confirmar"
+          ]
+        },
+        {
+          "user": "Brasil, Minas Gerais",
+          "expected_agent_behavior": [
+            "salva cidade=Belo Horizonte/MG, timezone=America/Sao_Paulo",
+            "segue pra próxima pergunta"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "cidade ambígua foi confirmada antes de salvar",
+        "timezone correto inferido (UTC-3)"
+      ]
+    },
+    {
+      "id": "aluno-relutante-nome-real",
+      "name": "Aluno não quer dar nome real (privacidade)",
+      "description": "Aluno preocupado com privacidade quer usar apelido/pseudônimo. Wizard respeita sem fricção.",
+      "setup": {
+        "workspace_state": "limpo",
+        "memory_flags": {}
+      },
+      "interaction_flow": [
+        {
+          "user": "[despachado, no momento da pergunta de nome]",
+          "expected_agent_behavior": ["pergunta nome completo + como chamar"]
+        },
+        {
+          "user": "prefiro não dar meu nome real, pode me chamar de Lobo",
+          "expected_agent_behavior": [
+            "aceita sem fricção (Princípio 7 — em dúvida, perguntar; aluno foi claro)",
+            "salva como_chamar=Lobo",
+            "explica que USER.md fica só no workspace dele (privacidade preservada)",
+            "deixa nome_completo vazio ou usa 'Lobo' também",
+            "segue pra próxima pergunta normalmente"
+          ],
+          "must_not": [
+            "insistir em nome real",
+            "dar lição de moral sobre privacidade",
+            "marcar como caso problemático"
+          ]
+        },
+        {
+          "user": "Curitiba, Brasil",
+          "expected_agent_behavior": ["fluxo normal, infere timezone, segue"]
+        }
+      ],
+      "success_criteria": [
+        "como_chamar=Lobo respeitado",
+        "aluno_configured=true sem nome real",
+        "explicação sobre privacidade do workspace foi dada"
+      ]
+    }
+  ]
+}

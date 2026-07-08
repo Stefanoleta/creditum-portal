@@ -1,0 +1,245 @@
+{
+  "skill": "onboarding-checklist",
+  "version": "1.0",
+  "description": "4 cenários de teste end-to-end pra validar fluxos críticos da skill mestre",
+  "scenarios": [
+    {
+      "id": "linear-novo",
+      "name": "Aluno linear (caminho feliz)",
+      "description": "Aluno novo, workspace vazio, faz tudo na ordem sem pular nem cancelar. Caso mais comum.",
+      "setup": {
+        "workspace_state": "vazio",
+        "memory_flags": {},
+        "canal": "telegram"
+      },
+      "interaction_flow": [
+        {
+          "user": "oi",
+          "expected_agent_behavior": [
+            "executa fase zero de detecção (workspace vazio = Cenário A)",
+            "verifica canal = Telegram (ok, sem aviso)",
+            "apresenta manifesto curto (carrega de manifesto-abertura.md)",
+            "marca kit_intro_done=true em MEMORY.md",
+            "renderiza checklist completa com ETA total ~37min",
+            "termina perguntando 'Bora começar pelo passo 0?'"
+          ],
+          "must_not": [
+            "começar wizard sem confirmação do aluno",
+            "pular o manifesto",
+            "renderizar checklist sem ETA total"
+          ]
+        },
+        {
+          "user": "começar",
+          "expected_agent_behavior": [
+            "despacha wizard-whisper-quick (passo 0)"
+          ]
+        },
+        {
+          "user": "[completou wizard-whisper-quick com sucesso]",
+          "expected_agent_behavior": [
+            "marca whisper_configured=true",
+            "roda pergunta-âncora do passo 0 (smoke test áudio)",
+            "renderiza checklist com [x] no passo 0",
+            "pergunta 'Bora pro passo 1?'"
+          ]
+        },
+        {
+          "user": "vai",
+          "expected_agent_behavior": [
+            "despacha wizard-agente (passo 1)"
+          ]
+        },
+        {
+          "user": "[completa todos os passos 1-6 em sequência similar]",
+          "expected_agent_behavior": [
+            "ao final do passo 6, renderiza checklist COMPLETA com 🎉",
+            "oferece 4 próximos passos opcionais",
+            "marca first_win_completed=true e onboarding_complete=true em MEMORY.md"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "kit_intro_done=true",
+        "todas as flags de passo (whisper_configured, agente_configured, ..., first_win_completed) = true",
+        "MEMORY.md tem registro de cada decisão tomada",
+        "aluno respondeu ao menos 1 pergunta-âncora",
+        "tempo total na faixa de 30-50min (margem aceitável)"
+      ]
+    },
+    {
+      "id": "aluno-pula-passos",
+      "name": "Aluno pula passo com dependência",
+      "description": "Aluno pula passo 3 (autonomia) e tenta seguir pro 4 (workspace). Agente deve avisar sobre fricção.",
+      "setup": {
+        "workspace_state": "passos 0, 1, 2 completos",
+        "memory_flags": {
+          "kit_intro_done": true,
+          "whisper_configured": true,
+          "agente_configured": true,
+          "aluno_configured": true,
+          "onboarding_current_step": 3
+        },
+        "canal": "telegram"
+      },
+      "interaction_flow": [
+        {
+          "user": "pulo",
+          "expected_agent_behavior": [
+            "marca passo 3 como skipped em MEMORY.md (NÃO done)",
+            "renderiza checklist com [→] no passo 3",
+            "consulta dependencias.md → passo 4 depende de 3",
+            "aviso: 'Antes de seguir, aviso: o passo 4 depende do passo 3...'",
+            "oferece 2 opções: voltar pro 3 ou seguir com fricção"
+          ],
+          "must_not": [
+            "pular silencioso sem avisar sobre dependência",
+            "marcar como done em vez de skipped"
+          ]
+        },
+        {
+          "user": "seguir mesmo",
+          "expected_agent_behavior": [
+            "despacha wizard-workspace (passo 4)",
+            "wizard-workspace, ao executar, vai pedir aprovação a cada criação de pasta/arquivo (efeito de não ter exec-policy yolo)"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "passo 3 marcado como skipped, não done",
+        "aluno foi informado da fricção antes de aceitar",
+        "decisão de pular foi registrada em MEMORY.md"
+      ]
+    },
+    {
+      "id": "cancela-volta",
+      "name": "Aluno cancela e volta dias depois",
+      "description": "Aluno cancela no passo 2, volta 2 dias depois, retoma corretamente.",
+      "setup": {
+        "workspace_state": "passos 0 e 1 completos, passo 2 em progresso",
+        "memory_flags": {
+          "kit_intro_done": true,
+          "whisper_configured": true,
+          "agente_configured": true,
+          "onboarding_current_step": 2
+        },
+        "canal": "telegram"
+      },
+      "interaction_flow": [
+        {
+          "user": "deixa quieto, depois eu volto",
+          "expected_agent_behavior": [
+            "salva onboarding_paused_at_step=2 em MEMORY.md",
+            "NÃO marca onboarding_dismissed=true",
+            "mensagem de despedida: 'Beleza, parei aqui. Você fez até o passo 1...'",
+            "informa comandos pra reativar ('reativa jornada') ou apagar de vez ('nunca mais')"
+          ]
+        },
+        {
+          "user": "[2 dias depois] reativa jornada",
+          "expected_agent_behavior": [
+            "lê onboarding_paused_at_step=2 de MEMORY.md",
+            "renderiza checklist com [x] nos passos 0 e 1, [⏸️] no passo 2",
+            "mensagem: 'Bem-vindo de volta. Você parou no passo 2.'",
+            "pergunta: 'Continuar daí ou prefere recapitular o que já fizemos?'"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "estado de pausa preservado entre sessões",
+        "checklist visual mostra histórico correto ao retomar",
+        "aluno consegue continuar exatamente do ponto onde parou"
+      ]
+    },
+    {
+      "id": "workspace-populado",
+      "name": "Aluno antigo (workspace populado)",
+      "description": "Aluno antigo do curso v1 baixou Kit Novos por engano. Agente deve recusar e entregar prompt agentic de upgrade.",
+      "setup": {
+        "workspace_state": "populado",
+        "files_present": [
+          "USER.md (preenchido, edit há 60 dias)",
+          "IDENTITY.md (preenchido)",
+          "AGENTS.md (preenchido)",
+          "MEMORY.md (47 entradas)",
+          "skills/operacional/captura-ideias/ (skill existente)",
+          "skills/conteudo/post-linkedin/ (skill customizada)"
+        ],
+        "memory_flags": {},
+        "canal": "telegram"
+      },
+      "interaction_flow": [
+        {
+          "user": "oi",
+          "expected_agent_behavior": [
+            "executa fase zero de detecção (workspace populado = Cenário B)",
+            "NÃO apresenta manifesto",
+            "NÃO renderiza checklist normal",
+            "mensagem: 'Detectei que você já tem um OpenClaw configurado:'",
+            "lista o que detectou (USER.md preenchido, X skills, etc)",
+            "explica por que kit não pode rodar aqui",
+            "oferece prompt agentic de upgrade",
+            "pergunta: 'Quer o prompt?'"
+          ],
+          "must_not": [
+            "tentar instalar kit por cima do trabalho existente",
+            "apresentar checklist normal",
+            "ignorar arquivos pré-existentes"
+          ]
+        },
+        {
+          "user": "sim",
+          "expected_agent_behavior": [
+            "carrega prompt-upgrade-para-aluno-antigo.md",
+            "substitui placeholders (paths reais)",
+            "entrega texto inteiro do prompt em mensagem",
+            "marca onboarding_dismissed=true (essa instalação não vai usar checklist)",
+            "aviso final: 'Cola tudo de uma vez no seu agente atual'"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "trabalho do aluno antigo preservado intacto",
+        "prompt agentic entregue completo",
+        "onboarding_dismissed=true em MEMORY.md (essa instalação não usa checklist)",
+        "instruções claras pro aluno colar prompt no agente dele"
+      ]
+    }
+  ],
+  "edge_cases_to_handle": [
+    {
+      "case": "Aluno tenta rodar em WhatsApp",
+      "expected": "Aviso de degradação + 2 opções: aceitar perda ou pausar pra mudar pra Telegram"
+    },
+    {
+      "case": "Aluno manda 'sobre' antes de começar jornada",
+      "expected": "Carrega sobre-o-kit.md, ao final pergunta 'Bora começar pelo passo 0 ou pular pro 1?'"
+    },
+    {
+      "case": "Aluno manda 'ajuda' (não previsto explicitamente)",
+      "expected": "Lista os 5 comandos canônicos + link grupo + email Bruno"
+    },
+    {
+      "case": "Aluno pula TODOS os passos exceto o 6 (vitória)",
+      "expected": "Aviso forte sobre experiência degradada, oferece 'volta no 1' como recomendação, espera confirmação 'vai mesmo'"
+    },
+    {
+      "case": "Wizard filho falha no meio (ex: erro de permissão)",
+      "expected": "PARA imediatamente, reporta estado, oferece 3 opções: debug / verificar manual / pular"
+    },
+    {
+      "case": "MEMORY.md corrompido ao reativar",
+      "expected": "Mostra checklist desmarcada, pergunta 'Bora começar de novo?'"
+    }
+  ],
+  "anti_patterns_to_test": [
+    "Não pode renderizar checklist sem ETA total na primeira vez",
+    "Não pode marcar passo como done sem o wizard correspondente ter completado",
+    "Não pode pular fase zero de detecção de ambiente",
+    "Não pode despachar wizard sem confirmação explícita do aluno",
+    "Não pode esquecer de rodar pergunta-âncora ao final de cada passo",
+    "Não pode escrever em arquivo raiz sem backup + confirmação dupla",
+    "Não pode ignorar comando 'cancelar' (sempre obedece)",
+    "Não pode tratar workspace populado como vazio"
+  ]
+}
