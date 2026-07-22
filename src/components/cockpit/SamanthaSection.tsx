@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react"
 import { Bot } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { SamanthaMetrics, TabulacaoMetric } from "@/lib/qick/metrics"
+import type { QickNormalizedCall } from "@/lib/qick/client"
+import { computeSamanthaMetrics } from "@/lib/qick/metrics"
 
 const REFRESH_MS = 5 * 60 * 1000
 
@@ -155,79 +157,70 @@ export const SamanthaSection = () => {
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+function AgentPanel({
+  name,
+  color,
+  data,
+  loading,
+  error,
+}: {
+  name: string
+  color: "violet" | "teal"
+  data: SamanthaMetrics | null
+  loading: boolean
+  error: string | null
+}) {
+  const border = color === "violet" ? "border-t-violet-400" : "border-t-teal-400"
+  const badge  = color === "violet" ? "bg-violet-100 text-violet-700" : "bg-teal-100 text-teal-700"
+
+  return (
+    <div className={cn("flex-1 bg-white rounded-lg shadow-sm px-5 py-4 flex flex-col gap-3 border-t-2", border)}>
+      <div className="flex items-center gap-2 shrink-0">
+        <span className={cn("text-[11px] font-bold tracking-wide uppercase rounded-full px-2.5 py-1", badge)}>
+          <Bot className="inline w-3 h-3 mr-1" />{name}
+        </span>
+        {data?.fonte === "mock" && (
+          <span className="text-[9px] font-semibold text-violet-400 bg-violet-50 border border-violet-200 rounded-full px-1.5 py-0.5 uppercase tracking-wide">SIMULADO</span>
+        )}
+      </div>
+
+      {loading ? (
+        <LoadingSkeleton />
+      ) : error ? (
+        <div className="text-[11px] text-red-400 py-4 text-center">{error}</div>
+      ) : !data || data.totalLigacoes === 0 ? (
+        <div className="text-[11px] text-gray-400 py-4 text-center">Nenhuma ligação hoje.</div>
+      ) : (
+        <>
+          <div className="grid grid-cols-5 gap-2">
+            <IAMetricCard label="Ligações" value={data.totalLigacoes.toString()} sublabel={`${data.ligacoesAtendidas} atendidas`} />
+            <IAMetricCard label="Contato" value={`${data.taxaContato}%`} sublabel="atendidas / total" />
+            <IAMetricCard label="Conversão" value={`${data.taxaConversao}%`} sublabel="demonstrou intenção" highlight />
+            <IAMetricCard label="TMA" value={data.tma} sublabel="tempo médio" />
+            <IAMetricCard label="Não Perturbe" value={`${data.taxaNaoPerturbe}%`} sublabel="não contatar" />
+          </div>
+          <TabulacoesBar tabulacoes={data.tabulacoes} />
+        </>
+      )}
+    </div>
+  )
+}
+
   return (
     <div className="col-span-12 bg-white rounded-lg shadow-sm px-6 py-5 flex flex-col gap-4">
-      {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 bg-violet-100 text-violet-700 rounded-full px-2.5 py-1">
             <Bot className="w-3.5 h-3.5" />
-            <span className="text-[11px] font-bold tracking-wide uppercase">I.A</span>
+            <span className="text-[11px] font-bold tracking-wide uppercase">SDR I.A</span>
           </div>
-          <h2 className="text-sm font-semibold text-gray-600">
-            SDR I.A — ANA + Maria
-            <span className="text-violet-400 ml-1">✦</span>
-          </h2>
-        </div>
-        <div className="flex items-center gap-2">
-          {data?.fonte === "mock" && (
-            <span className="text-[9px] font-semibold text-violet-400 bg-violet-50 border border-violet-200 rounded-full px-1.5 py-0.5 uppercase tracking-wide">
-              SIMULADO
-            </span>
-          )}
-          <span className="text-[10px] text-gray-300">
-            {data?.fonte === "live" ? "qick.ai · ao vivo" : "dados simulados"}
-          </span>
+          <h2 className="text-sm font-semibold text-gray-600">ANA + Maria — análise separada</h2>
         </div>
       </div>
-
-      {/* Content */}
-      {loading ? (
-        <LoadingSkeleton />
-      ) : error ? (
-        <div className="flex items-center justify-center py-6 text-[11px] text-red-400">
-          {error}
-        </div>
-      ) : data && data.totalLigacoes === 0 ? (
-        <div className="flex items-center justify-center py-6 text-[11px] text-gray-400">
-          Nenhuma ligação registrada hoje.
-        </div>
-      ) : data ? (
-        <>
-          {/* Metric cards */}
-          <div className="grid grid-cols-5 gap-3">
-            <IAMetricCard
-              label="Ligações Hoje"
-              value={data.totalLigacoes.toString()}
-              sublabel={`${data.ligacoesAtendidas} atendidas`}
-            />
-            <IAMetricCard
-              label="Taxa de Contato"
-              value={`${data.taxaContato}%`}
-              sublabel="atendidas / total"
-            />
-            <IAMetricCard
-              label="Taxa de Conversão"
-              value={`${data.taxaConversao}%`}
-              sublabel="demonstrou intenção"
-              highlight
-            />
-            <IAMetricCard
-              label="TMA"
-              value={data.tma}
-              sublabel="tempo médio atendidas"
-            />
-            <IAMetricCard
-              label="Não Perturbe"
-              value={`${data.taxaNaoPerturbe}%`}
-              sublabel="pediu para não contatar"
-            />
-          </div>
-
-          {/* Tabulações */}
-          <TabulacoesBar tabulacoes={data.tabulacoes} />
-        </>
-      ) : null}
+      <div className="flex gap-4">
+        <AgentPanel name="ANA"   color="violet" data={dataANA}   loading={loading} error={error} />
+        <AgentPanel name="Maria" color="teal"   data={dataMaria} loading={loading} error={error} />
+      </div>
     </div>
   )
 }
