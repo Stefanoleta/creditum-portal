@@ -17,6 +17,8 @@ export interface QickNormalizedCall {
   tabbingName: string
   createdAt: string      // ISO UTC
   durationSeconds: number | null
+  agentId: string | null
+  agentName: string | null
 }
 
 export type QickFonte = "live" | "mock"
@@ -77,7 +79,11 @@ function normalizeCall(raw: Record<string, unknown>): QickNormalizedCall {
     : typeof raw.durationSeconds === "number"   ? raw.durationSeconds
     : null
 
-  return { id, nome, phone, unidade, tabbingCode, tabbingName, createdAt, durationSeconds: duration }
+  const agentRaw = raw.agent as Record<string,unknown> | null | undefined
+  const agentId = typeof raw.agentId === 'string' ? raw.agentId
+    : typeof agentRaw?.id === 'string' ? String(agentRaw.id) : null
+  const agentName = typeof agentRaw?.name === 'string' ? agentRaw.name : null
+  return { id, nome, phone, unidade, tabbingCode, tabbingName, createdAt, durationSeconds: duration, agentId, agentName }
 }
 
 function normalizeMockCall(raw: QickRawCall): QickNormalizedCall {
@@ -90,6 +96,8 @@ function normalizeMockCall(raw: QickRawCall): QickNormalizedCall {
     tabbingName: raw.tabbing.name,
     createdAt: raw.created_at,
     durationSeconds: raw.duration,
+    agentId: null,
+    agentName: null,
   }
 }
 

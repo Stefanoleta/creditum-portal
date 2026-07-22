@@ -39,7 +39,7 @@ function maskPhone(phone: string): string {
 // Only agents in this list are shown in rankings and live calls.
 // Hardcoded default — does NOT depend on ARGUS_SDR_ALLOWLIST env var.
 // Add names in UPPERCASE exactly as Argus returns them.
-const DEFAULT_VENDAS = ["RAFAELLA GOMES", "MARCELA SAMPAIO"]
+const DEFAULT_VENDAS = ["RHENAN SILVA GONÇALVES"]
 
 export function getVendasAllowlist(envOverride?: string): string[] {
   if (envOverride) {
