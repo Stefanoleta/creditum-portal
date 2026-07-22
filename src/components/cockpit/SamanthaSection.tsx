@@ -165,7 +165,7 @@ export const SamanthaSection = () => {
             <span className="text-[11px] font-bold tracking-wide uppercase">I.A</span>
           </div>
           <h2 className="text-sm font-semibold text-gray-600">
-            SDR I.A — SAMANTHA
+            SDR I.A — ANA + Maria
             <span className="text-violet-400 ml-1">✦</span>
           </h2>
         </div>
