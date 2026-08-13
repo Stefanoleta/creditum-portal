@@ -48,50 +48,101 @@ export function parseBRLToCents(raw: unknown): number | null {
   return negative ? -cents : cents
 }
 
-// Resolve a ambiguidade de separador decimal vs. milhar.
+// Teto de sanidade: acima disso o valor não é dinheiro deste negócio, é célula
+// corrompida. R$ 10 trilhões — cinco ordens de grandeza acima do FIDC de R$ 90M.
+// Não é regra de negócio, é guarda de qualidade de dado.
+export const CENTS_SANITY_CEILING = 1_000_000_000_000_000
+
+// GRAMÁTICA, não heurística.
 //
-//   tem "," → a última "," é o decimal; todo "." é milhar
-//   só "."  → se o grupo após o último "." tiver exatamente 3 dígitos, todo "."
-//             é milhar ("1.234" = 1234); senão o último "." é decimal
-//             ("578.7" = 578,70)
+// A versão anterior desmontava a string por posição de separador e removia o
+// resto. Isso aceitava lixo como valor plausível: "1,2,3" virava R$ 12,30 e
+// "12.34,56" virava R$ 1.234,56 — exatamente o tipo de dado inventado que este
+// módulo existe para impedir. Uma célula corrompida entrava no ticket e no
+// volume contratado sem nunca acionar DATA_NOT_AVAILABLE.
+//
+// Agora a string inteira precisa casar com uma forma monetária conhecida:
+//
+//   1234           inteiro puro
+//   1234,56        decimal BR (1 ou 2 casas)
+//   1.234.567      milhar BR, grupos de exatamente 3
+//   1.234.567,89   milhar BR + decimal
+//   578.7          decimal com ponto (export/CSV) — 1 ou 2 casas
+//
+// "1.234" é ambíguo entre milhar e decimal. Resolvido pela regra: exatamente 3
+// dígitos após o ponto = milhar. Por isso GROUPED é testado antes de DOT_DEC, e
+// DOT_DEC aceita só 1–2 casas — as duas formas não se sobrepõem.
+
+const PLAIN = /^\d+$/
+const DEC_COMMA = /^(\d+),(\d{1,2})$/
+const GROUPED = /^\d{1,3}(?:\.\d{3})+$/
+const GROUPED_DEC = /^(\d{1,3}(?:\.\d{3})+),(\d{1,2})$/
+const DEC_DOT = /^(\d+)\.(\d{1,2})$/
+
 function toCents(s: string): number | null {
-  const hasComma = s.includes(",")
-  const hasDot = s.includes(".")
+  let intText: string
+  let fracText: string
 
-  let intPart: string
-  let fracPart: string
-
-  if (hasComma) {
-    const lastComma = s.lastIndexOf(",")
-    intPart = s.slice(0, lastComma).replace(/[.,]/g, "")
-    fracPart = s.slice(lastComma + 1).replace(/[.,]/g, "")
-  } else if (hasDot) {
-    const lastDot = s.lastIndexOf(".")
-    const tail = s.slice(lastDot + 1)
-    if (tail.length === 3) {
-      // separador de milhar em todos os pontos
-      intPart = s.replace(/\./g, "")
-      fracPart = ""
-    } else {
-      intPart = s.slice(0, lastDot).replace(/\./g, "")
-      fracPart = tail
-    }
+  let m: RegExpMatchArray | null
+  if (PLAIN.test(s)) {
+    intText = s
+    fracText = ""
+  } else if ((m = s.match(GROUPED_DEC))) {
+    intText = m[1].replace(/\./g, "")
+    fracText = m[2]
+  } else if (GROUPED.test(s)) {
+    intText = s.replace(/\./g, "")
+    fracText = ""
+  } else if ((m = s.match(DEC_COMMA))) {
+    intText = m[1]
+    fracText = m[2]
+  } else if ((m = s.match(DEC_DOT))) {
+    intText = m[1]
+    fracText = m[2]
   } else {
-    intPart = s
-    fracPart = ""
+    // Não casou com nenhuma forma conhecida. Não tento salvar.
+    return null
   }
 
-  if (!/^\d*$/.test(intPart) || !/^\d*$/.test(fracPart)) return null
-  if (intPart === "" && fracPart === "") return null
-
-  // Mais de 2 casas decimais não é dinheiro — não arredondo em silêncio
-  if (fracPart.length > 2) return null
-
-  const reais = intPart === "" ? 0 : Number(intPart)
-  const centavos = fracPart === "" ? 0 : Number(fracPart.padEnd(2, "0"))
+  const reais = Number(intText)
+  const centavos = fracText === "" ? 0 : Number(fracText.padEnd(2, "0"))
   if (!Number.isSafeInteger(reais)) return null
 
-  return reais * 100 + centavos
+  const cents = reais * 100 + centavos
+  // A guarda tem que ser no RESULTADO: `reais` pode ser safe e `reais * 100`
+  // não ser.
+  if (!Number.isSafeInteger(cents)) return null
+  if (cents > CENTS_SANITY_CEILING) return null
+
+  return cents
+}
+
+/**
+ * Multiplica um valor em centavos por um fator inteiro (ex. ticket = repasse ×
+ * parcelas), devolvendo null se o resultado sair da faixa exata.
+ *
+ * Existe para que nenhum cálculo financeiro produza silenciosamente um número
+ * que o JSON já não representa com fidelidade.
+ */
+export function multiplyCents(cents: number | null, factor: number | null): number | null {
+  if (cents === null || factor === null) return null
+  if (!Number.isSafeInteger(cents) || !Number.isInteger(factor)) return null
+  const result = cents * factor
+  if (!Number.isSafeInteger(result)) return null
+  if (Math.abs(result) > CENTS_SANITY_CEILING) return null
+  return result
+}
+
+/** Soma centavos com a mesma garantia de exatidão. */
+export function sumCents(values: readonly number[]): number | null {
+  let total = 0
+  for (const v of values) {
+    if (!Number.isSafeInteger(v)) return null
+    total += v
+    if (!Number.isSafeInteger(total)) return null
+  }
+  if (Math.abs(total) > CENTS_SANITY_CEILING) return null
+  return total
 }
 
 export function formatCentsBRL(cents: number | null): string | null {
@@ -263,38 +314,62 @@ export function toComparableKey(raw: unknown): string | null {
 // LGPD: este módulo NÃO persiste CPF. Ele normaliza para que `hashCpf` possa
 // gerar o HMAC. O dígito nunca vai para banco nem para log.
 
+/**
+ * Força do CPF como sinal de identidade para deduplicação.
+ *
+ * `exact`     — 11 dígitos vieram da fonte e o verificador confere
+ * `recovered` — 10 dígitos + um zero reconstruído, verificador confere
+ * `none`      — não utilizável como identidade
+ */
+export type CpfConfidence = "exact" | "recovered" | "none"
+
 export interface CpfResult {
-  /** 11 dígitos quando confiável; null quando não recuperável */
+  /** 11 dígitos quando utilizável; null caso contrário */
   digits: string | null
   /** dígitos verificadores conferem */
   valid: boolean
-  /** precisou recuperar zero(s) à esquerda */
+  /** precisou reconstruir o zero à esquerda */
   recovered: boolean
+  /** peso do sinal na deduplicação — `recovered` NUNCA vale o mesmo que `exact` */
+  confidence: CpfConfidence
 }
 
-const CPF_INVALID: CpfResult = { digits: null, valid: false, recovered: false }
+const CPF_NONE: CpfResult = { digits: null, valid: false, recovered: false, confidence: "none" }
 
 export function parseCpf(raw: unknown): CpfResult {
-  if (raw === null || raw === undefined) return CPF_INVALID
+  if (raw === null || raw === undefined) return CPF_NONE
   const digits = String(raw).replace(/\D/g, "")
-  if (!digits) return CPF_INVALID
+  if (!digits) return CPF_NONE
 
   if (digits.length === 11) {
-    return { digits, valid: isValidCpf(digits), recovered: false }
+    const valid = isValidCpf(digits)
+    return { digits, valid, recovered: false, confidence: valid ? "exact" : "none" }
   }
 
-  // 8–10 dígitos: possível perda de zero à esquerda pelo Sheets.
-  // Só aceito se o padding produzir um CPF válido — senão não é recuperação,
-  // é invenção.
-  if (digits.length >= 8 && digits.length < 11) {
-    const padded = digits.padStart(11, "0")
+  // SOMENTE 10 dígitos. A versão anterior aceitava 8–10, e a medição mostrou por
+  // que isso era errado:
+  //
+  //   entrada aleatória de 10 dígitos aceita pelo mod-11: ~1,0%
+  //   entrada aleatória de  9 dígitos aceita pelo mod-11: ~1,0%
+  //   entrada aleatória de  8 dígitos aceita pelo mod-11: ~1,0%
+  //
+  // A taxa de aceite falso é constante, mas a probabilidade a priori de a
+  // recuperação ser legítima despenca: ~10% dos CPFs começam com um zero, ~1%
+  // com dois, ~0,1% com três. Em 9 e 8 dígitos o filtro passa a admitir mais
+  // lixo do que dado real, então esse caminho foi removido.
+  //
+  // Mesmo em 10 dígitos o verificador prova CONSISTÊNCIA, não IDENTIDADE: resta
+  // ~1% de falso positivo. Por isso o resultado sai como `recovered` e a
+  // deduplicação é obrigada a exigir um segundo sinal independente antes de
+  // fundir registros — fundir duas pessoas é pior do que não fundir nenhuma.
+  if (digits.length === 10) {
+    const padded = "0" + digits
     if (isValidCpf(padded)) {
-      return { digits: padded, valid: true, recovered: true }
+      return { digits: padded, valid: true, recovered: true, confidence: "recovered" }
     }
-    return { digits: null, valid: false, recovered: false }
   }
 
-  return CPF_INVALID
+  return CPF_NONE
 }
 
 export function isValidCpf(digits: string): boolean {

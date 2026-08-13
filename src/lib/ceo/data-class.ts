@@ -1,12 +1,13 @@
 // Álgebra de métricas — a regra absoluta de confiabilidade (§3), no tipo.
 //
-// O objetivo deste módulo é tornar IMPOSSÍVEL, por tipagem, os quatro erros que
+// O objetivo deste módulo é tornar IMPOSSÍVEL, por tipagem, os erros que
 // destroem a confiança num painel executivo:
 //
 //   1. ausência virar zero
 //   2. dado observado se misturar com previsão
 //   3. divisão por denominador vazio produzir 0% em vez de "não sei"
 //   4. um número aparecer sem que se possa dizer de onde veio
+//   5. um agregado incompleto se passar por completo
 //
 // Nada aqui é opinião de UI: é o contrato que a UI é obrigada a respeitar,
 // porque `Metric<T>` não expõe `.value` sem antes passar por `ok`.
@@ -29,25 +30,40 @@ export type Gap =
   | "DATA_CONFLICT"
   | "LOW_CONFIDENCE"
   | "EMPTY_DENOMINATOR"
+  /** cobertura insuficiente para publicar o agregado */
+  | "INSUFFICIENT_COVERAGE"
   /** a regra de negócio oficial ainda não foi definida pelo CEO (§46) */
   | "BUSINESS_RULE_PENDING"
 
 export interface Provenance {
-  /** fórmula legível, para o CEO poder auditar o número */
-  formula?: string
   /** fontes que sustentam o valor (ex. ["google_sheets:sales"]) */
   sources?: string[]
   /** momento da coleta do dado que originou a métrica (ISO) */
   asOf?: string
-  /** 0..1 — obrigatório em `inferred`, opcional no resto */
-  confidence?: number
 }
 
-export interface MetricOk<T> extends Provenance {
-  ok: true
-  dataClass: DataClass
-  value: T
-}
+// As invariantes de cada classe vivem no DISCRIMINANTE, não em comentário nem
+// só na validação do construtor.
+//
+// Motivo: `Metric<T>` é um tipo estrutural que vai atravessar banco, API e UI.
+// Se a obrigatoriedade existisse apenas dentro dos construtores, um objeto
+// desserializado de JSON — a fronteira mais provável — poderia declarar-se
+// `inferred` sem confiança ou `calculated` sem fórmula e continuar sendo um
+// `Metric` válido para o compilador. Aí a garantia que este módulo promete
+// deixaria de existir exatamente onde ela é mais necessária.
+//
+//   observed   → nada além de procedência
+//   calculated → fórmula OBRIGATÓRIA (é a promessa de auditabilidade)
+//   inferred   → confiança OBRIGATÓRIA (senão é indistinguível de observação)
+//   forecast   → confiança OBRIGATÓRIA e payload é sempre uma faixa
+
+export type MetricOk<T> = Provenance &
+  { ok: true; value: T } & (
+    | { dataClass: "observed"; formula?: string; confidence?: number }
+    | { dataClass: "calculated"; formula: string; confidence?: number }
+    | { dataClass: "inferred"; confidence: number; formula?: string }
+    | { dataClass: "forecast"; confidence: number; formula?: string }
+  )
 
 export interface MetricGap extends Provenance {
   ok: false
@@ -55,6 +71,8 @@ export interface MetricGap extends Provenance {
   gap: Gap
   /** explicação curta, exibível ao CEO */
   detail?: string
+  formula?: string
+  confidence?: number
 }
 
 export type Metric<T> = MetricOk<T> | MetricGap
@@ -66,26 +84,52 @@ export function observed<T>(value: T, p: Provenance = {}): Metric<T> {
 }
 
 export function calculated<T>(value: T, formula: string, p: Provenance = {}): Metric<T> {
-  return { ok: true, dataClass: "calculated", value, ...p, formula }
+  return { ok: true, dataClass: "calculated", value, formula, ...p }
 }
 
 export function inferred<T>(value: T, confidence: number, p: Provenance = {}): Metric<T> {
-  // Inferência sem confiança declarada é indistinguível de observação — e é
-  // exatamente essa confusão que o §3 proíbe.
-  if (!(confidence >= 0 && confidence <= 1)) {
+  if (!isConfidence(confidence)) {
     return gap<T>("LOW_CONFIDENCE", "inferred", "confiança inválida", p)
   }
-  return { ok: true, dataClass: "inferred", value, ...p, confidence }
+  return { ok: true, dataClass: "inferred", value, confidence, ...p }
 }
 
-// Os construtores de lacuna são genéricos com default `never` — e isso não é
-// cosmético de tipagem.
+function isConfidence(c: number): boolean {
+  return Number.isFinite(c) && c >= 0 && c <= 1
+}
+
+/**
+ * Constrói um `MetricOk` a partir de uma classe calculada em tempo de execução,
+ * respeitando as obrigatoriedades de cada variante.
+ */
+function makeOk<T>(
+  dataClass: DataClass,
+  value: T,
+  formula: string | undefined,
+  p: Provenance,
+  confidence?: number,
+): MetricOk<T> {
+  // Fórmula vazia é pior que ausente: promete auditabilidade que não existe.
+  const f = formula && formula.length > 0 ? { formula } : {}
+  switch (dataClass) {
+    case "calculated":
+      return { ok: true, dataClass: "calculated", value, formula: formula ?? "", ...p }
+    case "inferred":
+      return { ok: true, dataClass: "inferred", value, confidence: confidence ?? 0, ...f, ...p }
+    case "forecast":
+      return { ok: true, dataClass: "forecast", value, confidence: confidence ?? 0, ...f, ...p }
+    default:
+      return { ok: true, dataClass: "observed", value, ...f, ...p }
+  }
+}
+
+// Os construtores de lacuna são genéricos com default `never`.
 //
-// Uma lacuna não carrega valor algum, então `never` é literalmente o tipo certo:
-// não existe valor desse tipo. Na prática isso resolve um problema real: sem o
-// parâmetro, `combine2(observed(14), notAvailable(...), fn)` não tem de onde
-// inferir o segundo tipo e degrada os dois argumentos de `fn` para `unknown` —
-// silenciosamente desligando a checagem exatamente onde ela mais importa.
+// Uma lacuna não carrega valor algum, então `never` é literalmente o tipo certo.
+// Na prática isso resolve um problema real: sem o parâmetro,
+// `combine2(observed(14), notAvailable(...), fn)` não tem de onde inferir o
+// segundo tipo e degrada os argumentos de `fn` para `unknown` — desligando em
+// silêncio a checagem exatamente onde ela mais importa.
 
 export function gap<T = never>(
   reason: Gap,
@@ -113,9 +157,6 @@ export function rulePending<T = never>(detail: string, p: Provenance = {}): Metr
 }
 
 // ─── Previsão (§29) ───────────────────────────────────────────────────────────
-//
-// Previsão nunca é um número solto. Sempre faixa, confiança e versão do modelo,
-// para que o CEO nunca confunda projeção com fato.
 
 export interface Forecast {
   expectedValue: number
@@ -129,10 +170,10 @@ export function forecast(f: Forecast, p: Provenance = {}): Metric<Forecast> {
   if (f.lowerBound > f.expectedValue || f.upperBound < f.expectedValue) {
     return gap<Forecast>("LOW_CONFIDENCE", "forecast", "faixa incoerente com o valor esperado", p)
   }
-  if (!(f.confidence >= 0 && f.confidence <= 1)) {
+  if (!isConfidence(f.confidence)) {
     return gap<Forecast>("LOW_CONFIDENCE", "forecast", "confiança inválida", p)
   }
-  return { ok: true, dataClass: "forecast", value: f, ...p, confidence: f.confidence }
+  return { ok: true, dataClass: "forecast", value: f, confidence: f.confidence, ...p }
 }
 
 // ─── Operações ────────────────────────────────────────────────────────────────
@@ -141,10 +182,10 @@ export function isOk<T>(m: Metric<T>): m is MetricOk<T> {
   return m.ok
 }
 
-/** Transforma o valor mantendo procedência. Lacuna passa intacta. */
+/** Transforma o valor mantendo procedência e classe. Lacuna passa intacta. */
 export function mapMetric<A, B>(m: Metric<A>, fn: (a: A) => B): Metric<B> {
   if (!m.ok) return m
-  return { ...m, value: fn(m.value) }
+  return makeOk<B>(m.dataClass, fn(m.value), m.formula ?? "", pick(m), m.confidence)
 }
 
 /**
@@ -155,80 +196,8 @@ export function unwrapOr<T>(m: Metric<T>, fallback: T): T {
   return m.ok ? m.value : fallback
 }
 
-// Regra comum a todos os combinadores: se QUALQUER entrada é lacuna, o resultado
-// é lacuna — a lacuna se propaga em vez de virar zero no meio de uma soma.
-//
-// A classe do resultado é a mais "fraca" das entradas:
-// observed < calculated < inferred < forecast. Um total que depende de uma
-// previsão é uma previsão, não um fato.
-//
-// A API é deliberadamente explícita (combine2/combine3/combineAll) em vez de um
-// combinador genérico sobre tuplas: a inferência de tupla sobre um tipo união
-// como `Metric<T>` falha em silêncio e degrada os valores para `unknown`, o que
-// derrota justamente a garantia que este módulo existe para dar (§52 —
-// confiabilidade acima de elegância).
-
-function resolve<R>(
-  inputs: readonly Metric<unknown>[],
-  compute: () => R,
-  formula: string,
-): Metric<R> {
-  const firstGap = inputs.find((m): m is MetricGap => !m.ok)
-  if (firstGap) {
-    return gap<R>(firstGap.gap, weakestClass(inputs), firstGap.detail, {
-      formula,
-      sources: mergeSources(inputs),
-      asOf: oldestAsOf(inputs),
-    })
-  }
-  return {
-    ok: true,
-    dataClass: weakestClass(inputs),
-    value: compute(),
-    formula,
-    sources: mergeSources(inputs),
-    asOf: oldestAsOf(inputs),
-  }
-}
-
-export function combine2<A, B, R>(
-  a: Metric<A>,
-  b: Metric<B>,
-  fn: (a: A, b: B) => R,
-  formula: string,
-): Metric<R> {
-  return resolve([a, b], () => fn((a as MetricOk<A>).value, (b as MetricOk<B>).value), formula)
-}
-
-export function combine3<A, B, C, R>(
-  a: Metric<A>,
-  b: Metric<B>,
-  c: Metric<C>,
-  fn: (a: A, b: B, c: C) => R,
-  formula: string,
-): Metric<R> {
-  return resolve(
-    [a, b, c],
-    () => fn((a as MetricOk<A>).value, (b as MetricOk<B>).value, (c as MetricOk<C>).value),
-    formula,
-  )
-}
-
-/** Combina uma lista homogênea — o caso de somas e agregações. */
-export function combineAll<T, R>(
-  metrics: readonly Metric<T>[],
-  fn: (values: readonly T[]) => R,
-  formula: string,
-): Metric<R> {
-  return resolve(metrics, () => fn(metrics.map((m) => (m as MetricOk<T>).value)), formula)
-}
-
-/** Soma métricas numéricas. Uma lacuna em qualquer parcela invalida o total. */
-export function sumMetrics(metrics: readonly Metric<number>[], formula: string): Metric<number> {
-  if (metrics.length === 0) {
-    return gap<number>("DATA_NOT_AVAILABLE", "calculated", "nada para somar", { formula })
-  }
-  return combineAll(metrics, (values) => values.reduce((a, b) => a + b, 0), formula)
+function pick(m: Metric<unknown>): Provenance {
+  return { sources: m.sources, asOf: m.asOf }
 }
 
 const CLASS_RANK: Record<DataClass, number> = {
@@ -258,6 +227,183 @@ function oldestAsOf(list: readonly Metric<unknown>[]): string | undefined {
   return stamps.length ? stamps.sort()[0] : undefined
 }
 
+function minConfidence(list: readonly Metric<unknown>[]): number | undefined {
+  const cs = list.map((m) => m.confidence).filter((c): c is number => typeof c === "number")
+  return cs.length ? Math.min(...cs) : undefined
+}
+
+// ─── Combinação estrita (aridade fixa) ────────────────────────────────────────
+//
+// Para combinações de poucos operandos conhecidos — conversão, ticket, razão —
+// a regra estrita é a correta: se falta um operando, o resultado não existe.
+// Não há "meia conversão".
+//
+// A API é deliberadamente explícita (combine2/combine3) em vez de um combinador
+// sobre tuplas: a inferência de tupla sobre um tipo união como `Metric<T>` falha
+// em silêncio e degrada os valores para `unknown` (§52 — confiabilidade acima de
+// elegância).
+
+function resolveStrict<R>(
+  inputs: readonly Metric<unknown>[],
+  compute: () => R,
+  formula: string,
+): Metric<R> {
+  const firstGap = inputs.find((m): m is MetricGap => !m.ok)
+  const prov: Provenance = { sources: mergeSources(inputs), asOf: oldestAsOf(inputs) }
+  if (firstGap) {
+    return gap<R>(firstGap.gap, resultClass(inputs), firstGap.detail, prov)
+  }
+  return makeOk<R>(resultClass(inputs), compute(), formula, prov, minConfidence(inputs))
+}
+
+/**
+ * Combinar dois valores observados produz um valor CALCULADO, não observado —
+ * ninguém observou a soma. Classes mais fracas (inferido, previsão) prevalecem.
+ */
+function resultClass(inputs: readonly Metric<unknown>[]): DataClass {
+  const base = weakestClass(inputs)
+  return base === "observed" ? "calculated" : base
+}
+
+export function combine2<A, B, R>(
+  a: Metric<A>,
+  b: Metric<B>,
+  fn: (a: A, b: B) => R,
+  formula: string,
+): Metric<R> {
+  return resolveStrict([a, b], () => fn((a as MetricOk<A>).value, (b as MetricOk<B>).value), formula)
+}
+
+export function combine3<A, B, C, R>(
+  a: Metric<A>,
+  b: Metric<B>,
+  c: Metric<C>,
+  fn: (a: A, b: B, c: C) => R,
+  formula: string,
+): Metric<R> {
+  return resolveStrict(
+    [a, b, c],
+    () => fn((a as MetricOk<A>).value, (b as MetricOk<B>).value, (c as MetricOk<C>).value),
+    formula,
+  )
+}
+
+// ─── Agregação sobre listas: cobertura explícita ──────────────────────────────
+//
+// Aqui a regra estrita seria destrutiva. Somar o volume contratado de 20
+// unidades e descartar TUDO porque uma não reportou confunde completude com
+// validade: apaga 19 valores bons e deixa o painel de 30 segundos sem número
+// justamente durante uma degradação parcial — que é quando o CEO mais precisa
+// olhar.
+//
+// A saída correta não é "R$ 0" nem "não sei". É:
+//
+//   R$ 82.920,57 · 19 de 20 unidades · 1 sem reporte
+//
+// Por isso a agregação devolve o subtotal conhecido JUNTO com a cobertura e a
+// lista completa de lacunas — não só a primeira. Cada métrica declara em
+// METRICS.md se publica parcial e com que cobertura mínima.
+
+export interface Coverage {
+  /** quantas contribuições entraram no valor */
+  observed: number
+  /** quantas eram esperadas */
+  expected: number
+  /** TODAS as lacunas encontradas, não apenas a primeira */
+  missing: readonly MetricGap[]
+}
+
+export interface Aggregated<T> {
+  value: T
+  coverage: Coverage
+}
+
+export type AggregationPolicy =
+  /** falta qualquer contribuição → o agregado não existe */
+  | { mode: "strict" }
+  /** publica o subtotal conhecido, exigindo cobertura mínima (0..1) */
+  | { mode: "partial"; minCoverage?: number }
+
+export const STRICT: AggregationPolicy = { mode: "strict" }
+export const PARTIAL: AggregationPolicy = { mode: "partial" }
+
+export function aggregate<T, R>(
+  metrics: readonly Metric<T>[],
+  fn: (values: readonly T[]) => R,
+  formula: string,
+  policy: AggregationPolicy = STRICT,
+): Metric<Aggregated<R>> {
+  const prov: Provenance = { sources: mergeSources(metrics), asOf: oldestAsOf(metrics) }
+  const missing = metrics.filter((m): m is MetricGap => !m.ok)
+  const present = metrics.filter(isOk)
+  const expected = metrics.length
+
+  if (expected === 0) {
+    return gap<Aggregated<R>>("EMPTY_DENOMINATOR", "calculated", "nada para agregar", prov)
+  }
+
+  if (policy.mode === "strict" && missing.length > 0) {
+    const detalhe =
+      missing.length === 1
+        ? missing[0].detail
+        : `${missing.length} de ${expected} contribuições indisponíveis`
+    return gap<Aggregated<R>>(missing[0].gap, resultClass(metrics), detalhe, prov)
+  }
+
+  if (present.length === 0) {
+    return gap<Aggregated<R>>(
+      missing[0]?.gap ?? "DATA_NOT_AVAILABLE",
+      resultClass(metrics),
+      `nenhuma das ${expected} contribuições está disponível`,
+      prov,
+    )
+  }
+
+  if (policy.mode === "partial" && policy.minCoverage !== undefined) {
+    const cobertura = present.length / expected
+    if (cobertura < policy.minCoverage) {
+      return gap<Aggregated<R>>(
+        "INSUFFICIENT_COVERAGE",
+        resultClass(metrics),
+        `cobertura ${present.length}/${expected} abaixo do mínimo exigido`,
+        prov,
+      )
+    }
+  }
+
+  const value: Aggregated<R> = {
+    value: fn(present.map((m) => m.value)),
+    coverage: { observed: present.length, expected, missing },
+  }
+  return makeOk<Aggregated<R>>(
+    resultClass(metrics),
+    value,
+    formula,
+    prov,
+    minConfidence(metrics),
+  )
+}
+
+/** true quando o agregado não cobre tudo que era esperado. */
+export function isPartial(c: Coverage): boolean {
+  return c.observed < c.expected
+}
+
+/**
+ * Soma métricas numéricas.
+ *
+ * O padrão é `STRICT`: um total de dinheiro incompleto apresentado como total
+ * engana. Use `PARTIAL` explicitamente onde o subtotal com cobertura for mais
+ * útil que a ausência — e rotule a cobertura na UI.
+ */
+export function sumMetrics(
+  metrics: readonly Metric<number>[],
+  formula: string,
+  policy: AggregationPolicy = STRICT,
+): Metric<Aggregated<number>> {
+  return aggregate(metrics, (values) => values.reduce((a, b) => a + b, 0), formula, policy)
+}
+
 // ─── Razão / conversão ────────────────────────────────────────────────────────
 //
 // O erro mais perigoso de um painel comercial: mostrar 0% de conversão porque
@@ -275,32 +421,36 @@ export function ratio(
   denominator: Metric<number>,
   formula: string,
 ): Metric<Ratio> {
-  if (!numerator.ok) return { ...numerator, formula }
-  if (!denominator.ok) return { ...denominator, formula }
+  const prov: Provenance = {
+    sources: mergeSources([numerator, denominator]),
+    asOf: oldestAsOf([numerator, denominator]),
+  }
+
+  if (!numerator.ok) return gap<Ratio>(numerator.gap, numerator.dataClass, numerator.detail, prov)
+  if (!denominator.ok) {
+    return gap<Ratio>(denominator.gap, denominator.dataClass, denominator.detail, prov)
+  }
 
   if (denominator.value === 0) {
     return gap<Ratio>(
       "EMPTY_DENOMINATOR",
       "calculated",
       "denominador zero — sem base para calcular a razão",
-      { formula, sources: mergeSources([numerator, denominator]) },
+      prov,
     )
   }
 
-  return {
-    ok: true,
-    dataClass: weakestClass([numerator, denominator]) === "observed"
-      ? "calculated"
-      : weakestClass([numerator, denominator]),
-    value: {
+  return makeOk<Ratio>(
+    resultClass([numerator, denominator]),
+    {
       bps: Math.round((numerator.value / denominator.value) * 10_000),
       numerator: numerator.value,
       denominator: denominator.value,
     },
     formula,
-    sources: mergeSources([numerator, denominator]),
-    asOf: oldestAsOf([numerator, denominator]),
-  }
+    prov,
+    minConfidence([numerator, denominator]),
+  )
 }
 
 /**
@@ -312,8 +462,17 @@ export function ratio(
  */
 export function meanCents(values: readonly number[], formula: string): Metric<number> {
   if (values.length === 0) {
-    return gap<number>("EMPTY_DENOMINATOR", "calculated", "nenhum valor para média", { formula })
+    return gap<number>("EMPTY_DENOMINATOR", "calculated", "nenhum valor para média", {})
   }
-  const total = values.reduce((a, b) => a + b, 0)
+  let total = 0
+  for (const v of values) {
+    if (!Number.isSafeInteger(v)) {
+      return gap<number>("DATA_NOT_AVAILABLE", "calculated", "valor fora da faixa exata", {})
+    }
+    total += v
+    if (!Number.isSafeInteger(total)) {
+      return gap<number>("DATA_NOT_AVAILABLE", "calculated", "soma fora da faixa exata", {})
+    }
+  }
   return calculated(Math.round(total / values.length), formula)
 }

@@ -13,6 +13,10 @@ import {
   combine2,
   combine3,
   sumMetrics,
+  aggregate,
+  isPartial,
+  PARTIAL,
+  STRICT,
   ratio,
   meanCents,
   type Metric,
@@ -97,9 +101,11 @@ describe("combinadores propagam lacuna em vez de somar zero", () => {
     expect(total.ok && total.value).toBe(14)
   })
 
-  it("sumMetrics soma uma lista e invalida o total se faltar uma parcela", () => {
+  it("sumMetrics é estrito por padrão: total de dinheiro incompleto não é total", () => {
     const ok = sumMetrics([observed(8), observed(6)], "SUM(vendas)")
-    expect(ok.ok && ok.value).toBe(14)
+    expect(ok.ok && ok.value.value).toBe(14)
+    expect(ok.ok && ok.value.coverage.observed).toBe(2)
+    expect(ok.ok && ok.value.coverage.expected).toBe(2)
 
     const furado = sumMetrics([observed(8), notAvailable("unidade sem reporte")], "SUM(vendas)")
     expect(furado.ok).toBe(false)
@@ -257,5 +263,113 @@ describe("o tipo impede ler value sem checar ok", () => {
     } else {
       throw new Error("deveria estar ok")
     }
+  })
+})
+
+// ─── Regressões da revisão adversarial (Codex, 2026-08-13) ────────────────────
+
+describe("agregação parcial: uma lacuna não pode apagar os dados bons", () => {
+  const unidades = [
+    observed(815160),
+    observed(901110),
+    notAvailable("Grau Meriti sem reporte hoje"),
+    observed(785140),
+  ]
+
+  it("estrito devolve lacuna, informando quantas contribuições faltaram", () => {
+    const total = sumMetrics(unidades, "SUM(volume_contratado)", STRICT)
+    expect(total.ok).toBe(false)
+    expect(!total.ok && total.gap).toBe("DATA_NOT_AVAILABLE")
+  })
+
+  it("parcial devolve o subtotal conhecido COM a cobertura", () => {
+    const total = sumMetrics(unidades, "SUM(volume_contratado)", PARTIAL)
+    expect(total.ok).toBe(true)
+    if (!total.ok) throw new Error("deveria publicar parcial")
+
+    expect(total.value.value).toBe(2_501_410) // os 3 valores disponíveis
+    expect(total.value.coverage.observed).toBe(3)
+    expect(total.value.coverage.expected).toBe(4)
+    expect(isPartial(total.value.coverage)).toBe(true)
+  })
+
+  it("parcial lista TODAS as lacunas, não apenas a primeira", () => {
+    const total = sumMetrics(
+      [
+        observed(100),
+        notAvailable("unidade A sem reporte"),
+        notAvailable("unidade B sem reporte"),
+      ],
+      "SUM(x)",
+      PARTIAL,
+    )
+    expect(total.ok && total.value.coverage.missing.length).toBe(2)
+    expect(total.ok && total.value.coverage.missing.map((g) => g.detail)).toEqual([
+      "unidade A sem reporte",
+      "unidade B sem reporte",
+    ])
+  })
+
+  it("cobertura zero nunca vira zero — continua lacuna", () => {
+    const total = sumMetrics([notAvailable("a"), notAvailable("b")], "SUM(x)", PARTIAL)
+    expect(total.ok).toBe(false)
+  })
+
+  it("respeita cobertura mínima exigida", () => {
+    const metricas = [observed(1), notAvailable("x"), notAvailable("y"), notAvailable("z")]
+    const frouxo = sumMetrics(metricas, "SUM(x)", { mode: "partial" })
+    expect(frouxo.ok).toBe(true) // 25% de cobertura, sem mínimo
+
+    const exigente = sumMetrics(metricas, "SUM(x)", { mode: "partial", minCoverage: 0.8 })
+    expect(exigente.ok).toBe(false)
+    expect(!exigente.ok && exigente.gap).toBe("INSUFFICIENT_COVERAGE")
+  })
+
+  it("agregado completo se declara completo", () => {
+    const total = sumMetrics([observed(1), observed(2)], "SUM(x)", PARTIAL)
+    expect(total.ok && isPartial(total.value.coverage)).toBe(false)
+  })
+
+  it("aggregate funciona para qualquer redução, não só soma", () => {
+    const maior = aggregate(
+      [observed(10), observed(42), notAvailable("sem dado")],
+      (vs) => Math.max(...vs),
+      "MAX(x)",
+      PARTIAL,
+    )
+    expect(maior.ok && maior.value.value).toBe(42)
+    expect(maior.ok && maior.value.coverage.observed).toBe(2)
+  })
+})
+
+describe("invariantes de classe vivem no tipo, não só no construtor", () => {
+  it("calculated carrega fórmula", () => {
+    const m = calculated(14, "sales / leads")
+    expect(m.ok && m.formula).toBe("sales / leads")
+  })
+
+  it("inferred carrega confiança", () => {
+    const m = inferred("COMMERCIAL", 0.82)
+    expect(m.ok && m.confidence).toBe(0.82)
+  })
+
+  it("forecast carrega confiança", () => {
+    const f = forecast({
+      expectedValue: 492,
+      lowerBound: 475,
+      upperBound: 509,
+      confidence: 0.8,
+      modelVersion: "v1",
+    })
+    expect(f.ok && f.confidence).toBe(0.8)
+  })
+
+  it("mapMetric preserva classe, fórmula e confiança", () => {
+    const m = inferred(10, 0.5, { sources: ["sheets"] })
+    const dobro = mapMetric(m, (x) => x * 2)
+    expect(dobro.ok && dobro.value).toBe(20)
+    expect(dobro.dataClass).toBe("inferred")
+    expect(dobro.confidence).toBe(0.5)
+    expect(dobro.sources).toEqual(["sheets"])
   })
 })

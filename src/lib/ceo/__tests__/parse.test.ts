@@ -10,6 +10,9 @@ import {
   toComparableKey,
   parseCpf,
   isValidCpf,
+  multiplyCents,
+  sumCents,
+  CENTS_SANITY_CEILING,
 } from "../parse"
 
 // ─── Dinheiro ─────────────────────────────────────────────────────────────────
@@ -105,15 +108,15 @@ describe("ticket = valor_repasse × parcelas_grau (D5)", () => {
       const n = parseCount(parcelas)
       expect(repasseCents).not.toBeNull()
       expect(n).not.toBeNull()
-      expect(formatCentsBRL(repasseCents! * n!)).toBe(ticket)
+      expect(formatCentsBRL(multiplyCents(repasseCents, n))).toBe(ticket)
     },
   )
 
   it("soma das 14 vendas é exata em centavos", () => {
-    const total = VENDAS_AGOSTO_2026.reduce(
-      (acc, v) => acc + parseBRLToCents(v.repasse)! * parseCount(v.parcelas)!,
-      0,
+    const tickets = VENDAS_AGOSTO_2026.map(
+      (v) => multiplyCents(parseBRLToCents(v.repasse), parseCount(v.parcelas))!,
     )
+    const total = sumCents(tickets)
     expect(total).toBe(8_292_057)
     expect(formatCentsBRL(total)).toBe("R$ 82.920,57")
   })
@@ -308,13 +311,15 @@ describe("parseCpf", () => {
     expect(r.recovered).toBe(false)
   })
 
-  it("recupera 10 dígitos quando o padding produz CPF válido", () => {
-    // "1234567890" → "01234567890" é CPF matematicamente válido, então a
-    // recuperação é legítima e o registro serve como sinal forte de dedup.
+  it("recupera 10 dígitos, mas como sinal FRACO — nunca equivalente a exato", () => {
+    // "1234567890" → "01234567890" passa no mod-11. Isso prova consistência,
+    // não identidade: resta ~1% de falso positivo. Por isso sai como
+    // "recovered", e a dedup precisa de um segundo sinal antes de fundir.
     const r = parseCpf("1234567890")
     expect(r.digits).toBe("01234567890")
     expect(r.valid).toBe(true)
     expect(r.recovered).toBe(true)
+    expect(r.confidence).toBe("recovered")
   })
 
   it("devolve null para ausência e lixo", () => {
@@ -346,5 +351,103 @@ describe("isValidCpf", () => {
     expect(isValidCpf("123")).toBe(false)
     expect(isValidCpf("123456789012")).toBe(false)
     expect(isValidCpf("1234567890a")).toBe(false)
+  })
+})
+
+// ─── Regressões da revisão adversarial (Codex, 2026-08-13) ────────────────────
+
+describe("gramática monetária: sintaxe malformada vira null, não valor plausível", () => {
+  // Antes da correção, 9 destas 11 entradas viravam um valor de aparência
+  // legítima — "1,2,3" chegava a R$ 12,30 — e alimentavam ticket e volume
+  // contratado sem nunca acionar DATA_NOT_AVAILABLE.
+  const malformados = [
+    "1,2,3",
+    "12.34,56",
+    "1.2.345,00",
+    "1..234,00",
+    "1,,2",
+    ",",
+    ".",
+    "1.234.5",
+    "1,234,56",
+    "1.23.456,78",
+    "12345.678,90",
+  ]
+
+  it.each(malformados)("recusa %s", (entrada) => {
+    expect(parseBRLToCents(entrada)).toBeNull()
+  })
+
+  it("continua aceitando as formas monetárias legítimas", () => {
+    expect(parseBRLToCents("1234")).toBe(123400)
+    expect(parseBRLToCents("1234,56")).toBe(123456)
+    expect(parseBRLToCents("1.234.567")).toBe(123456700)
+    expect(parseBRLToCents("1.234.567,89")).toBe(123456789)
+    expect(parseBRLToCents("12.345,67")).toBe(1234567)
+    expect(parseBRLToCents("12345.67")).toBe(1234567) // export US sem agrupamento
+    expect(parseBRLToCents("578.7")).toBe(57870)
+  })
+})
+
+describe("exatidão: nenhum cálculo escapa da faixa segura", () => {
+  it("recusa valor que estoura o inteiro seguro", () => {
+    expect(parseBRLToCents("99999999999999,99")).toBeNull()
+    expect(parseBRLToCents("999999999999999999,99")).toBeNull()
+  })
+
+  it("recusa valor acima do teto de sanidade do domínio", () => {
+    const acimaDoTeto = String(CENTS_SANITY_CEILING / 100 + 1)
+    expect(parseBRLToCents(acimaDoTeto)).toBeNull()
+  })
+
+  it("multiplyCents devolve null em vez de número inexato", () => {
+    expect(multiplyCents(40758, 20)).toBe(815160)
+    expect(multiplyCents(42176, 17)).toBe(716992)
+    expect(multiplyCents(Number.MAX_SAFE_INTEGER, 2)).toBeNull()
+    expect(multiplyCents(null, 20)).toBeNull()
+    expect(multiplyCents(40758, null)).toBeNull()
+    expect(multiplyCents(40758, 1.5)).toBeNull()
+  })
+
+  it("sumCents devolve null em vez de total inexato", () => {
+    expect(sumCents([815160, 901110])).toBe(1716270)
+    expect(sumCents([])).toBe(0)
+    expect(sumCents([Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER])).toBeNull()
+  })
+})
+
+describe("CPF: recuperação restrita a 10 dígitos e rebaixada a sinal fraco", () => {
+  it("CPF exato de 11 dígitos é sinal forte", () => {
+    expect(parseCpf("13300596700").confidence).toBe("exact")
+    expect(parseCpf("034.642.844-09").confidence).toBe("exact")
+  })
+
+  it.each([["2175980723"], ["3446230254"], ["8773155403"]])(
+    "%s recupera, mas como sinal fraco",
+    (raw) => {
+      const r = parseCpf(raw)
+      expect(r.valid).toBe(true)
+      expect(r.confidence).toBe("recovered")
+    },
+  )
+
+  // "00123456797" é um CPF matematicamente VÁLIDO que começa com dois zeros.
+  // Se o Sheets comesse os dois, sobraria "123456797" (9 dígitos) e o padding
+  // reconstruiria um CPF válido. Ainda assim rejeitamos: a taxa de aceite falso
+  // é ~1% em qualquer comprimento, mas só ~1% dos CPFs começam com "00" — logo
+  // em 9 dígitos o filtro admitiria mais lixo do que dado real.
+  it("rejeita 9 dígitos mesmo quando o padding produziria CPF válido", () => {
+    expect(isValidCpf("00123456797")).toBe(true)
+    const r = parseCpf("123456797")
+    expect(r.digits).toBeNull()
+    expect(r.confidence).toBe("none")
+  })
+
+  it("rejeita 8 dígitos", () => {
+    expect(parseCpf("12345678").confidence).toBe("none")
+  })
+
+  it("CPF de 11 dígitos com verificador errado não é identidade", () => {
+    expect(parseCpf("12345678900").confidence).toBe("none")
   })
 })
