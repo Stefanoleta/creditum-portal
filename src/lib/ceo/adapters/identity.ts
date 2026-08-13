@@ -42,31 +42,45 @@ export interface RecordIdentity {
 }
 
 /**
- * `locator` deve identificar a POSIÇÃO da linha na fonte (ex. `{ row: 42 }`).
+ * `dataset` é o ARQUIVO/CONJUNTO específico de onde a linha veio — para o
+ * Google Sheets, o id da planilha.
  *
- * O número da linha é instável — inserir uma linha no meio desloca todas as
- * seguintes — e por isso ele não serve como identidade da linha ao longo do
- * tempo. Mas ele é indispensável para separar duas ocorrências distintas
- * DENTRO de um mesmo snapshot, que é o que o `sourceRecordId` precisa fazer.
+ * É parâmetro obrigatório e separado do `source` porque a operação troca de
+ * planilha todo mês (`Vendas - Agosto`, `Vendas - Setembro`, …). Sem ele, a
+ * linha 42 de agosto e a linha 42 de setembro produzem o MESMO `rowKey`, e o
+ * sistema conclui que a linha de setembro é uma edição da de agosto — passando
+ * a versionar uma por cima da outra e destruindo as duas.
  *
- * O pareamento entre snapshots usa `contentHash`, não o localizador.
+ * `locator` identifica a POSIÇÃO dentro daquele arquivo (ex. `{ row: 42 }`).
+ * A posição é instável entre coletas — inserir uma linha no meio desloca todas
+ * as seguintes — então ela não é identidade ao longo do tempo. Mas é
+ * indispensável para separar duas ocorrências distintas DENTRO de um mesmo
+ * snapshot, que é o que o `sourceRecordId` precisa fazer.
+ *
+ * O pareamento entre snapshots usa `contentHash`, nunca o localizador.
  */
 export function computeIdentity(
   source: string,
+  dataset: string,
   tabKey: string,
   locator: Record<string, unknown>,
   values: Record<string, unknown>,
 ): RecordIdentity {
+  if (!dataset) {
+    throw new Error("computeIdentity: `dataset` é obrigatório — sem ele, linhas de arquivos diferentes colidem")
+  }
+
   const content = stableContent(values)
   const contentHash = sha256(content)
 
   const locatorKeys = Object.keys(locator).sort()
   const locatorText = locatorKeys.map((k) => `${k}=${String(locator[k])}`).join("|")
+  const scope = `${source}|${dataset}|${tabKey}`
 
   return {
     contentHash,
-    rowKey: sha256(`${source}|${tabKey}|${locatorText}`),
-    sourceRecordId: sha256(`${source}|${tabKey}|${locatorText}|${contentHash}`),
+    rowKey: sha256(`${scope}|${locatorText}`),
+    sourceRecordId: sha256(`${scope}|${locatorText}|${contentHash}`),
   }
 }
 
