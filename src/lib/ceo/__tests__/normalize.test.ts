@@ -6,6 +6,7 @@ import {
   similarity,
   resolveSchool,
   isBlankRow,
+  classifyRow,
   SUGGESTION_THRESHOLD,
 } from "../normalize"
 
@@ -194,5 +195,42 @@ describe("linha-fantasma é rejeitada, não ingerida", () => {
     // um lead real pode ter 0 parcelas em aberto
     expect(isBlankRow({ studentName: "Fulano", contact: "11999999999", installmentsTotal: "0" }))
       .toBe(false)
+  })
+})
+
+// ─── Regressão da 3ª revisão adversarial ──────────────────────────────────────
+
+describe("linha sem identidade mas COM dinheiro nunca é descartada", () => {
+  it("linha de gabarito continua sendo fantasma", () => {
+    expect(classifyRow({ studentName: "", contact: "", installmentsTotal: "0" })).toBe("blank")
+    expect(classifyRow({})).toBe("blank")
+  })
+
+  it("sem identidade e COM parcelas vira conflito, não descarte", () => {
+    // Antes isso entrava em rows_skipped e o sinal financeiro sumia sem rastro,
+    // indistinguível das ~55 linhas vazias legítimas da planilha.
+    expect(classifyRow({ studentName: "", contact: "", installmentsTotal: "20" })).toBe(
+      "orphan_material",
+    )
+  })
+
+  it("sem identidade e COM valor vira conflito", () => {
+    expect(classifyRow({ installmentValue: "R$ 578,70" })).toBe("orphan_material")
+    expect(classifyRow({ transferValue: "R$ 407,58" })).toBe("orphan_material")
+  })
+
+  it("valor zerado explícito não é dado material", () => {
+    // R$ 0,00 é um fato, mas sozinho não sustenta um registro sem identidade
+    expect(classifyRow({ installmentsTotal: "0" })).toBe("blank")
+  })
+
+  it("com identidade segue para ingestão, com ou sem valor", () => {
+    expect(classifyRow({ studentName: "Fulano" })).toBe("material")
+    expect(classifyRow({ contact: "11999999999", installmentsTotal: "0" })).toBe("material")
+  })
+
+  it("isBlankRow só é verdadeiro para a linha realmente vazia", () => {
+    expect(isBlankRow({ installmentsTotal: "20" })).toBe(false)
+    expect(isBlankRow({ installmentsTotal: "0" })).toBe(true)
   })
 })

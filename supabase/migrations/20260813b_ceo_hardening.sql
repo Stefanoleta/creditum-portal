@@ -1,0 +1,23 @@
+-- Correções da 3a revisão adversarial do Codex. JÁ APLICADA em produção.
+--
+-- Nenhum achado era vazamento ATIVO: `authenticated` nunca recebeu USAGE no
+-- schema `ceo`, então nenhum SELECT passava. Mas as 19 policies `using (true)`
+-- eram armadilha armada — o grant que a Home vai precisar abriria tudo de uma
+-- vez, incluindo source_records.payload, que é a planilha inteira.
+--
+-- 1. ceo.app_users + ceo.is_member() SECURITY DEFINER; as 19 policies
+--    permissivas trocadas por autorização real por identidade.
+-- 2. unique(source_record_id) em sales. O índice anterior cobria só
+--    `opportunity_id is not null` — e justamente as vendas SEM oportunidade
+--    ficavam de fora. Na base real são 6 das 14: existem na aba financeira e
+--    não têm registro no pipeline. Um retry as duplicaria em ticket e ranking.
+-- 3. trigger append-only em source_records: a ingestão roda com service_role e
+--    ignorava RLS, podendo sobrescrever payload ou apagar a trilha de auditoria
+--    que sustenta toda a reconstrução de métrica.
+-- 4. source_record_id passa a exigir o localizador da linha na composição do
+--    hash. Só conteúdo faria duas linhas DISTINTAS de conteúdo idêntico
+--    colidirem — e a duplicata da fonte, que é um DATA_CONFLICT a reportar,
+--    viraria invisível.
+--
+-- Conteúdo idêntico ao aplicado via apply_migration `ceo_schema_hardening`.
+-- Ver docs/decisions/2026-08-13.md (D14).

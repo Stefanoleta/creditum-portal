@@ -16,7 +16,7 @@
 // "Grau Santos" e "Grau Santo Amaro" — cidades diferentes que qualquer
 // similaridade ingênua juntaria.
 
-import { parseText, toComparableKey } from "./parse"
+import { parseText, parseCount, parseBRLToCents, toComparableKey } from "./parse"
 
 // ─── Abreviações ──────────────────────────────────────────────────────────────
 //
@@ -209,18 +209,52 @@ export function resolveSchool(
 // A rejeição é contada em `rows_skipped`: descarte silencioso é invisível na
 // auditoria e indistinguível de um bug de coleta.
 
-export interface BlankRowCheck {
+export interface RowCheck {
   studentName?: unknown
   contact?: unknown
   installmentsTotal?: unknown
+  installmentValue?: unknown
+  transferValue?: unknown
 }
 
-export function isBlankRow(row: BlankRowCheck): boolean {
-  const hasName = parseText(row.studentName) !== null
-  const hasContact = parseText(row.contact) !== null
-  if (hasName || hasContact) return false
+export type RowVerdict =
+  /** tem identidade — segue para ingestão */
+  | "material"
+  /** nem identidade nem conteúdo — linha de gabarito, entra em rows_skipped */
+  | "blank"
+  /** SEM identidade mas COM dado financeiro — nunca descartar, é conflito */
+  | "orphan_material"
 
-  // Sem aluno E sem contato. O total zerado confirma que é linha de gabarito,
-  // mas a ausência dos dois identificadores já basta: não há a quem se referir.
-  return true
+/**
+ * Classifica uma linha da fonte antes da ingestão.
+ *
+ * A versão anterior tratava "sem aluno e sem contato" como fantasma e pronto,
+ * ignorando `installmentsTotal` — que a própria interface recebia e nunca lia.
+ *
+ * O problema disso não é teórico: uma linha com parcelas e valor preenchidos
+ * mas identificação perdida seria contada como `rows_skipped`, ou seja,
+ * descartada como se fosse linha de gabarito. Um sinal FINANCEIRO sumiria sem
+ * deixar rastro, e a auditoria não teria como distinguir isso das ~55 linhas
+ * vazias legítimas da planilha.
+ *
+ * Agora ausência de identidade com presença de dinheiro é `orphan_material`:
+ * o registro bruto é preservado e vira `DATA_CONFLICT` para alguém olhar.
+ */
+export function classifyRow(row: RowCheck): RowVerdict {
+  const hasIdentity =
+    parseText(row.studentName) !== null || parseText(row.contact) !== null
+  if (hasIdentity) return "material"
+
+  const total = parseCount(row.installmentsTotal)
+  const hasMaterialData =
+    (total !== null && total > 0) ||
+    parseBRLToCents(row.installmentValue) !== null ||
+    parseBRLToCents(row.transferValue) !== null
+
+  return hasMaterialData ? "orphan_material" : "blank"
+}
+
+/** Linha de gabarito: sem identidade E sem nenhum dado material. */
+export function isBlankRow(row: RowCheck): boolean {
+  return classifyRow(row) === "blank"
 }
