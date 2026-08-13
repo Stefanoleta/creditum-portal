@@ -118,7 +118,7 @@ function levenshtein(a: string, b: string): number {
  * lugar, e a diferença de estrutura do nome é a evidência disso.
  *
  * Fora esse veto, vale a proximidade de caracteres, que é o que pega erro de
- * digitação (`mogii` → `mogi`).
+ * digitação (`alecrin` → `alecrim`).
  *
  * Uma tentativa anterior usava `min(jaccard, caracteres)`. Era seguro demais:
  * derrubava TODO score a zero sempre que não houvesse palavra em comum, o que
@@ -148,8 +148,11 @@ export function similarity(a: string, b: string): number {
  * Acima disto vira SUGESTÃO para o CEO confirmar. Nunca fusão automática.
  *
  * Calibrado contra as unidades REAIS desta base:
- *   mogi / mogii        0,80  → sugere (erro de digitação)
+ *   alecrim / alecrin   0,86  → sugere (erro de digitação)
  *   limeira / limoeiro  0,75  → não sugere (duas unidades reais e distintas)
+ *
+ * Foi `limeira`/`limoeiro` que fixou o valor: são duas unidades legítimas e
+ * ficam a 0,05 do limiar. Não dá para afrouxar.
  */
 export const SUGGESTION_THRESHOLD = 0.8
 

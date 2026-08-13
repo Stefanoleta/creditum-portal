@@ -102,17 +102,20 @@ describe("veto estrutural do nome", () => {
   })
 
   it("erro de digitação em palavra única continua detectável", () => {
-    expect(similarity("mogi", "mogii")).toBeGreaterThanOrEqual(SUGGESTION_THRESHOLD)
+    expect(similarity("alecrim", "alecrin")).toBeGreaterThanOrEqual(SUGGESTION_THRESHOLD)
   })
 })
 
 describe("resolveSchool: da certeza para a suspeita", () => {
-  const SAO_JOSE = "sao jose do rio preto"
-  const known = new Set([SAO_JOSE, "meriti", "mogi"])
+  // Nomes canônicos confirmados pelo CEO. A planilha escreve as formas curtas.
+  const known = new Set(["sao jose do rio preto", "mogi das cruzes", "meriti", "alecrim"])
 
-  // "Rio Preto" é contração de nome composto, não abreviação derivável por
-  // regra. Só entra por alias que o CEO aprovou.
-  const aliases = new Map([["rio preto", "school-sjrp"]])
+  // Contração de nome composto NÃO é derivável por regra: nenhum algoritmo tira
+  // "Mogi das Cruzes" de "Mogi". Só entra por alias que o CEO aprovou.
+  const aliases = new Map([
+    ["rio preto", "school-sjrp"],
+    ["mogi", "school-mogi"],
+  ])
 
   it("alias aprovado resolve direto", () => {
     const r = resolveSchool("Rio Preto", aliases, known)
@@ -120,16 +123,29 @@ describe("resolveSchool: da certeza para a suspeita", () => {
     expect(r?.schoolId).toBe("school-sjrp")
   })
 
+  it("forma curta da planilha resolve pelo alias do CEO", () => {
+    const r = resolveSchool("Grau Mogi", aliases, known)
+    expect(r?.kind).toBe("alias")
+    expect(r?.schoolId).toBe("school-mogi")
+  })
+
   it("nome canônico resolve sem alias", () => {
     expect(resolveSchool("São José do Rio Preto", aliases, known)?.kind).toBe("canonical")
+    expect(resolveSchool("Mogi das Cruzes", aliases, known)?.kind).toBe("canonical")
     expect(resolveSchool("Grau Meriti", aliases, known)?.kind).toBe("canonical")
   })
 
   it("parecido vira SUGESTÃO, nunca fusão automática", () => {
-    const r = resolveSchool("Grau Mogii", aliases, known) // erro de digitação
+    const r = resolveSchool("Grau Alecrin", aliases, known) // erro de digitação
     expect(r?.kind).toBe("suggestion")
-    expect(r?.candidateKey).toBe("mogi")
+    expect(r?.candidateKey).toBe("alecrim")
     expect(r?.score).toBeGreaterThanOrEqual(SUGGESTION_THRESHOLD)
+  })
+
+  it("contração NÃO é inferida por semelhança — sem alias, vira unidade nova", () => {
+    // "Mogi" contra "mogi das cruzes": 1 palavra vs 3, nenhuma em comum.
+    // O veto estrutural age, e é isso que torna o alias do CEO indispensável.
+    expect(resolveSchool("Grau Mogi", new Map(), known)?.kind).toBe("new")
   })
 
   it("desconhecido vira unidade nova, não fusão com o mais parecido", () => {
