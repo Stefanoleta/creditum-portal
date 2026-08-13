@@ -451,3 +451,46 @@ describe("CPF: recuperação restrita a 10 dígitos e rebaixada a sinal fraco", 
     expect(parseCpf("12345678900").confidence).toBe("none")
   })
 })
+
+// ─── Regressões da revisão adversarial — rodada 2 ─────────────────────────────
+
+describe("sinal monetário: negativo nunca vira positivo", () => {
+  it("reconhece o negativo em qualquer posição do envoltório", () => {
+    expect(parseBRLToCents("-R$ 100,00")).toBe(-10000)
+    // Este era o bug: o sinal depois do "R$" era apagado pela limpeza e o
+    // estorno virava entrada positiva.
+    expect(parseBRLToCents("R$ -100,00")).toBe(-10000)
+    expect(parseBRLToCents("-100,00")).toBe(-10000)
+  })
+
+  it("parênteses significam negativo, mas precisam abrir e fechar", () => {
+    expect(parseBRLToCents("(R$ 100,00)")).toBe(-10000)
+    expect(parseBRLToCents("(100,00)")).toBe(-10000)
+    expect(parseBRLToCents("(R$ 100,00")).toBeNull()
+    expect(parseBRLToCents("R$ 100,00)")).toBeNull()
+  })
+
+  it("recusa envoltório corrompido em vez de limpar e aceitar", () => {
+    expect(parseBRLToCents("$100$")).toBeNull()
+    expect(parseBRLToCents("R$R$ 100,00")).toBeNull()
+    expect(parseBRLToCents("- R$ -100,00")).toBeNull() // sinal duplicado
+    expect(parseBRLToCents("(-R$ 100,00)")).toBeNull() // parêntese + sinal
+    expect(parseBRLToCents("100,00 R$")).toBeNull()
+  })
+})
+
+describe("célula numérica passa pelas mesmas guardas do texto", () => {
+  it("recusa número que produz centavos fora da faixa exata", () => {
+    expect(parseBRLToCents(Number.MAX_SAFE_INTEGER)).toBeNull()
+    expect(parseBRLToCents(1e18)).toBeNull()
+  })
+
+  it("recusa número acima do teto de sanidade", () => {
+    expect(parseBRLToCents(CENTS_SANITY_CEILING / 100 + 1)).toBeNull()
+  })
+
+  it("a mesma quantia é tratada igual como número e como texto", () => {
+    expect(parseBRLToCents(578.7)).toBe(parseBRLToCents("578,70"))
+    expect(parseBRLToCents(1e18)).toBe(parseBRLToCents("1000000000000000000"))
+  })
+})

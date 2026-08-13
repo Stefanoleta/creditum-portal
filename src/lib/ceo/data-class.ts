@@ -12,6 +12,8 @@
 // Nada aqui é opinião de UI: é o contrato que a UI é obrigada a respeitar,
 // porque `Metric<T>` não expõe `.value` sem antes passar por `ok`.
 
+import { sumCents } from "./parse"
+
 // ─── Classificação ────────────────────────────────────────────────────────────
 
 export type DataClass =
@@ -84,7 +86,7 @@ export function observed<T>(value: T, p: Provenance = {}): Metric<T> {
 }
 
 export function calculated<T>(value: T, formula: string, p: Provenance = {}): Metric<T> {
-  return { ok: true, dataClass: "calculated", value, formula, ...p }
+  return makeOk<T>("calculated", value, formula, p)
 }
 
 export function inferred<T>(value: T, confidence: number, p: Provenance = {}): Metric<T> {
@@ -102,18 +104,28 @@ function isConfidence(c: number): boolean {
  * Constrói um `MetricOk` a partir de uma classe calculada em tempo de execução,
  * respeitando as obrigatoriedades de cada variante.
  */
+function hasFormula(f: string | undefined): f is string {
+  return typeof f === "string" && f.trim().length > 0
+}
+
 function makeOk<T>(
   dataClass: DataClass,
   value: T,
   formula: string | undefined,
   p: Provenance,
   confidence?: number,
-): MetricOk<T> {
-  // Fórmula vazia é pior que ausente: promete auditabilidade que não existe.
-  const f = formula && formula.length > 0 ? { formula } : {}
+): Metric<T> {
+  // Fórmula vazia é PIOR que ausente: promete auditabilidade que não existe.
+  // O tipo exige `string` para `calculated`, e `""` é uma string — então a
+  // invariante precisa ser imposta aqui também. Um número calculado que não
+  // sabe dizer como foi calculado não é um número confiável: vira lacuna.
+  const f = hasFormula(formula) ? { formula } : {}
   switch (dataClass) {
     case "calculated":
-      return { ok: true, dataClass: "calculated", value, formula: formula ?? "", ...p }
+      if (!hasFormula(formula)) {
+        return gap<T>("DATA_NOT_AVAILABLE", "calculated", "métrica calculada sem fórmula", p)
+      }
+      return { ok: true, dataClass: "calculated", value, formula, ...p }
     case "inferred":
       return { ok: true, dataClass: "inferred", value, confidence: confidence ?? 0, ...f, ...p }
     case "forecast":
@@ -313,9 +325,22 @@ export interface Coverage {
   missing: readonly MetricGap[]
 }
 
-export interface Aggregated<T> {
-  value: T
-  coverage: Coverage
+/**
+ * Resultado de uma agregação.
+ *
+ * É união discriminada de propósito, e o ramo parcial NÃO chama seu conteúdo de
+ * `value`. Antes, parcialidade vivia só dentro de `coverage` e o consumidor
+ * podia ler `.value` sem nunca perguntar se estava completo — publicando
+ * subtotal como total. Agora ler o número de um agregado possivelmente
+ * incompleto é erro de compilação até que se decida o que fazer com a lacuna.
+ */
+export type Aggregated<T> =
+  | { complete: true; value: T; coverage: Coverage }
+  | { complete: false; subtotal: T; coverage: Coverage }
+
+/** Lê o número de qualquer agregado, assumindo explicitamente o subtotal. */
+export function aggregatedNumber<T>(a: Aggregated<T>): T {
+  return a.complete ? a.value : a.subtotal
 }
 
 export type AggregationPolicy =
@@ -329,7 +354,9 @@ export const PARTIAL: AggregationPolicy = { mode: "partial" }
 
 export function aggregate<T, R>(
   metrics: readonly Metric<T>[],
-  fn: (values: readonly T[]) => R,
+  // O redutor pode FALHAR devolvendo null (ex. soma que estoura a faixa exata).
+  // Sem isso, a agregação executiva contornaria as guardas de exatidão.
+  fn: (values: readonly T[]) => R | null,
   formula: string,
   policy: AggregationPolicy = STRICT,
 ): Metric<Aggregated<R>> {
@@ -371,10 +398,22 @@ export function aggregate<T, R>(
     }
   }
 
-  const value: Aggregated<R> = {
-    value: fn(present.map((m) => m.value)),
-    coverage: { observed: present.length, expected, missing },
+  const reduced = fn(present.map((m) => m.value))
+  if (reduced === null) {
+    return gap<Aggregated<R>>(
+      "DATA_NOT_AVAILABLE",
+      resultClass(metrics),
+      "agregação fora da faixa exata",
+      prov,
+    )
   }
+
+  const coverage: Coverage = { observed: present.length, expected, missing }
+  const value: Aggregated<R> =
+    present.length === expected
+      ? { complete: true, value: reduced, coverage }
+      : { complete: false, subtotal: reduced, coverage }
+
   return makeOk<Aggregated<R>>(
     resultClass(metrics),
     value,
@@ -385,8 +424,8 @@ export function aggregate<T, R>(
 }
 
 /** true quando o agregado não cobre tudo que era esperado. */
-export function isPartial(c: Coverage): boolean {
-  return c.observed < c.expected
+export function isPartial<T>(a: Aggregated<T>): boolean {
+  return !a.complete
 }
 
 /**
@@ -401,7 +440,10 @@ export function sumMetrics(
   formula: string,
   policy: AggregationPolicy = STRICT,
 ): Metric<Aggregated<number>> {
-  return aggregate(metrics, (values) => values.reduce((a, b) => a + b, 0), formula, policy)
+  // Usa `sumCents`, não `reduce`. A guarda de exatidão de D11 não pode ser
+  // contornada justamente pelo agregador que produz os totais executivos:
+  // parcelas individualmente válidas podem somar fora da faixa exata.
+  return aggregate(metrics, (values) => sumCents(values), formula, policy)
 }
 
 // ─── Razão / conversão ────────────────────────────────────────────────────────

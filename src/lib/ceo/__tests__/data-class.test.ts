@@ -15,6 +15,7 @@ import {
   sumMetrics,
   aggregate,
   isPartial,
+  aggregatedNumber,
   PARTIAL,
   STRICT,
   ratio,
@@ -103,7 +104,8 @@ describe("combinadores propagam lacuna em vez de somar zero", () => {
 
   it("sumMetrics é estrito por padrão: total de dinheiro incompleto não é total", () => {
     const ok = sumMetrics([observed(8), observed(6)], "SUM(vendas)")
-    expect(ok.ok && ok.value.value).toBe(14)
+    expect(ok.ok && ok.value.complete).toBe(true)
+    expect(ok.ok && ok.value.complete && ok.value.value).toBe(14)
     expect(ok.ok && ok.value.coverage.observed).toBe(2)
     expect(ok.ok && ok.value.coverage.expected).toBe(2)
 
@@ -287,10 +289,12 @@ describe("agregação parcial: uma lacuna não pode apagar os dados bons", () =>
     expect(total.ok).toBe(true)
     if (!total.ok) throw new Error("deveria publicar parcial")
 
-    expect(total.value.value).toBe(2_501_410) // os 3 valores disponíveis
+    // Ler o número exige assumir explicitamente que é subtotal.
+    expect(total.value.complete).toBe(false)
+    expect(aggregatedNumber(total.value)).toBe(2_501_410) // os 3 disponíveis
     expect(total.value.coverage.observed).toBe(3)
     expect(total.value.coverage.expected).toBe(4)
-    expect(isPartial(total.value.coverage)).toBe(true)
+    expect(isPartial(total.value)).toBe(true)
   })
 
   it("parcial lista TODAS as lacunas, não apenas a primeira", () => {
@@ -327,7 +331,7 @@ describe("agregação parcial: uma lacuna não pode apagar os dados bons", () =>
 
   it("agregado completo se declara completo", () => {
     const total = sumMetrics([observed(1), observed(2)], "SUM(x)", PARTIAL)
-    expect(total.ok && isPartial(total.value.coverage)).toBe(false)
+    expect(total.ok && isPartial(total.value)).toBe(false)
   })
 
   it("aggregate funciona para qualquer redução, não só soma", () => {
@@ -337,7 +341,7 @@ describe("agregação parcial: uma lacuna não pode apagar os dados bons", () =>
       "MAX(x)",
       PARTIAL,
     )
-    expect(maior.ok && maior.value.value).toBe(42)
+    expect(maior.ok && aggregatedNumber(maior.value)).toBe(42)
     expect(maior.ok && maior.value.coverage.observed).toBe(2)
   })
 })
@@ -371,5 +375,41 @@ describe("invariantes de classe vivem no tipo, não só no construtor", () => {
     expect(dobro.dataClass).toBe("inferred")
     expect(dobro.confidence).toBe(0.5)
     expect(dobro.sources).toEqual(["sheets"])
+  })
+})
+
+// ─── Regressões da revisão adversarial — rodada 2 ─────────────────────────────
+
+describe("rodada 2: rotas de corrupção fechadas", () => {
+  it("sumMetrics não contorna a guarda de exatidão de centavos", () => {
+    // Parcelas individualmente válidas cuja soma sai da faixa exata.
+    const metade = Math.floor(Number.MAX_SAFE_INTEGER / 2)
+    const estouro = sumMetrics(
+      [observed(metade), observed(metade), observed(metade)],
+      "SUM(volume_contratado)",
+    )
+    expect(estouro.ok).toBe(false)
+    expect(!estouro.ok && estouro.gap).toBe("DATA_NOT_AVAILABLE")
+  })
+
+  it("métrica calculada sem fórmula vira lacuna, não número sem procedência", () => {
+    expect(calculated(14, "").ok).toBe(false)
+    expect(calculated(14, "   ").ok).toBe(false)
+    const m = calculated(14, "")
+    expect(!m.ok && m.detail).toBe("métrica calculada sem fórmula")
+  })
+
+  it("ratio sem fórmula também recusa", () => {
+    expect(ratio(observed(14), observed(132), "").ok).toBe(false)
+  })
+
+  it("subtotal parcial não pode ser lido como total sem decisão explícita", () => {
+    const parcial = sumMetrics([observed(10), notAvailable("sem reporte")], "SUM(x)", PARTIAL)
+    expect(parcial.ok).toBe(true)
+    if (!parcial.ok) throw new Error("deveria publicar parcial")
+    // `.value` não existe no ramo incompleto — só `subtotal`, e só após narrar.
+    expect(parcial.value.complete).toBe(false)
+    if (parcial.value.complete) throw new Error("não deveria estar completo")
+    expect(parcial.value.subtotal).toBe(10)
   })
 })

@@ -24,26 +24,49 @@
 //   "R$ 0,00"      → 0       (zero explícito é dado, não ausência)
 //   ""             → null    (ausência)
 
+// Envoltório monetário aceito, validado sobre a string INTEIRA.
+//
+// A versão anterior detectava o negativo ANTES de limpar "R$" e espaços, e
+// depois removia o sinal. Resultado: "R$ -100,00" virava +R$ 100,00 — inversão
+// de sinal silenciosa num estorno. A mesma limpeza cega aceitava lixo como
+// "$100$", furando a promessa de validar a string inteira.
+// Grupos numerados, não nomeados: o tsconfig do app mira ES2017 e capture
+// groups nomeados exigem ES2018. Mudar o target por causa de um regex seria
+// alterar o build de toda a aplicação por conveniência local.
+//   1 = parêntese de abertura   2 = sinal antes do R$   3 = sinal depois
+//   4 = número                  5 = parêntese de fechamento
+const MONEY_WRAPPER = /^(\()?\s*(-)?\s*(?:R\$)?\s*(-)?\s*([\d.,]+)\s*(\))?$/i
+
 export function parseBRLToCents(raw: unknown): number | null {
   if (raw === null || raw === undefined) return null
 
-  // Número puro já vem em reais (ex. célula numérica do Sheets)
+  // Célula numérica do Sheets. Passa pelas MESMAS guardas do caminho textual —
+  // senão a mesma quantia seria aceita como número e recusada como texto.
   if (typeof raw === "number") {
     if (!Number.isFinite(raw)) return null
-    return Math.round(raw * 100)
+    const cents = Math.round(raw * 100)
+    if (!Number.isSafeInteger(cents)) return null
+    if (Math.abs(cents) > CENTS_SANITY_CEILING) return null
+    return cents
   }
 
-  let s = String(raw).trim()
+  const s = String(raw).trim()
   if (!s) return null
 
-  const negative = /^-|^\(.*\)$/.test(s)
-  s = s.replace(/[R$\s()]/gi, "").replace(/^-/, "")
-  if (!s) return null
+  const m = s.match(MONEY_WRAPPER)
+  if (!m) return null
+  const [, open, sign1, sign2, num, close] = m
 
-  // Só pode sobrar dígito, ponto e vírgula
-  if (!/^[\d.,]+$/.test(s)) return null
+  // Parênteses precisam abrir E fechar
+  if (Boolean(open) !== Boolean(close)) return null
+  // Sinal duplicado ("- R$ -100") é entrada corrompida, não valor
+  if (sign1 && sign2) return null
+  // Parêntese já significa negativo; combinar com "-" é ambíguo
+  if (open && (sign1 || sign2)) return null
 
-  const cents = toCents(s)
+  const negative = Boolean(open) || Boolean(sign1) || Boolean(sign2)
+
+  const cents = toCents(num)
   if (cents === null) return null
   return negative ? -cents : cents
 }
