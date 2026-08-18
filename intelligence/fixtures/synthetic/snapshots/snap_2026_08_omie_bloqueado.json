@@ -1,0 +1,26 @@
+{
+  "snapshot_id": "snap_2026_08_omie_bloqueado",
+  "schema_version": "1.0.0",
+  "source_system": "omie",
+  "dataset_id": "sintetico-omie-nao-consultavel",
+  "period_start": "2026-08-01",
+  "period_end": "2026-08-31",
+  "observed_at": "2026-08-16T09:00:00.000Z",
+  "ingested_at": "2026-08-16T09:03:00.000Z",
+  "content_hash": "0badc0ffee1234567890abcdef0123456789abcdef0123456789abcdef012345",
+  "record_count": 42,
+  "rows_skipped": 0,
+  "coverage": {
+    "expected_units": 20,
+    "reporting_units": 20,
+    "ratio_bp": 10000
+  },
+  "quality_status": "ok",
+  "conflicts": [],
+  "missing_fields": [],
+  "evidence_refs": [],
+  "payload": {
+    "period_label": "agosto/2026",
+    "volume_contracted_cents": 9900000
+  }
+}

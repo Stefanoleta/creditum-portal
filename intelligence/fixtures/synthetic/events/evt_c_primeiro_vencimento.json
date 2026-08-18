@@ -1,0 +1,37 @@
+{
+  "event_id": "evt_c_primeiro_vencimento_setembro",
+  "event_type": "first_due_date_concentration",
+  "detector_id": "det.first_due_concentration",
+  "detector_version": "1.0.0",
+  "snapshot_ids": [
+    "snap_2026_08_pipeline"
+  ],
+  "period_start": "2026-08-01",
+  "period_end": "2026-08-31",
+  "detected_at": "2026-08-16T09:05:00.000Z",
+  "severity": "medium",
+  "materiality": {
+    "basis": "count",
+    "count": 9,
+    "share_of_total_bp": 7500
+  },
+  "observed_metric": {
+    "name": "contratos_com_primeiro_vencimento_no_alvo",
+    "data_class": "calculated",
+    "unit": "count",
+    "value": 9,
+    "formula": "count(elegiveis where first_due_date in target)"
+  },
+  "reference_metric": {
+    "name": "contratos_com_primeiro_vencimento_no_alvo_referencia",
+    "data_class": "gap",
+    "gap_reason": "DATA_NOT_AVAILABLE"
+  },
+  "evidence_refs": [
+    "ev_c_hist_vencimento"
+  ],
+  "data_quality": {
+    "quality_status": "degraded",
+    "coverage_ratio_bp": 9500
+  }
+}

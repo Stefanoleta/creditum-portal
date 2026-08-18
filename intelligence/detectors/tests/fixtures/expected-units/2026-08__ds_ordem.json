@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0.0",
+  "period": "2026-08",
+  "dataset_id": "ds_ordem",
+  "expected_units": [
+    {
+      "unit_id": "bonsucesso"
+    },
+    {
+      "unit_id": "bezerra"
+    },
+    {
+      "unit_id": "belford_roxo"
+    },
+    {
+      "unit_id": "bangu"
+    },
+    {
+      "unit_id": "alecrim"
+    }
+  ],
+  "provenance": {
+    "source_system": "fixture_teste",
+    "source_version": "1.0.0",
+    "content_hash": "6f906d1504166a296a1363a88c037fe3005632b39d62225d636ff9183ddfaf84"
+  }
+}

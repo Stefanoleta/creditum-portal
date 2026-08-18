@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Decisoes humanas de canonicalizacao D13 que nao vieram da planilha operacional. Fonte governada, consumida pelo build step junto com UNIDADES.xlsx.",
+  "aliases": [
+    {
+      "alias": "Presidente P.",
+      "target_unit_id": "prudente",
+      "rationale": "Forma usada em public.unidades. A planilha traz 'Prudente' como canonico mas nao traz 'Presidente P.'. 'P.' nao e expansivel por regra: poderia ser Penha ou Piedade.",
+      "approved_in": "FASE_2_6B"
+    },
+    {
+      "alias": "BelfordRoxo",
+      "target_unit_id": "belford_roxo",
+      "rationale": "A planilha grafa com espaco. A normalizacao colapsa espacos repetidos mas nao insere espaco, entao 'belfordroxo' e 'belford roxo' nao casariam entre si.",
+      "approved_in": "FASE_2_6B"
+    },
+    {
+      "alias": "Rio Preto",
+      "target_unit_id": "sao_jose_do_rio_preto",
+      "rationale": "Forma curta usada nas planilhas de venda. Decisao D13 anterior, confirmada pelo CEO.",
+      "approved_in": "FASE_2_6B"
+    }
+  ]
+}

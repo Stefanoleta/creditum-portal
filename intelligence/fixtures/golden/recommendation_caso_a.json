@@ -1,0 +1,193 @@
+{
+  "recommendation_id": "rec_caso_a_parcelamento_2026_08",
+  "schema_version": "1.0.0",
+  "run_id": "run_2026_08_16_0905",
+  "generated_at": "2026-08-16T09:07:42.000Z",
+
+  "fact": {
+    "statement": "Metade dos contratos de agosto/2026 foi fechada acima de 19 parcelas, contra 28% na referência. Os 7 contratos nessa faixa concentram R$ 43.189,20, equivalentes a 52,08% do volume contratado do mês.",
+    "event_ids": ["evt_a_parcelamento_agosto"],
+    "snapshot_ids": ["snap_2026_08_pipeline", "snap_2026_08_sales"],
+    "evidence_refs": ["ev_a_hist_parcelas"],
+    "observed_at": "2026-08-16T09:00:00.000Z",
+    "metrics": [
+      {
+        "name": "share_contratos_acima_19_parcelas",
+        "data_class": "calculated",
+        "value_repr": "50,00%",
+        "unit": "basis_points",
+        "evidence_refs": ["ev_a_hist_parcelas"]
+      },
+      {
+        "name": "volume_na_faixa",
+        "data_class": "calculated",
+        "value_repr": "R$ 43.189,20",
+        "unit": "cents",
+        "evidence_refs": ["ev_a_hist_parcelas"]
+      },
+      {
+        "name": "inadimplencia_esperada_da_faixa",
+        "data_class": "gap",
+        "value_repr": "indisponível"
+      }
+    ]
+  },
+
+  "probable_cause": {
+    "is_inference": true,
+    "statement": "O alongamento provavelmente vem da mesa comercial usando prazo como alavanca de fechamento em tickets acima da média, e não de mudança no perfil do aluno.",
+    "confidence_bp": 4000,
+    "competing_explanations": [
+      "Mudança na política de crédito do parceiro liberando prazos maiores, sem relação com a mesa.",
+      "Mix de unidades: Mogi das Cruzes e Rio Preto sozinhos respondem por 50,3% do impacto e podem ter perfil de renda distinto.",
+      "Artefato de dado: 55 linhas-fantasma foram descartadas do pipeline e podem ter enviesado a base de comparação."
+    ],
+    "what_would_falsify_it": "Se a distribuição de parcelas por vendedor for homogênea, a hipótese da mesa cai. Se a inadimplência histórica da faixa >19 for igual à das demais, o alerta perde materialidade mesmo sendo verdadeiro."
+  },
+
+  "data_quality": {
+    "quality_status": "conflicted",
+    "conflicts": [
+      {
+        "conflict_id": "conf_vendas_pipeline_vs_financeiro",
+        "field": "sales_count",
+        "versions_repr": ["pipeline: 8", "financeiro: 14"],
+        "resolved": false
+      }
+    ],
+    "gaps": [
+      { "field": "inadimplencia_por_faixa_de_parcelas", "reason": "DATA_NOT_AVAILABLE" },
+      { "field": "curso", "reason": "DATA_NOT_AVAILABLE" },
+      { "field": "churn", "reason": "BUSINESS_RULE_PENDING" }
+    ],
+    "coverage_ratio_bp": 9500,
+    "data_age_hours": 0
+  },
+
+  "confidence_bp": 5500,
+
+  "alternatives": [
+    {
+      "stance": "conservative",
+      "summary": "Não mexer na política. Instrumentar a faixa e reavaliar em 30 dias.",
+      "rationale": "O conflito de 8 vs 14 vendas não está resolvido e a inadimplência por faixa de parcelas não existe na base. Mudar política sobre um número em disputa é apostar, não decidir.",
+      "benefit": "Custo zero, nenhuma receita perdida, e em 30 dias existe série para decidir com dado em vez de hipótese.",
+      "risk": "Se o alongamento de fato eleva a inadimplência, mais um mês de originação entra na carteira com o mesmo perfil.",
+      "impact": {
+        "data_class": "gap",
+        "narrative": "Impacto financeiro não estimável sem inadimplência por faixa."
+      },
+      "tradeoffs": [
+        "Troca risco de decisão errada por risco de exposição continuada.",
+        "Depende de a instrumentação ficar pronta dentro do prazo, o que não está garantido."
+      ],
+      "likely_consequences": [
+        "Setembro entra com composição de prazo semelhante à de agosto.",
+        "A decisão real fica para depois de conciliar pipeline e financeiro."
+      ],
+      "reversible": true
+    },
+    {
+      "stance": "moderate",
+      "summary": "Manter a política, mas exigir aprovação de coordenação para contratos acima de 19 parcelas com ticket acima da média.",
+      "rationale": "Ataca a concentração sem cortar volume: só os casos que somam materialidade passam por revisão humana, e os três maiores respondem por 67,5% do impacto do evento.",
+      "benefit": "Reduz exposição na cauda mantendo a mesa operando; gera trilha de aprovação que vira dado para a decisão definitiva.",
+      "risk": "Atrito no fechamento pode derrubar conversão nas unidades que mais usam prazo longo — justamente Mogi das Cruzes e Rio Preto.",
+      "impact": {
+        "data_class": "forecast",
+        "range_low_cents": -1200000,
+        "range_high_cents": 400000,
+        "confidence_bp": 3500,
+        "narrative": "Faixa larga e confiança baixa: sem elasticidade medida de conversão contra prazo, qualquer ponto central seria invenção."
+      },
+      "tradeoffs": [
+        "Ganha controle e perde velocidade comercial.",
+        "Cria trabalho de coordenação que ninguém está alocado para absorver hoje."
+      ],
+      "likely_consequences": [
+        "Queda esperada na proporção de contratos >19 parcelas já em setembro.",
+        "Possível deslocamento para 19 parcelas exatas, contornando a regra sem mudar o risco."
+      ],
+      "reversible": true
+    },
+    {
+      "stance": "aggressive",
+      "summary": "Teto de 19 parcelas para novas originações, com exceção só por aprovação do CEO.",
+      "rationale": "Se a hipótese do alongamento como alavanca estiver certa, o teto elimina a concentração imediatamente e força a mesa a fechar por valor, não por prazo.",
+      "benefit": "Corta a exposição da cauda em um mês, e a proibição torna a elasticidade observável — quem não fecha em 19 revela onde o prazo era decisivo.",
+      "risk": "Perda direta de originação nas unidades dependentes de prazo, sem evidência de que a inadimplência da faixa seja de fato pior. Pode destruir receita para resolver um problema não confirmado.",
+      "impact": {
+        "data_class": "forecast",
+        "range_low_cents": -4300000,
+        "range_high_cents": -800000,
+        "confidence_bp": 3000,
+        "narrative": "Cenário de perda: até o volume inteiro da faixa se a conversão for totalmente dependente do prazo."
+      },
+      "tradeoffs": [
+        "Máximo controle de risco contra máximo custo de receita.",
+        "Difícil de reverter sem custo de credibilidade com a mesa e com as unidades."
+      ],
+      "likely_consequences": [
+        "Concentração acima de 19 parcelas cai a zero nas novas originações.",
+        "Pressão comercial imediata das unidades de maior ticket.",
+        "Risco de a mesa migrar volume para o concorrente que oferece prazo."
+      ],
+      "reversible": false
+    }
+  ],
+
+  "combinable": {
+    "is_combinable": true,
+    "viable_combinations": [
+      {
+        "stances": ["conservative", "moderate"],
+        "note": "Instrumentar a faixa e, em paralelo, exigir aprovação só nos contratos de ticket alto. É a combinação que mais aprende por unidade de risco assumido."
+      }
+    ],
+    "mutually_exclusive_note": "O teto agressivo e a instrumentação conservadora não combinam: o teto elimina a população que a instrumentação precisaria observar."
+  },
+
+  "horizons": {
+    "immediate": [
+      {
+        "action": "Conciliar as 6 vendas do financeiro sem contrapartida no pipeline antes de qualquer mudança de política.",
+        "owner_role": "backoffice",
+        "depends_on_stance": "any"
+      }
+    ],
+    "short_term": [
+      {
+        "action": "Instrumentar inadimplência por faixa de parcelas nas safras já existentes.",
+        "owner_role": "dados",
+        "depends_on_stance": "any"
+      }
+    ],
+    "medium_term": [
+      {
+        "action": "Medir elasticidade de conversão contra prazo por unidade antes de fixar teto.",
+        "owner_role": "comercial",
+        "depends_on_stance": "aggressive"
+      }
+    ],
+    "long_term": [
+      {
+        "action": "Incorporar prazo como variável no motor de crédito em desenvolvimento, em vez de regra fixa.",
+        "owner_role": "produto",
+        "depends_on_stance": "any"
+      }
+    ]
+  },
+
+  "human_decision_required": true,
+  "review_by": "2026-09-15",
+
+  "provenance": {
+    "provider": "fixture",
+    "model": "nenhum-modelo-invocado",
+    "prompt_version": "0.1.0",
+    "skill_id": "creditum-observer.parcelamento",
+    "skill_version": "0.1.0",
+    "config_hash": "b1946ac92492d2347c6235b4d2611184f1e7b1e0d6e2f4a8c0b3d5f7091a2c4e",
+    "fallback_used": false
+  }
+}

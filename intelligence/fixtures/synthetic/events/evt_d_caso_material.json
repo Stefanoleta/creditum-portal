@@ -1,0 +1,45 @@
+{
+  "event_id": "evt_d_caso_material_agosto",
+  "event_type": "material_single_case",
+  "detector_id": "det.material_single_case",
+  "detector_version": "1.0.0",
+  "snapshot_ids": ["snap_2026_08_sales"],
+  "period_start": "2026-08-01",
+  "period_end": "2026-08-31",
+  "detected_at": "2026-08-16T09:05:00.000Z",
+  "severity": "high",
+  "materiality": {
+    "basis": "amount_cents",
+    "amount_cents": 1184580,
+    "count": 1,
+    "share_of_total_bp": 1429
+  },
+  "observed_metric": {
+    "name": "ticket_medio_com_o_caso",
+    "data_class": "calculated",
+    "unit": "cents",
+    "value": 592290,
+    "formula": "SUM(ticket_cents) / COUNT(vendas)"
+  },
+  "reference_metric": {
+    "name": "ticket_medio_sem_o_caso",
+    "data_class": "calculated",
+    "unit": "cents",
+    "value": 546729,
+    "formula": "SUM(ticket_cents EXCEPT caso) / COUNT(vendas - 1)"
+  },
+  "contributing_cases": [
+    {
+      "subject_ref": "subj_9f2a4c6e8b0d1357",
+      "contribution": { "amount_cents": 1184580, "count": 1, "share_of_event_bp": 10000 },
+      "unit": "Mogi das Cruzes",
+      "evidence_refs": ["ev_d_caso_material"]
+    }
+  ],
+  "evidence_refs": ["ev_d_caso_material"],
+  "data_quality": {
+    "quality_status": "conflicted",
+    "conflict_ids": ["conf_vendas_pipeline_vs_financeiro"],
+    "coverage_ratio_bp": 9500
+  }
+}

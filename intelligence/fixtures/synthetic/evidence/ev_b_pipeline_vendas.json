@@ -1,0 +1,11 @@
+{
+  "evidence_id": "ev_b_pipeline_vendas",
+  "snapshot_id": "snap_2026_08_pipeline",
+  "kind": "aggregate",
+  "locator": {
+    "dataset_id": "sintetico-vendas-agosto-pipeline",
+    "sheet": "Indicações",
+    "column": "Status"
+  },
+  "observed_at": "2026-08-16T09:00:00.000Z"
+}

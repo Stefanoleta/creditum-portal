@@ -1,0 +1,354 @@
+{
+  "catalog_version": "1.0.0",
+  "importer_version": "2.0.0",
+  "columns": [
+    "Unidade",
+    "Apelido",
+    "Ativo"
+  ],
+  "sources": [
+    {
+      "role": "workbook",
+      "file": "UNIDADES.xlsx",
+      "sha256": "fd8c7e001ea2b36da41bd071923df1fb50ef0a7fc69de2c5e19cebc6118a1409"
+    },
+    {
+      "role": "alias_overrides",
+      "file": "d13.alias-overrides.json",
+      "sha256": "b80a7d81e50aa94541f3ecd5ec8b1979f6a7eca53d06defcf7c2f72af4a67c4e",
+      "alias_count": 3
+    }
+  ],
+  "units": [
+    {
+      "unit_id": "alecrim",
+      "canonical_name": "Alecrim",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "bangu",
+      "canonical_name": "Bangu",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "belford_roxo",
+      "canonical_name": "Belford Roxo",
+      "aliases": [
+        "BelfordRoxo"
+      ],
+      "status": "active"
+    },
+    {
+      "unit_id": "bezerra",
+      "canonical_name": "Bezerra",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "bonsucesso",
+      "canonical_name": "Bonsucesso",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "camaragibe",
+      "canonical_name": "Camaragibe",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "cariacica",
+      "canonical_name": "Cariacica",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "carpina",
+      "canonical_name": "Carpina",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "curitiba",
+      "canonical_name": "Curitiba",
+      "aliases": [
+        "Curitiba/Centro"
+      ],
+      "status": "active"
+    },
+    {
+      "unit_id": "diadema",
+      "canonical_name": "Diadema",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "divinopolis",
+      "canonical_name": "Divinopólis",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "duque_de_caxias",
+      "canonical_name": "Duque de Caxias",
+      "aliases": [],
+      "status": "inactive"
+    },
+    {
+      "unit_id": "fortaleza_centro",
+      "canonical_name": "Fortaleza - Centro",
+      "aliases": [
+        "Centro FZA"
+      ],
+      "status": "active"
+    },
+    {
+      "unit_id": "guarulhos",
+      "canonical_name": "Guarulhos",
+      "aliases": [],
+      "status": "inactive"
+    },
+    {
+      "unit_id": "jd_angela",
+      "canonical_name": "Jd Angela",
+      "aliases": [],
+      "status": "inactive"
+    },
+    {
+      "unit_id": "joao_pessoa",
+      "canonical_name": "João Pessoa",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "joinville",
+      "canonical_name": "Joinville",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "limeira",
+      "canonical_name": "Limeira",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "limoeiro",
+      "canonical_name": "Limoeiro",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "madureira",
+      "canonical_name": "Madureira",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "manaus",
+      "canonical_name": "Manaus",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "maraba",
+      "canonical_name": "Marabá",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "maracanau",
+      "canonical_name": "Maracanaú",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "mogi",
+      "canonical_name": "Mogi",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "mossoro",
+      "canonical_name": "Mossoró",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "niteroi",
+      "canonical_name": "Niteroi",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "nova_iguacu",
+      "canonical_name": "Nova Iguaçu",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "osasco",
+      "canonical_name": "Osasco",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "parnamirim",
+      "canonical_name": "Parnamirim",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "petrolina",
+      "canonical_name": "Petrolina",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "prudente",
+      "canonical_name": "Prudente",
+      "aliases": [
+        "Presidente P."
+      ],
+      "status": "active"
+    },
+    {
+      "unit_id": "rio_centro",
+      "canonical_name": "Rio Centro",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "santa_cruz",
+      "canonical_name": "Santa Cruz",
+      "aliases": [
+        "STA Cruz"
+      ],
+      "status": "active"
+    },
+    {
+      "unit_id": "santo_amaro",
+      "canonical_name": "Santo Amaro",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "santo_andre",
+      "canonical_name": "Santo André",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "santos",
+      "canonical_name": "Santos",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "sao_goncalo",
+      "canonical_name": "São Gonçalo",
+      "aliases": [],
+      "status": "inactive"
+    },
+    {
+      "unit_id": "sao_joao_de_meriti",
+      "canonical_name": "São João de Meriti",
+      "aliases": [
+        "S.J de Meriti"
+      ],
+      "status": "active"
+    },
+    {
+      "unit_id": "sao_jose_do_rio_preto",
+      "canonical_name": "Sâo José do Rio Preto",
+      "aliases": [
+        "Rio Preto"
+      ],
+      "status": "active"
+    },
+    {
+      "unit_id": "sao_luis",
+      "canonical_name": "São Luís",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "serra",
+      "canonical_name": "Serra",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "serra_talhada",
+      "canonical_name": "Serra Talhada",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "sumare",
+      "canonical_name": "Sumaré",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "taboao",
+      "canonical_name": "Taboão",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "teresina",
+      "canonical_name": "Teresina",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "venda_nova_bh",
+      "canonical_name": "Venda Nova (BH)",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "vila_maria",
+      "canonical_name": "Vila Maria",
+      "aliases": [],
+      "status": "inactive"
+    },
+    {
+      "unit_id": "vila_velha",
+      "canonical_name": "Vila Velha",
+      "aliases": [],
+      "status": "active"
+    },
+    {
+      "unit_id": "zona_norte_rn",
+      "canonical_name": "Zona Norte - RN",
+      "aliases": [
+        "Natal Zona Norte"
+      ],
+      "status": "active"
+    }
+  ],
+  "groups": [
+    {
+      "label": "Carpina e Limoeiro",
+      "members": [
+        "carpina",
+        "limoeiro"
+      ]
+    },
+    {
+      "label": "Limeira, Sumaré & JD Ângela",
+      "members": [
+        "jd_angela",
+        "limeira",
+        "sumare"
+      ]
+    }
+  ],
+  "warnings": [
+    "linha 32 (Prudente): Apelido igual ao canônico — redundante"
+  ]
+}

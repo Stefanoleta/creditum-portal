@@ -1,0 +1,56 @@
+{
+  "event_id": "evt_a_parcelamento_agosto",
+  "event_type": "installment_concentration",
+  "detector_id": "det.installment_concentration",
+  "detector_version": "1.0.0",
+  "snapshot_ids": ["snap_2026_08_pipeline", "snap_2026_08_sales"],
+  "period_start": "2026-08-01",
+  "period_end": "2026-08-31",
+  "detected_at": "2026-08-16T09:05:00.000Z",
+  "severity": "high",
+  "materiality": {
+    "basis": "amount_cents",
+    "amount_cents": 4318920,
+    "count": 7,
+    "share_of_total_bp": 5209
+  },
+  "observed_metric": {
+    "name": "share_contratos_acima_19_parcelas",
+    "data_class": "calculated",
+    "unit": "basis_points",
+    "value": 5000,
+    "formula": "contratos_com_parcelas_acima_de_19 / contratos_totais"
+  },
+  "reference_metric": {
+    "name": "share_contratos_acima_19_parcelas_referencia",
+    "data_class": "observed",
+    "unit": "basis_points",
+    "value": 2800
+  },
+  "contributing_cases": [
+    {
+      "subject_ref": "subj_9f2a4c6e8b0d1357",
+      "contribution": { "amount_cents": 1184580, "count": 1, "share_of_event_bp": 2743 },
+      "unit": "Mogi das Cruzes",
+      "evidence_refs": ["ev_a_hist_parcelas"]
+    },
+    {
+      "subject_ref": "subj_1b3d5f7092a4c6e8",
+      "contribution": { "amount_cents": 987450, "count": 1, "share_of_event_bp": 2286 },
+      "unit": "São José do Rio Preto",
+      "evidence_refs": ["ev_a_hist_parcelas"]
+    },
+    {
+      "subject_ref": "subj_2c4e6a8092b4d6f8",
+      "contribution": { "amount_cents": 742300, "count": 1, "share_of_event_bp": 1719 },
+      "unit": "Grau Sumaré",
+      "evidence_refs": ["ev_a_hist_parcelas"]
+    }
+  ],
+  "evidence_refs": ["ev_a_hist_parcelas"],
+  "data_quality": {
+    "quality_status": "degraded",
+    "missing_fields": ["curso"],
+    "coverage_ratio_bp": 9500
+  }
+}

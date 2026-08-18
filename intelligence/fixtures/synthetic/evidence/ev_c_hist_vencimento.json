@@ -1,0 +1,12 @@
+{
+  "evidence_id": "ev_c_hist_vencimento",
+  "snapshot_id": "snap_2026_08_pipeline",
+  "kind": "computed",
+  "locator": {
+    "dataset_id": "sintetico-vendas-agosto-pipeline",
+    "sheet": "Indicações",
+    "column": "Primeiro vencimento"
+  },
+  "observed_at": "2026-08-16T09:00:00.000Z",
+  "formula": "COUNT(contratos GROUP BY year_month(primeiro_vencimento))"
+}

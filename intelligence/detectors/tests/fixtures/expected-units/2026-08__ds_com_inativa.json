@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0.0",
+  "period": "2026-08",
+  "dataset_id": "ds_com_inativa",
+  "expected_units": [
+    {
+      "unit_id": "alecrim"
+    },
+    {
+      "unit_id": "bangu"
+    },
+    {
+      "unit_id": "duque_de_caxias"
+    }
+  ],
+  "provenance": {
+    "source_system": "fixture_teste",
+    "source_version": "1.0.0",
+    "content_hash": "15001eca9305affef8132ed0e4ccdfc6222b18363123ecdc603e83734949ca5e"
+  }
+}

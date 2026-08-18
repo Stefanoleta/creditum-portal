@@ -1,0 +1,3768 @@
+diff --git a/intelligence/detectors/src/production-policy.ts b/intelligence/detectors/src/production-policy.ts
+new file mode 100644
+index 0000000..22d4a5d
+--- /dev/null
++++ b/intelligence/detectors/src/production-policy.ts
+@@ -0,0 +1,1145 @@
++/**
++ * Política Creditum v1 — projeção do artefato governado em configuração de produção.
++ *
++ * ─── Por que projeção, e não constantes ───────────────────────────────────────
++ *
++ * A Fase 2.6c terminou com um HIGH que vale relembrar aqui: três aliases D13
++ * viviam numa tabela TypeScript e eram enxertados no catálogo depois do load.
++ * Havia duas fontes de governança e a segunda era invisível para quem olhasse a
++ * fonte governada. A lição foi direta — valor aprovado da Creditum tem **uma**
++ * fonte efetiva, e o runtime projeta, não enriquece.
++ *
++ * Este módulo aplica a mesma regra à política de negócio. Nenhum threshold da
++ * Creditum é escrito aqui. Os números vêm de
++ * `governance/policy/creditum-policy.v1.json`; este arquivo sabe validá-los e
++ * montar `DetectorConfig`, e recusar quando falta decisão.
++ *
++ * ─── Não existe DEFAULT_CONFIG ────────────────────────────────────────────────
++ *
++ * Política ausente ou inválida não cai para um padrão razoável: falha fechado.
++ * `TEST_CONFIG` continua em `tests/` e não é alcançável daqui — não há import,
++ * nem fallback, nem "se produção falhar use o de teste".
++ */
++
++import ARTEFATO from "../../governance/policy/creditum-policy.v1.json"
++import { GatewayError } from "../../gateway/src/errors"
++import {
++  FIRST_DUE_CONTEXT_MODES,
++  FIRST_DUE_EVENT_WINDOW_MODES,
++  isValidTimezone,
++  validateDetectorConfig,
++} from "./config"
++import type {
++  ContributingCaseRule,
++  FirstDueEventWindowMode,
++  DetectorConfig,
++  DueWindow,
++  Severity,
++  SeverityBand,
++  SeverityScale,
++} from "./config"
++
++// ─── O artefato ───────────────────────────────────────────────────────────────
++
++export interface PolicyArtifact {
++  readonly schema_version: string
++  readonly policy_version: string
++  readonly materiality: {
++    readonly relevant_participation_bp: number
++    readonly financial_materiality_cents: number
++    readonly financial_materiality_status: string
++    readonly relevant_case_count: number
++    readonly minimum_population_contracts: number
++    readonly semantics: string
++  }
++  readonly severity_bands: readonly { readonly at_least_bp: number; readonly severity: string }[]
++  readonly low_ticket: {
++    readonly floor_cents: number
++    readonly comparison: string
++    readonly severity: string
++  }
++  readonly coverage: { readonly missing_share_insufficient_at_bp: number }
++  readonly source_disagreement: {
++    readonly numeric_tolerance_bp: number
++    readonly structural_tolerance_bp: number
++    readonly structural_fields: readonly string[]
++  }
++  readonly first_due_windows: {
++    readonly approved_event_windows: readonly Record<string, unknown>[]
++    readonly context: readonly string[]
++    readonly day_basis: string
++  }
++  readonly single_case_aggregators: readonly string[]
++  readonly expected_units: { readonly model: readonly string[]; readonly values_source: string }
++  readonly detector_severity: Record<string, Record<string, unknown>>
++  readonly detector_config: Record<string, Record<string, unknown>>
++}
++
++/**
++ * Estratégia de base de severidade. Conjunto FECHADO.
++ *
++ * `max_available_participation` — usa a MAIOR participação governada válida
++ * entre as candidatas. Existe porque escolher permanentemente entre quantidade e
++ * valor esconderia metade dos casos: uma data com muitos contratos pequenos e
++ * outra com poucos grandes produzem leituras opostas, e nenhuma das duas é
++ * "a certa" para todo evento.
++ *
++ * `share_of_total_when_applicable` — usa `share_of_total_bp` só quando ela tem
++ * semântica real de parte-do-todo. Sem base aplicável, o fato sobrevive e o
++ * Event não sai.
++ */
++export type SeverityStrategy = "max_available_participation" | "share_of_total_when_applicable"
++
++export type ParticipationDimension = "share_count_bp" | "share_amount_bp"
++
++export interface ParticipationSeverityPolicy {
++  readonly severity_strategy: "max_available_participation"
++  readonly candidates: readonly ParticipationDimension[]
++  /**
++   * Desempate DETERMINÍSTICO e governado.
++   *
++   * No empate as duas participações são numericamente iguais, então a severidade
++   * é a mesma — o que muda é só qual dimensão o evento declara ter graduado.
++   * A ordem de entrada nunca decide.
++   */
++  readonly tie_break_dimension: ParticipationDimension
++}
++
++const SCHEMAS_SUPORTADOS = new Set(["1.0.0"])
++const SEVERIDADES = new Set(["info", "low", "medium", "high", "critical"])
++
++/**
++ * Agregadores aprovados para o Detector D. Conjunto FECHADO.
++ *
++ * `median`, `max`, `min`, `percentile` e `stddev` NÃO estão aqui e não entram
++ * sem nova decisão humana — cada um traz semântica de contrafactual própria.
++ */
++/**
++ * VOCABULÁRIO de agregadores — protocolo, não política.
++ *
++ * São os nomes que `SingleCaseMetric` fecha e que o Detector D sabe calcular. Um
++ * nome fora daqui não tem implementação: recusar é checagem de capacidade, não
++ * decisão de negócio.
++ *
++ * O SUBCONJUNTO habilitado para a Creditum vem do artefato
++ * (`single_case_aggregators`) e é projetado em `supported_metrics`. Se o artefato
++ * deixar de aprovar `amount_mean_cents`, nada aqui o reintroduz — o detector
++ * passa a recusar aquela métrica, e existe teste para isso.
++ */
++const VOCABULARIO_DE_METRICAS = new Set<string>([
++  "amount_sum_cents",
++  "amount_mean_cents",
++  "case_count",
++])
++
++/** Base civil obrigatória: dia útil exige calendário de feriados governado, que não existe. */
++/**
++ * A base de dias que o runtime IMPLEMENTA. Capacidade, não preferência.
++ *
++ * `next_n_days` conta dias corridos porque é o único cálculo que existe: dia útil
++ * exigiria calendário de feriados governado, que não existe em lugar nenhum do
++ * sistema. Uma política pedindo outra base não seria "outra decisão da Creditum"
++ * — seria um pedido sem código para atender, e recusar é fail-closed.
++ *
++ * Os valores de NEGÓCIO das janelas — quantos dias, quais modos, qual contexto —
++ * saíram deste arquivo na Fase 2.7 final. Vêm do artefato.
++ */
++const BASE_DE_DIAS_IMPLEMENTADA = "civil_calendar_days"
++
++/** Vocabulários do protocolo, não da política. Ver `config.ts`. */
++const VOCABULARIO_DE_JANELAS = new Set<string>(FIRST_DUE_EVENT_WINDOW_MODES)
++const VOCABULARIO_DE_CONTEXTO = new Set<string>(FIRST_DUE_CONTEXT_MODES)
++
++class Recusas {
++  readonly list: string[] = []
++  add(campo: string, motivo: string): void {
++    this.list.push(`${campo}: ${motivo}`)
++  }
++}
++
++function inteiroExato(v: unknown, campo: string, r: Recusas, min = 0): number | null {
++  if (typeof v !== "number" || !Number.isSafeInteger(v)) {
++    r.add(campo, "precisa ser inteiro exato")
++    return null
++  }
++  if (v < min) {
++    r.add(campo, `precisa ser >= ${min}`)
++    return null
++  }
++  return v
++}
++
++function bp(v: unknown, campo: string, r: Recusas): number | null {
++  const n = inteiroExato(v, campo, r)
++  if (n === null) return null
++  if (n > 10000) {
++    r.add(campo, "basis points não passam de 10000")
++    return null
++  }
++  return n
++}
++
++/**
++ * Valida as bandas de severidade da política.
++ *
++ * Recusa sobreposição, buraco e ordem incoerente. As três seriam ambiguidade
++ * executiva: um mesmo valor classificado de duas formas, ou de nenhuma.
++ */
++function validarBandas(raw: unknown, r: Recusas): SeverityScale | null {
++  if (!Array.isArray(raw) || raw.length === 0) {
++    r.add("severity_bands", "obrigatória e não vazia")
++    return null
++  }
++
++  const bandas: SeverityBand[] = []
++  let anterior: number | null = null
++  let rankAnterior = -1
++
++  for (const [i, banda] of (raw as readonly unknown[]).entries()) {
++    const p = `severity_bands[${i}]`
++    if (typeof banda !== "object" || banda === null) {
++      r.add(p, "precisa ser objeto")
++      continue
++    }
++    const b = banda as Record<string, unknown>
++    const at = inteiroExato(b["at_least_bp"], `${p}.at_least_bp`, r)
++    const sev = b["severity"]
++
++    if (typeof sev !== "string" || !SEVERIDADES.has(sev)) {
++      r.add(`${p}.severity`, `precisa ser uma de ${[...SEVERIDADES].join(", ")}`)
++      continue
++    }
++    if (at === null) continue
++
++    // Buraco: a primeira banda precisa cobrir o piso do domínio.
++    if (i === 0 && at !== 0) {
++      r.add(`${p}.at_least_bp`, "a primeira banda precisa começar em 0 — senão há valor sem classificação")
++    }
++    // Sobreposição: duas bandas com o mesmo piso classificam o mesmo valor de
++    // duas formas, e o resultado passa a depender da ordem de avaliação.
++    if (anterior !== null && at <= anterior) {
++      r.add(p, `at_least_bp ${at} não é maior que o da banda anterior (${anterior}) — sobreposição`)
++    }
++    // Ordem incoerente: severidade que cai enquanto a base sobe inverte a leitura.
++    const rank = ["info", "low", "medium", "high", "critical"].indexOf(sev)
++    if (rank <= rankAnterior) {
++      r.add(p, `severidade ${sev} não é mais grave que a banda anterior — ordem incoerente`)
++    }
++
++    anterior = at
++    rankAnterior = rank
++    bandas.push({ at_least: at, severity: sev as Severity })
++  }
++
++  return bandas.length === raw.length ? bandas : null
++}
++
++/**
++ * Regra de contribuintes: qual estratégia, e o parâmetro que ela exige.
++ *
++ * `until_share_bp` e `min_individual_share_bp` são estruturalmente aceitas pelo
++ * tipo `ContributingCaseRule`, mas **não** são política de produção da Creditum:
++ * a decisão de 2.7c §2 recusou `until_share_bp = 8000` explicitamente, e não
++ * existe regra Pareto/80% aprovada. Recusar aqui é o que impede um artefato
++ * editado de reintroduzi-la por baixo.
++ */
++function validarRegraDeContribuintes(
++  raw: unknown,
++  campo: string,
++  r: Recusas,
++): ContributingCaseRule | null {
++  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
++    regraRecusada(campo, "objeto obrigatório", r)
++    return null
++  }
++  const o = raw as Record<string, unknown>
++  if (o["strategy"] !== "top_n") {
++    regraRecusada(campo, `estratégia não aprovada: ${JSON.stringify(o["strategy"])}`, r)
++    return null
++  }
++  const n = inteiroExato(o["top_n"], `${campo}.top_n`, r, 1)
++  if (n === null) return null
++  return Object.freeze({ mode: "top_n" as const, n })
++}
++
++function regraRecusada(campo: string, motivo: string, r: Recusas): void {
++  r.add(campo, `${motivo} — a única estratégia aprovada na v1 é top_n`)
++}
++
++/**
++ * As janelas EXECUTIVAS do Detector C — validadas como CONJUNTO COMPLETO.
++ *
++ * ─── O que o gate final encontrou ─────────────────────────────────────────────
++ *
++ * A versão anterior iterava os membros fornecidos e dizia "cada um é válido".
++ * Isso deixava passar um artefato com `same_day` só: a política validava,
++ * `POLICY_V1_COMPLETE` continuava `true`, a configuração era montável, e uma
++ * análise de produção obrigatória desaparecia em silêncio. Pior, o antigo
++ * `diasDaJanelaCorrida` devolvia 7 quando a janela não existia — fabricando o
++ * parâmetro de uma janela que a política não aprovava.
++ *
++ * ─── Como a integridade do conjunto é verificada sem criar segunda fonte ──────
++ *
++ * A exigência é de TOTALIDADE sobre o vocabulário do protocolo: cada modo que o
++ * Detector C sabe executar precisa aparecer no conjunto governado exatamente uma
++ * vez. `FIRST_DUE_EVENT_WINDOW_MODES` é vocabulário de contrato — não diz nada
++ * sobre o que a Creditum quer, nem carrega parâmetro nenhum. Não existe lista de
++ * "janelas requeridas" escrita aqui.
++ *
++ * O que é NEGÓCIO continua vindo do artefato: `days` é lido, nunca pinado. Um
++ * artefato com `days: 6` descreve uma política diferente e o runtime a executa
++ * como 6 — o que nenhum código pode fazer é dizer "se não for 7, uso 7".
++ *
++ * Ordem não significa nada: o conjunto é o conjunto. Duplicata é erro, porque
++ * repetir sugeriria um peso que não existe.
++ */
++function validarJanelasAprovadas(raw: unknown, r: Recusas): readonly DueWindow[] | null {
++  const campo = "first_due_windows.approved_event_windows"
++  if (!Array.isArray(raw) || raw.length === 0) {
++    r.add(campo, "lista não vazia obrigatória")
++    return null
++  }
++
++  const porModo = new Map<string, DueWindow>()
++  let falhou = false
++
++  for (const [i, bruto] of (raw as readonly unknown[]).entries()) {
++    const p = `${campo}[${i}]`
++    if (typeof bruto !== "object" || bruto === null || Array.isArray(bruto)) {
++      r.add(p, "janela precisa ser objeto")
++      falhou = true
++      continue
++    }
++    const o = bruto as Record<string, unknown>
++    const modo = o["mode"]
++
++    if (typeof modo !== "string" || !VOCABULARIO_DE_JANELAS.has(modo)) {
++      // `calendar_month` cai aqui: é modo de CONTEXTO, e promovê-lo a janela
++      // executiva criaria um Event que não existe.
++      r.add(
++        `${p}.mode`,
++        `modo não executável: ${JSON.stringify(modo)} — o Detector C executa ` +
++          `${FIRST_DUE_EVENT_WINDOW_MODES.join(", ")}`,
++      )
++      falhou = true
++      continue
++    }
++
++    if (porModo.has(modo)) {
++      r.add(p, `modo ${modo} duplicado — approved_event_windows é um conjunto`)
++      falhou = true
++      continue
++    }
++
++    const janela = construirJanela(modo as FirstDueEventWindowMode, o, p, r)
++    if (janela === null) {
++      falhou = true
++      continue
++    }
++    porModo.set(modo, janela)
++  }
++
++  // TOTALIDADE: cada modo executável tem de estar governado. Ausência é recusa —
++  // não "política menor", porque o Detector C teria capacidade sem autorização e
++  // ninguém saberia qual análise deixou de rodar.
++  for (const modo of FIRST_DUE_EVENT_WINDOW_MODES) {
++    if (!porModo.has(modo)) {
++      r.add(`${campo}.${modo}`, "janela executável ausente do conjunto governado")
++      falhou = true
++    }
++  }
++
++  if (falhou) return null
++
++  // Ordem estável na projeção, derivada do vocabulário — não da ordem em que o
++  // artefato listou. Reordenar o JSON não muda a política nem a saída.
++  return Object.freeze(
++    FIRST_DUE_EVENT_WINDOW_MODES.map((m) => porModo.get(m)).filter(
++      (j): j is DueWindow => j !== undefined,
++    ),
++  )
++}
++
++/** Monta uma janela lendo os parâmetros que o modo exige. Nenhum é presumido. */
++function construirJanela(
++  modo: FirstDueEventWindowMode,
++  o: Record<string, unknown>,
++  p: string,
++  r: Recusas,
++): DueWindow | null {
++  if (modo === "same_day") {
++    // Não tem parâmetro. Um `days` aqui seria dado sem significado.
++    if (o["days"] !== undefined) {
++      r.add(`${p}.days`, "same_day não tem parâmetro de dias")
++      return null
++    }
++    return Object.freeze({ mode: "same_day" as const })
++  }
++
++  // `days` vem do artefato. Sem pino: 7 é o valor governado hoje, e é o artefato
++  // que diz isso — não este arquivo.
++  const dias = inteiroExato(o["days"], `${p}.days`, r, 1)
++  if (dias === null) return null
++  return Object.freeze({ mode: "next_n_days" as const, days: dias })
++}
++
++/**
++ * Os modos de CONTEXTO — mesmo critério de totalidade.
++ *
++ * Ausente, vazio, duplicado ou com membro extra é recusa. `calendar_month` nunca
++ * é fabricado em runtime: se o artefato não o declarar, a política não carrega.
++ */
++function validarContexto(raw: unknown, r: Recusas): readonly string[] | null {
++  const campo = "first_due_windows.context"
++  if (!Array.isArray(raw) || raw.length === 0) {
++    r.add(campo, "lista não vazia obrigatória")
++    return null
++  }
++
++  const vistos = new Set<string>()
++  let falhou = false
++
++  for (const [i, v] of (raw as readonly unknown[]).entries()) {
++    if (typeof v !== "string" || !VOCABULARIO_DE_CONTEXTO.has(v)) {
++      r.add(`${campo}[${i}]`, `contexto não reconhecido: ${JSON.stringify(v)}`)
++      falhou = true
++      continue
++    }
++    if (vistos.has(v)) {
++      r.add(`${campo}[${i}]`, `contexto ${v} duplicado — context é um conjunto`)
++      falhou = true
++      continue
++    }
++    vistos.add(v)
++  }
++
++  for (const modo of FIRST_DUE_CONTEXT_MODES) {
++    if (!vistos.has(modo)) {
++      r.add(`${campo}.${modo}`, "contexto reconhecido ausente do conjunto governado")
++      falhou = true
++    }
++  }
++
++  // PROJEÇÃO dos valores declarados, não reconstrução a partir do vocabulário.
++  // Hoje o contexto tem um membro só e as duas formas dão o mesmo resultado; a
++  // diferença aparece no dia em que ganhar um segundo, e aí reconstruir do
++  // vocabulário deixaria de refletir o artefato.
++  return falhou ? null : Object.freeze([...(raw as readonly string[])])
++}
++
++// ─── Política validada ────────────────────────────────────────────────────────
++
++export interface CreditumPolicy {
++  readonly policy_version: string
++  readonly relevant_participation_bp: number
++  readonly financial_materiality_cents: number
++  readonly relevant_case_count: number
++  readonly minimum_population_contracts: number
++  readonly severity_scale: SeverityScale
++  readonly low_ticket_floor_cents: number
++  readonly low_ticket_severity: Severity
++  readonly coverage_missing_share_insufficient_at_bp: number
++  readonly numeric_tolerance_bp: number
++  readonly structural_tolerance_bp: number
++  readonly structural_fields: readonly string[]
++  readonly single_case_aggregators: readonly string[]
++  readonly expected_units_model: readonly string[]
++  /** `"UNRESOLVED"` enquanto não houver fonte governada dos valores. */
++  readonly expected_units_values_source: string
++  readonly installment_severity: ParticipationSeverityPolicy
++  readonly first_due_severity: ParticipationSeverityPolicy
++  readonly single_case_severity_basis: "share_of_total_bp"
++  readonly structural_severity: Severity
++
++  // ── Fase 2.7c: os campos que a configuração de produção exigia ──
++
++  /** Fuso de negócio. Relocado da constante `BUSINESS_TIMEZONE`, valor inalterado. */
++  readonly business_timezone: string
++  /** Relocado de `APPROVED_THRESHOLDS.similarity_threshold_bp`, valor inalterado. */
++  readonly similarity_threshold_bp: number
++  /** Relocado do briefing do Bloco 1 §14 Caso A. Comparação é `> 19`. */
++  readonly installment_threshold: number
++
++  /**
++   * Quantos contribuintes o Event do Detector A publica, e por qual critério.
++   *
++   * Parâmetro de EXPLICAÇÃO do evento. Não é `relevant_case_count`: ver
++   * `assertDistinctFiveFields`.
++   */
++  readonly contributing_case_rule: ContributingCaseRule
++
++  /**
++   * Diferença ABSOLUTA material entre métricas cuja unidade já é basis points.
++   *
++   * 1000 bp = 10 pontos percentuais. Não é `numeric_tolerance_bp`: aquela é
++   * divergência RELATIVA e decide equal/conflict. Ver §5 do briefing 2.7c.
++   */
++  readonly conflict_material_absolute_bp: number
++
++  /** Mudança contrafactual relativa material, em basis points, avaliada em MAGNITUDE. */
++  readonly single_case_material_relative_delta_bp: number
++  /** Sempre `true` na v1: a avaliação usa `abs()`, o resultado preserva o sinal. */
++  readonly single_case_relative_delta_uses_magnitude: boolean
++
++  /**
++   * As janelas EXECUTIVAS aprovadas do Detector C. Conjunto, não sequência.
++   *
++   * Nenhuma é padrão. A ordem no artefato não carrega significado e não elege
++   * uma "primeira". Quem escolhe é a execução, via
++   * `buildFirstDueExecutionConfig`.
++   */
++  readonly first_due_event_windows: readonly DueWindow[]
++
++  /**
++   * Leituras aprovadas como CONTEXTO — não geram Event próprio.
++   *
++   * `calendar_month` está aqui: a semântica fechada do Detector C o trata como
++   * contexto de leitura, e promovê-lo a janela executiva criaria um evento que
++   * ninguém aprovou.
++   */
++  readonly first_due_context: readonly string[]
++}
++
++const DIMENSOES_DE_PARTICIPACAO = new Set<string>(["share_count_bp", "share_amount_bp"])
++
++/** Valida um bloco de severidade por participação (A e C usam o mesmo formato). */
++function validarParticipacao(
++  raw: unknown,
++  caminho: string,
++  r: Recusas,
++): ParticipationSeverityPolicy | null {
++  if (typeof raw !== "object" || raw === null) {
++    r.add(caminho, "obrigatório")
++    return null
++  }
++  const b = raw as Record<string, unknown>
++
++  if (b["severity_strategy"] !== "max_available_participation") {
++    r.add(`${caminho}.severity_strategy`, "a estratégia aprovada é max_available_participation")
++  }
++
++  const cand = b["candidates"]
++  if (!Array.isArray(cand) || cand.length !== 2) {
++    r.add(`${caminho}.candidates`, "precisa listar as duas participações governadas")
++    return null
++  }
++  for (const [i, c] of (cand as readonly unknown[]).entries()) {
++    if (typeof c !== "string" || !DIMENSOES_DE_PARTICIPACAO.has(c)) {
++      r.add(`${caminho}.candidates[${i}]`, `dimensão não governada: ${JSON.stringify(c)}`)
++    }
++  }
++
++  const desempate = b["tie_break_dimension"]
++  if (typeof desempate !== "string" || !DIMENSOES_DE_PARTICIPACAO.has(desempate)) {
++    r.add(`${caminho}.tie_break_dimension`, "desempate obrigatório e governado")
++    return null
++  }
++  // Desempatar por uma dimensão que não é candidata seria escolher fora do
++  // conjunto — e o empate ficaria sem regra fechada.
++  if (!(cand as readonly unknown[]).includes(desempate)) {
++    r.add(`${caminho}.tie_break_dimension`, "o desempate precisa ser uma das candidatas")
++  }
++
++  return {
++    severity_strategy: "max_available_participation",
++    candidates: Object.freeze([...(cand as readonly ParticipationDimension[])]),
++    tie_break_dimension: desempate as ParticipationDimension,
++  }
++}
++
++/**
++ * Valida o artefato e devolve a política. Recusa em bloco, listando tudo.
++ *
++ * Não há caminho parcial: política com metade dos campos não roda com a outra
++ * metade em default.
++ */
++export function validateCreditumPolicy(raw: unknown): CreditumPolicy {
++  const r = new Recusas()
++
++  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
++    throw new GatewayError("NOT_ALLOWED", "Política Creditum recusada", ["$: precisa ser objeto"])
++  }
++  const a = raw as Record<string, unknown>
++
++  if (typeof a["schema_version"] !== "string" || !SCHEMAS_SUPORTADOS.has(a["schema_version"])) {
++    r.add("schema_version", `não suportada; suportadas: ${[...SCHEMAS_SUPORTADOS].join(", ")}`)
++  }
++  if (typeof a["policy_version"] !== "string" || !/^\d+\.\d+\.\d+$/.test(a["policy_version"])) {
++    r.add("policy_version", "obrigatória, formato x.y.z")
++  }
++
++  // ── Materialidade ──
++  const m = (a["materiality"] ?? {}) as Record<string, unknown>
++  const participacao = bp(m["relevant_participation_bp"], "materiality.relevant_participation_bp", r)
++  const financeiro = inteiroExato(
++    m["financial_materiality_cents"],
++    "materiality.financial_materiality_cents",
++    r,
++    1,
++  )
++  const casos = inteiroExato(m["relevant_case_count"], "materiality.relevant_case_count", r, 1)
++  const populacao = inteiroExato(
++    m["minimum_population_contracts"],
++    "materiality.minimum_population_contracts",
++    r,
++    1,
++  )
++  // Semântica OR é a decisão aprovada. Outro valor mudaria o significado de
++  // "material" sem que ninguém revisasse o código dos detectores.
++  if (m["semantics"] !== "OR") {
++    r.add("materiality.semantics", "a semântica aprovada é OR")
++  }
++
++  // ── Severidade ──
++  const escala = validarBandas(a["severity_bands"], r)
++
++  // ── Low-ticket ──
++  const lt = (a["low_ticket"] ?? {}) as Record<string, unknown>
++  const piso = inteiroExato(lt["floor_cents"], "low_ticket.floor_cents", r, 1)
++  if (lt["comparison"] !== "strictly_less_than") {
++    r.add("low_ticket.comparison", "a regra aprovada é estritamente menor")
++  }
++  /**
++   * Severidade da regra low-ticket: obrigatória, dentro do vocabulário, e o valor
++   * é do ARTEFATO.
++   *
++   * Até o gate final aqui havia `!== "medium"`. Era pino de valor: `medium` é uma
++   * escolha entre severidades todas implementáveis, então duplicá-la no código
++   * criava uma segunda autoridade executável — o artefato dizia `medium` e o
++   * TypeScript também, e a igualdade era coincidência mantida à mão.
++   *
++   * A regra continua FIXA no sentido que importa: não deriva das bandas
++   * percentuais, nem de participação, nem de valor agregado. Ela é declarada, e
++   * quem declara é a política governada.
++   */
++  const sevLowTicket = lt["severity"]
++  if (typeof sevLowTicket !== "string" || !SEVERIDADES.has(sevLowTicket)) {
++    r.add(
++      "low_ticket.severity",
++      `severidade obrigatória, dentro do vocabulário: ${[...SEVERIDADES].join(", ")}`,
++    )
++  }
++
++  // ── Cobertura ──
++  const cov = (a["coverage"] ?? {}) as Record<string, unknown>
++  const faltanteInsuficiente = bp(
++    cov["missing_share_insufficient_at_bp"],
++    "coverage.missing_share_insufficient_at_bp",
++    r,
++  )
++  if (faltanteInsuficiente !== null && faltanteInsuficiente === 0) {
++    r.add(
++      "coverage.missing_share_insufficient_at_bp",
++      "zero tornaria qualquer ausência insuficiente e apagaria a faixa degraded",
++    )
++  }
++
++  // ── Discordância entre fontes ──
++  const sd = (a["source_disagreement"] ?? {}) as Record<string, unknown>
++  const tolerancia = bp(sd["numeric_tolerance_bp"], "source_disagreement.numeric_tolerance_bp", r)
++  const tolEstrutural = inteiroExato(
++    sd["structural_tolerance_bp"],
++    "source_disagreement.structural_tolerance_bp",
++    r,
++  )
++  // Tolerância estrutural diferente de zero contradiz a decisão aprovada: data e
++  // identidade não têm "diferença pequena".
++  if (tolEstrutural !== null && tolEstrutural !== 0) {
++    r.add("source_disagreement.structural_tolerance_bp", "campos estruturais têm tolerância ZERO")
++  }
++  const estruturais = sd["structural_fields"]
++  if (!Array.isArray(estruturais) || estruturais.length === 0) {
++    r.add("source_disagreement.structural_fields", "lista não vazia obrigatória")
++  }
++
++  // ── Janelas do Detector C ──
++  const w = (a["first_due_windows"] ?? {}) as Record<string, unknown>
++  const janelas = validarJanelasAprovadas(w["approved_event_windows"], r)
++  const contexto = validarContexto(w["context"], r)
++  if (w["day_basis"] !== BASE_DE_DIAS_IMPLEMENTADA) {
++    r.add(
++      "first_due_windows.day_basis",
++      `precisa ser ${BASE_DE_DIAS_IMPLEMENTADA} — dia útil exigiria calendário de feriados governado`,
++    )
++  }
++
++  // ── Agregadores do Detector D ──
++  const ags = a["single_case_aggregators"]
++  if (!Array.isArray(ags) || ags.length === 0) {
++    r.add("single_case_aggregators", "lista não vazia obrigatória")
++  } else {
++    for (const [i, ag] of (ags as readonly unknown[]).entries()) {
++      if (typeof ag !== "string" || !VOCABULARIO_DE_METRICAS.has(ag)) {
++        r.add(`single_case_aggregators[${i}]`, `agregador não aprovado: ${JSON.stringify(ag)}`)
++      }
++    }
++  }
++
++  // ── expected_units: modelo aprovado, valores não ──
++  const eu = (a["expected_units"] ?? {}) as Record<string, unknown>
++  const modelo = eu["model"]
++  if (!Array.isArray(modelo) || modelo.length === 0) {
++    r.add("expected_units.model", "modelo obrigatório")
++  }
++  if (typeof eu["values_source"] !== "string") {
++    r.add("expected_units.values_source", "obrigatório — `UNRESOLVED` é resposta válida")
++  }
++
++  // ── Severidade por detector: as quatro decisões fechadas na Fase 2.7b ──
++  const ds = (a["detector_severity"] ?? {}) as Record<string, unknown>
++
++  const instSev = validarParticipacao(
++    ds["installment_concentration"],
++    "detector_severity.installment_concentration",
++    r,
++  )
++  const dueSev = validarParticipacao(
++    ds["first_due_concentration"],
++    "detector_severity.first_due_concentration",
++    r,
++  )
++
++  const single = (ds["material_single_case"] ?? {}) as Record<string, unknown>
++  if (single["severity_strategy"] !== "share_of_total_when_applicable") {
++    r.add(
++      "detector_severity.material_single_case.severity_strategy",
++      "a estratégia aprovada é share_of_total_when_applicable",
++    )
++  }
++  // `relative_delta_bp` é mudança contrafactual, não participação: pode ser
++  // negativa e passar de 10000 bp. Classificá-la pelas bandas de participação
++  // seria conflagrar duas grandezas diferentes.
++  if (single["basis"] !== "share_of_total_bp") {
++    r.add(
++      "detector_severity.material_single_case.basis",
++      "a base aprovada é share_of_total_bp — relative_delta_bp não é participação",
++    )
++  }
++
++  const csc = (ds["cross_source_conflict"] ?? {}) as Record<string, unknown>
++  /**
++   * Severidade de conflito ESTRUTURAL: obrigatória, no vocabulário, valor do
++   * artefato.
++   *
++   * O `!== "medium"` que existia aqui saiu pelo mesmo motivo do low-ticket. O que
++   * permanece é a natureza da regra: ela é QUALITATIVA — conflito de data ou de
++   * identidade não tem denominador, então a severidade é declarada em vez de
++   * calculada. Qual severidade é decisão de negócio, e ela mora no JSON.
++   *
++   * Tolerância zero continua não significando gravidade máxima; hoje a política
++   * declara `medium`. Se um dia declarar outra coisa, isso aparece no diff do
++   * artefato e no hash, não numa constante escondida.
++   */
++  const estrutural = csc["structural_severity"]
++  if (typeof estrutural !== "string" || !SEVERIDADES.has(estrutural)) {
++    r.add(
++      "detector_severity.cross_source_conflict.structural_severity",
++      `severidade obrigatória, dentro do vocabulário: ${[...SEVERIDADES].join(", ")}`,
++    )
++  }
++
++  // ── Configuração por detector: as três decisões fechadas na Fase 2.7c ──
++  const dc = (a["detector_config"] ?? {}) as Record<string, unknown>
++
++  const eng = (dc["engine"] ?? {}) as Record<string, unknown>
++  if (!isValidTimezone(eng["business_timezone"])) {
++    r.add("detector_config.engine.business_timezone", "fuso IANA obrigatório")
++  }
++  const similaridade = bp(
++    eng["similarity_threshold_bp"],
++    "detector_config.engine.similarity_threshold_bp",
++    r,
++  )
++
++  const ic = (dc["installment_concentration"] ?? {}) as Record<string, unknown>
++  const parcelas = inteiroExato(
++    ic["installment_threshold"],
++    "detector_config.installment_concentration.installment_threshold",
++    r,
++    1,
++  )
++  // A comparação é parte da regra: `>= 19` e `> 19` classificam o contrato de 19
++  // parcelas de formas opostas, e o briefing aprovou "mais de 19".
++  if (ic["installment_comparison"] !== "strictly_greater_than") {
++    r.add(
++      "detector_config.installment_concentration.installment_comparison",
++      "a comparação aprovada é strictly_greater_than",
++    )
++  }
++  const regra = validarRegraDeContribuintes(
++    ic["contributing_case_rule"],
++    "detector_config.installment_concentration.contributing_case_rule",
++    r,
++  )
++
++  const cc = (dc["cross_source_conflict"] ?? {}) as Record<string, unknown>
++  const absolutoBp = bp(
++    cc["material_absolute_basis_points"],
++    "detector_config.cross_source_conflict.material_absolute_basis_points",
++    r,
++  )
++
++  const sc = (dc["material_single_case"] ?? {}) as Record<string, unknown>
++  // Sem teto de 10000: mudança relativa pode passar de 100%. `bp()` não serve.
++  const deltaRelativo = inteiroExato(
++    sc["material_relative_delta_bp"],
++    "detector_config.material_single_case.material_relative_delta_bp",
++    r,
++    1,
++  )
++  if (sc["relative_delta_materiality_uses_magnitude"] !== true) {
++    // Sem magnitude, uma queda de 15% no agregado não seria material e um
++    // contrafactual negativo relevante desapareceria em silêncio.
++    r.add(
++      "detector_config.material_single_case.relative_delta_materiality_uses_magnitude",
++      "a v1 avalia materialidade relativa em MAGNITUDE",
++    )
++  }
++
++  if (r.list.length > 0) {
++    throw new GatewayError("NOT_ALLOWED", "Política Creditum recusada", r.list)
++  }
++
++  return Object.freeze({
++    policy_version: a["policy_version"] as string,
++    relevant_participation_bp: participacao as number,
++    financial_materiality_cents: financeiro as number,
++    relevant_case_count: casos as number,
++    minimum_population_contracts: populacao as number,
++    severity_scale: Object.freeze(escala as SeverityScale),
++    low_ticket_floor_cents: piso as number,
++    low_ticket_severity: lt["severity"] as Severity,
++    coverage_missing_share_insufficient_at_bp: faltanteInsuficiente as number,
++    numeric_tolerance_bp: tolerancia as number,
++    structural_tolerance_bp: tolEstrutural as number,
++    structural_fields: Object.freeze([...(estruturais as readonly string[])]),
++    single_case_aggregators: Object.freeze([...(ags as readonly string[])]),
++    expected_units_model: Object.freeze([...(modelo as readonly string[])]),
++    expected_units_values_source: eu["values_source"] as string,
++    installment_severity: instSev as ParticipationSeverityPolicy,
++    first_due_severity: dueSev as ParticipationSeverityPolicy,
++    single_case_severity_basis: "share_of_total_bp",
++    structural_severity: estrutural as Severity,
++    business_timezone: eng["business_timezone"] as string,
++    similarity_threshold_bp: similaridade as number,
++    installment_threshold: parcelas as number,
++    contributing_case_rule: regra as ContributingCaseRule,
++    conflict_material_absolute_bp: absolutoBp as number,
++    single_case_material_relative_delta_bp: deltaRelativo as number,
++    single_case_relative_delta_uses_magnitude: true,
++    first_due_event_windows: Object.freeze([...(janelas ?? [])]),
++    first_due_context: Object.freeze([...(contexto ?? [])]),
++  })
++}
++
++/** A política de produção em vigor. Projeção do artefato governado. */
++export const CREDITUM_POLICY_V1: CreditumPolicy = validateCreditumPolicy(ARTEFATO)
++
++// ─── Cobertura: da política para a primitive existente ────────────────────────
++
++/**
++ * Traduz a política de cobertura para os dois limiares que os detectores já usam.
++ *
++ * A política é escrita em **fração AUSENTE** — a linguagem em que foi aprovada.
++ * Os detectores comparam `unit_coverage.ratio_bp`, que é a fração **presente**.
++ * A tradução é `ausente = 10000 - presente`, e fica aqui, num lugar só, testada
++ * nos limites. Duplicar os números já traduzidos no artefato criaria duas
++ * representações da mesma decisão — exatamente o defeito da Fase 2.6c.
++ *
++ *   ausente = 0                       → cobertura 10000 → ok
++ *   0 < ausente < limiar              → degraded
++ *   ausente >= limiar                 → insufficient
++ *
++ * Com o limiar aprovado de 1000 bp: `degraded_below_bp = 10000` (qualquer
++ * ausência degrada) e `emit_event_below_bp = 9001` (cobertura de 9000 bp, ou
++ * seja 10% ausente, já é insuficiente — o `<` do detector exige o +1).
++ */
++export function coverageThresholdsFromPolicy(p: CreditumPolicy): {
++  degraded_below_bp: number
++  emit_event_below_bp: number
++} {
++  return {
++    degraded_below_bp: 10000,
++    emit_event_below_bp: 10000 - p.coverage_missing_share_insufficient_at_bp + 1,
++  }
++}
++
++// ─── O que a política ainda NÃO decide ────────────────────────────────────────
++
++/**
++ * O que a Política v1 ainda não decide. **Vazio desde a Fase 2.7b.**
++ *
++ * A lista existia com quatro campos: as dimensões de severidade de A, C e D, e a
++ * severidade estrutural de B. Todas foram decididas — não por afrouxar a
++ * validação, mas porque o artefato governado passou a contê-las e a validação
++ * ficou mais estrita, não menos.
++ *
++ * A constante permanece porque o mecanismo continua valendo: a próxima decisão
++ * pendente entra aqui e volta a bloquear a configuração de produção.
++ */
++export const POLICY_DECISIONS_PENDING: readonly string[] = Object.freeze([])
++
++/**
++ * Erro de projeção: a política é válida, mas não cobre tudo que produção exige.
++ *
++ * Existe separado da recusa de política para que o relatório distinga "o
++ * artefato está errado" de "o artefato está certo e ainda falta decisão humana".
++ */
++export function assertProductionPolicyComplete(pendentes: readonly string[]): void {
++  if (pendentes.length > 0) {
++    throw new GatewayError(
++      "NOT_ALLOWED",
++      "Configuração de produção incompleta: a Política Creditum v1 não decide estes campos",
++      [...pendentes],
++    )
++  }
++}
++
++// ─── Projeção para configuração de produção ───────────────────────────────────
++
++/**
++ * Campos de `DetectorConfig` que a Política Creditum v1 **não** decide.
++ *
++ * **Vazio desde a Fase 2.7c.** A lista tinha três campos e todos foram
++ * aprovados: `contributing_case_rule` (top_n 5), `material_absolute_basis_points`
++ * (1000 bp) e `material_relative_delta_bp` (1000 bp em magnitude). Nenhum deles
++ * saiu daqui por afrouxamento — o artefato governado passou a contê-los e a
++ * validação ficou mais estrita.
++ *
++ * A constante permanece pelo mesmo motivo de `POLICY_DECISIONS_PENDING`: o
++ * mecanismo continua valendo e a próxima lacuna volta a bloquear a projeção.
++ */
++export const PRODUCTION_CONFIG_FIELDS_PENDING: readonly string[] = Object.freeze([])
++
++/**
++ * Recusa a projeção enquanto houver campo de configuração sem decisão.
++ *
++ * Separada da recusa de política de propósito: distingue "o artefato está errado"
++ * de "o artefato está certo e a configuração exige um campo que ele não cobre".
++ */
++export function assertProductionConfigComplete(pendentes: readonly string[]): void {
++  if (pendentes.length > 0) {
++    throw new GatewayError(
++      "NOT_ALLOWED",
++      "Configuração de produção incompleta: campos sem decisão governada",
++      [...pendentes],
++    )
++  }
++}
++
++/**
++ * A janela é escolhida pela EXECUÇÃO. Não existe janela base.
++ *
++ * A Fase 2.7c tinha uma regra aqui: "a janela base é a única aprovada que
++ * dispensa `reference_date`". Foi removida na 2.7c.1, e a razão vale registrar —
++ * ausência de `reference_date` é característica de FORMA, não semântica de
++ * negócio. Uma limitação do tipo `DetectorConfig`, que comporta uma janela só,
++ * estava decidindo qual análise a Creditum executa.
++ *
++ * A política aprova duas janelas executivas e não elege nenhuma. Quem escolhe é
++ * quem executa, e a escolha é explícita.
++ */
++
++/** As janelas EXECUTIVAS aprovadas. Conjunto — a ordem não decide nada. */
++export function productionFirstDueWindows(
++  p: CreditumPolicy = CREDITUM_POLICY_V1,
++): readonly DueWindow[] {
++  return p.first_due_event_windows
++}
++
++/**
++ * Os dias corridos da janela `next_n_days` governada.
++ *
++ * Não existe campo derivado guardando este número. A versão anterior tinha um
++ * `first_due_next_n_days` na política validada, alimentado por uma função que
++ * devolvia 7 quando a janela faltava — o fallback que o gate final encontrou.
++ *
++ * Deletar a cópia derivada foi a correção: o valor mora num lugar só, dentro da
++ * janela governada, e a validação de totalidade garante que a janela exista.
++ * `undefined` aqui só é alcançável com política montada à mão, e é `undefined` —
++ * nunca um número inventado.
++ */
++export function productionNextNDays(p: CreditumPolicy = CREDITUM_POLICY_V1): number | undefined {
++  const j = p.first_due_event_windows.find((x) => x.mode === "next_n_days")
++  return j !== undefined && j.mode === "next_n_days" ? j.days : undefined
++}
++
++/** As leituras aprovadas como CONTEXTO. Não geram Event próprio. */
++export function productionFirstDueContext(
++  p: CreditumPolicy = CREDITUM_POLICY_V1,
++): readonly string[] {
++  return p.first_due_context
++}
++
++/**
++ * A escolha de janela de uma execução do Detector C.
++ *
++ * União discriminada de propósito: `reference_date` só existe no ramo em que
++ * significa alguma coisa. Com um campo opcional solto,
++ * `{ window: "same_day", reference_date }` compilaria e a data seria ignorada em
++ * silêncio; `{ window: "next_n_days" }` sem data também compilaria, deixando a
++ * falta para ser descoberta em runtime.
++ *
++ * A política define "7 dias corridos". A execução informa "a partir de quando".
++ */
++export type FirstDueExecution =
++  | { readonly window: "same_day" }
++  | { readonly window: "next_n_days"; readonly reference_date: string }
++
++const DATA_CIVIL = /^\d{4}-\d{2}-\d{2}$/
++
++/**
++ * Monta a configuração de UMA execução do Detector C.
++ *
++ * Recusa janela que a política não aprova, e recusa `next_n_days` sem
++ * `reference_date` válida. Não existe caminho que devolva configuração com
++ * janela presumida: a alternativa a escolher explicitamente é falhar.
++ */
++export function buildFirstDueExecutionConfig(
++  p: CreditumPolicy,
++  execution: FirstDueExecution,
++): DetectorConfig {
++  const base = buildProductionDetectorConfig(p)
++  const aprovadas = productionFirstDueWindows(p)
++
++  const janela = aprovadas.find((j) => j.mode === execution.window)
++  if (janela === undefined) {
++    throw new GatewayError("NOT_ALLOWED", "Janela não aprovada pela Política Creditum v1", [
++      `firstDueConcentration.window: ${execution.window} não está nas janelas executivas aprovadas`,
++    ])
++  }
++
++  if (execution.window === "next_n_days" && !DATA_CIVIL.test(execution.reference_date)) {
++    // A política diz quantos dias; ela não sabe, nem pode saber, a partir de que
++    // dia esta avaliação conta.
++    throw new GatewayError("SCHEMA_INVALID", "reference_date inválida para next_n_days", [
++      `reference_date: data civil AAAA-MM-DD obrigatória, recebido ${JSON.stringify(
++        execution.reference_date,
++      )}`,
++    ])
++  }
++
++  // Reinjeta a janela e REVALIDA: a projeção não tem passe livre.
++  return validateDetectorConfig({
++    ...base,
++    firstDueConcentration: { ...base.firstDueConcentration, window: janela },
++  })
++}
++
++
++/**
++ * Monta a configuração de produção a partir da política governada.
++ *
++ * Cada valor de negócio vem do artefato. O que este código contém é **tradução
++ * de forma**, não decisão:
++ *
++ *   participação relevante   → toda dimensão `*_share_*_bp` dos quatro detectores
++ *   materialidade financeira → toda dimensão em centavos
++ *   quantidade relevante     → toda dimensão de contagem
++ *   população mínima         → amostra mínima e população após remoção
++ *   cobertura ausente        → os limiares de cobertura, via a primitive existente
++ *
++ * Uma dimensão receber o mesmo número que outra não as torna o mesmo campo: são
++ * campos independentes que a v1 preencheu com o mesmo valor aprovado, e cada um
++ * pode mudar sozinho. É a mesma separação que `assertDistinctFiveFields` prova
++ * para os dois "5".
++ *
++ * O resultado passa por `validateDetectorConfig` — a projeção não tem passe
++ * livre. Não existe queda para `TEST_CONFIG`: este módulo não conhece `tests/`.
++ */
++export function buildProductionDetectorConfig(
++  p: CreditumPolicy = CREDITUM_POLICY_V1,
++): DetectorConfig {
++  assertProductionPolicyComplete(POLICY_DECISIONS_PENDING)
++  assertProductionConfigComplete(PRODUCTION_CONFIG_FIELDS_PENDING)
++
++  const cobertura = coverageThresholdsFromPolicy(p)
++
++  return validateDetectorConfig({
++    config_version: p.policy_version,
++    businessTimezone: p.business_timezone,
++    similarity_threshold_bp: p.similarity_threshold_bp,
++
++    installmentConcentration: {
++      installment_threshold: p.installment_threshold,
++      minimum_sample_size: p.minimum_population_contracts,
++      material_count_above: p.relevant_case_count,
++      material_share_count_bp: p.relevant_participation_bp,
++      material_share_amount_bp: p.relevant_participation_bp,
++      material_amount_cents: p.financial_materiality_cents,
++      contributing_case_rule: p.contributing_case_rule,
++      severity_strategy: p.installment_severity.severity_strategy,
++      severity_dimension: p.installment_severity.tie_break_dimension,
++      severity_scale: p.severity_scale,
++      // Mesma pergunta que `emit_event_below_bp`: abaixo desta cobertura a
++      // amostra não sustenta o consolidado. Um segundo número aqui seria uma
++      // segunda representação da mesma decisão.
++      minimum_coverage_bp: cobertura.emit_event_below_bp,
++    },
++
++    crossSourceConflict: {
++      material_absolute_count: p.relevant_case_count,
++      material_amount_cents: p.financial_materiality_cents,
++      material_absolute_basis_points: p.conflict_material_absolute_bp,
++      material_relative_difference_bp: p.relevant_participation_bp,
++      material_share_bp: p.relevant_participation_bp,
++      structural_fields: p.structural_fields,
++      severity_by_relative_bp: p.severity_scale,
++      structural_severity: p.structural_severity,
++    },
++
++    firstDueConcentration: {
++      // SEM janela. Ela é parâmetro de EXECUÇÃO: a política aprova duas e não
++      // elege nenhuma. `buildFirstDueExecutionConfig` monta a execução; o
++      // Detector C recusa se receber configuração sem janela.
++      material_count: p.relevant_case_count,
++      material_share_count_bp: p.relevant_participation_bp,
++      material_amount_cents: p.financial_materiality_cents,
++      material_share_amount_bp: p.relevant_participation_bp,
++      severity_strategy: p.first_due_severity.severity_strategy,
++      severity_dimension: p.first_due_severity.tie_break_dimension,
++      severity_scale: p.severity_scale,
++      minimum_sample_size: p.minimum_population_contracts,
++    },
++
++    materialSingleCase: {
++      supported_metrics: p.single_case_aggregators,
++      min_population_after_removal: p.minimum_population_contracts,
++      material_absolute_delta_cents: p.financial_materiality_cents,
++      material_count_delta: p.relevant_case_count,
++      material_relative_delta_bp: p.single_case_material_relative_delta_bp,
++      material_share_of_total_bp: p.relevant_participation_bp,
++      severity_dimension: p.single_case_severity_basis,
++      severity_scale: p.severity_scale,
++    },
++
++    coverage: cobertura,
++  })
++}
++
++/**
++ * Os dois "5" da Política v1 são campos INDEPENDENTES.
++ *
++ * `materiality.relevant_case_count` decide se um fato merece atenção;
++ * `contributing_case_rule.top_n` decide quantos contribuintes o Event lista para
++ * explicar o fato. Valem 5 os dois hoje, e é exatamente por isso que a
++ * independência precisa de prova: um `top_n: cfg.material_count_above` passaria
++ * em todo teste de valor e amarraria os dois para sempre.
++ *
++ * Devolve `true` quando mexer num não move o outro. Usada em teste; exportada
++ * porque a invariante é do módulo, não da suíte.
++ */
++export function assertDistinctFiveFields(p: CreditumPolicy): boolean {
++  const outro = validateCreditumPolicy({
++    ...(ARTEFATO as object),
++    materiality: { ...(ARTEFATO as { materiality: object }).materiality, relevant_case_count: 7 },
++  })
++  const regra = outro.contributing_case_rule
++  return (
++    outro.relevant_case_count === 7 &&
++    regra.mode === "top_n" &&
++    regra.n === (p.contributing_case_rule.mode === "top_n" ? p.contributing_case_rule.n : -1)
++  )
++}
++
++export const POLICY_V1_COMPLETE = POLICY_DECISIONS_PENDING.length === 0
+diff --git a/intelligence/detectors/tests/production-policy.test.ts b/intelligence/detectors/tests/production-policy.test.ts
+new file mode 100644
+index 0000000..1d529f5
+--- /dev/null
++++ b/intelligence/detectors/tests/production-policy.test.ts
+@@ -0,0 +1,1660 @@
++/**
++ * Política Creditum v1 — projeção governada, validação fail-closed.
++ *
++ * A Fase 2.6c terminou com um HIGH: três aliases D13 viviam em TypeScript e o
++ * runtime os enxertava depois do load. Havia duas fontes de governança, e a
++ * segunda era invisível para quem olhasse a fonte governada.
++ *
++ * Estes testes aplicam a mesma trava à política de negócio. Nenhum valor da
++ * Creditum pode existir em constante de código; a projeção precisa vir do
++ * artefato, e política incompleta precisa recusar em vez de completar sozinha.
++ */
++
++import { readFileSync } from "node:fs"
++import { describe, expect, it } from "vitest"
++import type { CreditumPolicy } from "../src/production-policy"
++import {
++  CREDITUM_POLICY_V1,
++  POLICY_DECISIONS_PENDING,
++  POLICY_V1_COMPLETE,
++  PRODUCTION_CONFIG_FIELDS_PENDING,
++  assertProductionConfigComplete,
++  assertProductionPolicyComplete,
++  buildProductionDetectorConfig,
++  assertDistinctFiveFields,
++  productionNextNDays,
++  coverageThresholdsFromPolicy,
++  productionFirstDueWindows,
++  buildFirstDueExecutionConfig,
++  productionFirstDueContext,
++  validateCreditumPolicy,
++} from "../src/production-policy"
++import { classifySeverity } from "../src/severity"
++import { APPROVED_THRESHOLDS, BUSINESS_TIMEZONE } from "../src/config"
++import { GatewayError } from "../../gateway/src/errors"
++
++const ARTEFATO = JSON.parse(
++  readFileSync(new URL("../../governance/policy/creditum-policy.v1.json", import.meta.url), "utf8"),
++) as Record<string, unknown>
++
++/** Cópia profunda do artefato válido, para mutar um campo por vez. */
++const comMudanca = (mut: (a: Record<string, never>) => void): unknown => {
++  const copia = JSON.parse(JSON.stringify(ARTEFATO)) as Record<string, never>
++  mut(copia)
++  return copia
++}
++
++const recusa = (mut: (a: Record<string, never>) => void): string[] => {
++  try {
++    validateCreditumPolicy(comMudanca(mut))
++  } catch (e) {
++    if (e instanceof GatewayError) return [...(e.details ?? [])]
++    throw e
++  }
++  throw new Error("esperava recusa, a política foi aceita")
++}
++
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("§2 — os valores aprovados de materialidade", () => {
++  it("participação relevante = 10%", () => {
++    expect(CREDITUM_POLICY_V1.relevant_participation_bp).toBe(1000)
++  })
++
++  it("materialidade financeira = R$ 50.000 em centavos", () => {
++    expect(CREDITUM_POLICY_V1.financial_materiality_cents).toBe(5_000_000)
++  })
++
++  it("quantidade relevante = 5 casos", () => {
++    expect(CREDITUM_POLICY_V1.relevant_case_count).toBe(5)
++  })
++
++  it("população mínima = 10 contratos", () => {
++    expect(CREDITUM_POLICY_V1.minimum_population_contracts).toBe(10)
++  })
++
++  it("`calibratable` está registrado como estado, não como comportamento", () => {
++    // Calibrável significa que o CEO pode revisar. Não autoriza o sistema a
++    // mudar o número sozinho — nada no runtime escreve no artefato.
++    const m = ARTEFATO["materiality"] as Record<string, unknown>
++    expect(m["financial_materiality_status"]).toBe("approved_initial_calibratable")
++    const fonte = readFileSync(new URL("../src/production-policy.ts", import.meta.url), "utf8")
++    expect(fonte).not.toContain("writeFileSync")
++  })
++})
++
++describe("§21 — bandas de severidade aprovadas", () => {
++  const escala = CREDITUM_POLICY_V1.severity_scale
++
++  it("fronteiras exatas", () => {
++    for (const [bp, esperado] of [
++      [0, "low"],
++      [999, "low"],
++      [1000, "medium"],
++      [2499, "medium"],
++      [2500, "high"],
++      [4999, "high"],
++      [5000, "critical"],
++    ] as const) {
++      expect(classifySeverity(escala, bp), `${bp} bp`).toBe(esperado)
++    }
++  })
++
++  it("acima de 10000 bp continua critical — sem clamp silencioso", () => {
++    expect(classifySeverity(escala, 20000)).toBe("critical")
++  })
++
++  it("valor abaixo da primeira banda falha fechado, não vira `info`", () => {
++    // A escala começa em 0. Um bp negativo não é classificado por acidente.
++    expect(() => classifySeverity(escala, -1)).toThrow(GatewayError)
++  })
++
++  it("recusa bandas sobrepostas", () => {
++    const d = recusa((a) => {
++      ;(a["severity_bands"] as unknown as { at_least_bp: number }[])[2]!.at_least_bp = 1000
++    })
++    expect(d.join(" ")).toContain("sobreposição")
++  })
++
++  it("recusa buraco no piso do domínio", () => {
++    const d = recusa((a) => {
++      ;(a["severity_bands"] as unknown as { at_least_bp: number }[])[0]!.at_least_bp = 100
++    })
++    expect(d.join(" ")).toContain("começar em 0")
++  })
++
++  it("recusa ordem de severidade incoerente", () => {
++    const d = recusa((a) => {
++      ;(a["severity_bands"] as unknown as { severity: string }[])[2]!.severity = "low"
++    })
++    expect(d.join(" ")).toContain("ordem incoerente")
++  })
++})
++
++describe("§7 — low-ticket: piso e severidade fixa", () => {
++  it("piso R$ 1.499,99, comparação estritamente menor", () => {
++    expect(CREDITUM_POLICY_V1.low_ticket_floor_cents).toBe(149_999)
++  })
++
++  it("severidade fixa medium", () => {
++    expect(CREDITUM_POLICY_V1.low_ticket_severity).toBe("medium")
++  })
++
++  it("§7 — a severidade vem do ARTEFATO: medium não é pinado em TypeScript", () => {
++    // Este teste substitui o antigo, que afirmava que qualquer severidade diferente
++    // de medium era recusada. Aquilo era pino de valor: `medium` é escolha entre
++    // severidades todas implementáveis, e duplicá-la no código criava uma segunda
++    // autoridade executável.
++    //
++    // Fixture de TESTE, não a Policy v1 real — o artefato de produção continua
++    // declarando medium, e o teste acima afirma isso.
++    for (const sev of ["low", "high", "critical"] as const) {
++      const outra = validateCreditumPolicy(
++        comMudanca((a) => {
++          ;(a["low_ticket"] as unknown as { severity: string }).severity = sev
++        }),
++      )
++      expect(outra.low_ticket_severity, sev).toBe(sev)
++    }
++  })
++
++  it("severidade ausente ou fora do vocabulário continua recusada", () => {
++    for (const ruim of [undefined, "", "urgente", "MEDIUM", 3, null]) {
++      const d = recusa((a) => {
++        ;(a["low_ticket"] as unknown as Record<string, unknown>)["severity"] = ruim
++      })
++      expect(d.join(" "), JSON.stringify(ruim)).toContain("low_ticket.severity")
++    }
++  })
++
++  it("recusa comparação diferente de estritamente menor", () => {
++    const d = recusa((a) => {
++      ;(a["low_ticket"] as unknown as { comparison: string }).comparison = "less_or_equal"
++    })
++    expect(d.join(" ")).toContain("estritamente menor")
++  })
++
++  it("a severidade do low-ticket NÃO é derivada das bandas gerais", () => {
++    // Se fosse, `medium` corresponderia a 1000..2499 bp de alguma base. A regra
++    // é individual e não tem base percentual nenhuma.
++    expect(CREDITUM_POLICY_V1.low_ticket_severity).toBe("medium")
++    expect(CREDITUM_POLICY_V1.low_ticket_floor_cents).not.toBe(
++      CREDITUM_POLICY_V1.financial_materiality_cents,
++    )
++  })
++})
++
++describe("§9/§23 — cobertura", () => {
++  const t = coverageThresholdsFromPolicy(CREDITUM_POLICY_V1)
++
++  /** Reproduz a decisão do detector a partir dos limiares projetados. */
++  const qualidade = (esperadas: number, faltantes: number): string => {
++    const ratio = Math.floor(((esperadas - faltantes) * 10000) / esperadas)
++    if (ratio < t.emit_event_below_bp) return "insufficient"
++    if (ratio < t.degraded_below_bp) return "degraded"
++    return "ok"
++  }
++
++  it("os exemplos governados", () => {
++    for (const [esperadas, faltantes, esperado] of [
++      [20, 0, "ok"],
++      [20, 1, "degraded"],
++      [20, 2, "insufficient"],
++      [10, 1, "insufficient"],
++      [11, 1, "degraded"],
++    ] as const) {
++      expect(qualidade(esperadas, faltantes), `${esperadas}/${faltantes}`).toBe(esperado)
++    }
++  })
++
++  it("fronteira: 9,99% degrada, 10,00% é insuficiente", () => {
++    expect(qualidade(1000, 99)).toBe("degraded")
++    expect(qualidade(1000, 100)).toBe("insufficient")
++  })
++
++  it("aritmética inteira: nenhum float na projeção", () => {
++    expect(Number.isSafeInteger(t.degraded_below_bp)).toBe(true)
++    expect(Number.isSafeInteger(t.emit_event_below_bp)).toBe(true)
++  })
++
++  it("recusa limiar zero — apagaria a faixa degraded", () => {
++    const d = recusa((a) => {
++      ;(a["coverage"] as unknown as { missing_share_insufficient_at_bp: number }).missing_share_insufficient_at_bp = 0
++    })
++    expect(d.join(" ")).toContain("degraded")
++  })
++})
++
++describe("§11 — expected_units: modelo aprovado, valores não", () => {
++  it("o modelo é period + dataset_id + unit_id", () => {
++    expect(CREDITUM_POLICY_V1.expected_units_model).toEqual(["period", "dataset_id", "unit_id"])
++  })
++
++  it("os VALORES continuam sem fonte governada", () => {
++    expect(CREDITUM_POLICY_V1.expected_units_values_source).toBe("UNRESOLVED")
++  })
++
++  it("a política NÃO enumera unidades esperadas", () => {
++    // O erro que isto previne: usar o catálogo ativo — hoje 49 unidades — como
++    // denominador de cobertura. Catálogo ativo não é expected_units.
++    const eu = ARTEFATO["expected_units"] as Record<string, unknown>
++    expect(eu["values"]).toBeUndefined()
++    expect(eu["units"]).toBeUndefined()
++    for (const v of Object.values(eu)) {
++      if (Array.isArray(v)) expect(v).toEqual(["period", "dataset_id", "unit_id"])
++    }
++  })
++})
++
++describe("§12/§13 — discordância entre fontes", () => {
++  it("tolerância numérica de 2% = 200 bp", () => {
++    expect(CREDITUM_POLICY_V1.numeric_tolerance_bp).toBe(200)
++  })
++
++  it("tolerância estrutural é ZERO", () => {
++    expect(CREDITUM_POLICY_V1.structural_tolerance_bp).toBe(0)
++  })
++
++  it("recusa tolerância estrutural diferente de zero", () => {
++    const d = recusa((a) => {
++      ;(a["source_disagreement"] as unknown as { structural_tolerance_bp: number }).structural_tolerance_bp = 1
++    })
++    expect(d.join(" ")).toContain("ZERO")
++  })
++
++  it("datas e identidades estão na lista estrutural", () => {
++    for (const campo of ["sale_date", "first_due_date", "unit_id", "contract_id"]) {
++      expect(CREDITUM_POLICY_V1.structural_fields, campo).toContain(campo)
++    }
++  })
++
++  it("recusa lista estrutural vazia", () => {
++    const d = recusa((a) => {
++      ;(a["source_disagreement"] as unknown as { structural_fields: unknown[] }).structural_fields = []
++    })
++    expect(d.join(" ")).toContain("structural_fields")
++  })
++})
++
++describe("§14/§25 — janelas do Detector C", () => {
++  it("a janela aprovada é de 7 dias", () => {
++    expect(productionNextNDays()).toBe(7)
++  })
++
++  it("o N vem do ARTEFATO — nenhum código o pina em 7", () => {
++    // Antes do gate final, `days !== 7` era recusado por uma constante
++    // TypeScript. Isso era uma segunda autoridade executável: o artefato dizia 7
++    // e o código também, e a igualdade era coincidência mantida à mão.
++    //
++    // Agora `days` é lido. Um artefato com 6 descreve uma política DIFERENTE, e o
++    // runtime a executa como 6 — nunca "corrige" para 7.
++    for (const n of [1, 5, 6, 8, 10, 30]) {
++      const outro = validateCreditumPolicy(
++        comMudanca((a) => {
++          ;(
++            a as unknown as { first_due_windows: { approved_event_windows: { days: number }[] } }
++          ).first_due_windows.approved_event_windows[1]!.days = n
++        }),
++      )
++      expect(productionNextNDays(outro), String(n)).toBe(n)
++      const cfg = buildFirstDueExecutionConfig(outro, {
++        window: "next_n_days",
++        reference_date: "2026-09-01",
++      })
++      expect(cfg.firstDueConcentration.window, String(n)).toEqual({ mode: "next_n_days", days: n })
++    }
++  })
++
++  it("N inválido continua falhando fechado — sem cair para 7", () => {
++    for (const ruim of [0, -1, 7.5, "7", null]) {
++      const d = recusa((a) => {
++        ;(
++          a["first_due_windows"] as unknown as { approved_event_windows: { days: unknown }[] }
++        ).approved_event_windows[1]!.days = ruim
++      })
++      expect(d.join(" "), JSON.stringify(ruim)).toContain("days")
++    }
++  })
++
++  it("dias são CIVIS — dia útil é recusado", () => {
++    const d = recusa((a) => {
++      ;(a["first_due_windows"] as unknown as { day_basis: string }).day_basis = "business_days"
++    })
++    expect(d.join(" ")).toContain("civil_calendar_days")
++  })
++
++  it("nenhuma dependência de feriado ou calendário externo", () => {
++    // A palavra "feriados" aparece na nota do artefato — para PROIBI-los. O que
++    // não pode existir é campo configurável de calendário.
++    const w = ARTEFATO["first_due_windows"] as Record<string, unknown>
++    for (const chave of ["holidays", "holiday_calendar", "business_days", "calendar_source"]) {
++      expect(w[chave], chave).toBeUndefined()
++    }
++    expect(w["day_basis"]).toBe("civil_calendar_days")
++  })
++
++  it("nenhuma linguagem de previsão", () => {
++    const texto = readFileSync(
++      new URL("../../governance/policy/creditum-policy.v1.json", import.meta.url),
++      "utf8",
++    ).toLowerCase()
++    for (const proibido of ["forecast", "previs", "probabil", "inadimpl"]) {
++      expect(texto, proibido).not.toContain(proibido)
++    }
++  })
++})
++
++describe("§16/§26 — agregadores do Detector D", () => {
++  it("exatamente sum, mean e count", () => {
++    expect([...CREDITUM_POLICY_V1.single_case_aggregators].sort()).toEqual([
++      "amount_mean_cents",
++      "amount_sum_cents",
++      "case_count",
++    ])
++  })
++
++  it("recusa agregador não aprovado", () => {
++    for (const ag of ["median", "max", "min", "percentile_95", "stddev"]) {
++      const d = recusa((a) => {
++        ;(a["single_case_aggregators"] as unknown as string[]).push(ag)
++      })
++      expect(d.join(" "), ag).toContain("não aprovado")
++    }
++  })
++})
++
++describe("§17 — validação recusa política incompatível", () => {
++  it("schema_version não suportada", () => {
++    expect(recusa((a) => ((a as Record<string, unknown>)["schema_version"] = "9.9.9")).join(" ")).toContain(
++      "schema_version",
++    )
++  })
++
++  it("dinheiro que não é inteiro em centavos", () => {
++    for (const v of [50000.5, "5000000", null]) {
++      const d = recusa((a) => {
++        ;(a["materiality"] as unknown as Record<string, unknown>)["financial_materiality_cents"] = v
++      })
++      expect(d.join(" "), String(v)).toContain("financial_materiality_cents")
++    }
++  })
++
++  it("participação fora da faixa de basis points", () => {
++    const d = recusa((a) => {
++      ;(a["materiality"] as unknown as Record<string, unknown>)["relevant_participation_bp"] = 10001
++    })
++    expect(d.join(" ")).toContain("10000")
++  })
++
++  it("contagem de casos não inteira ou não positiva", () => {
++    for (const v of [0, -1, 2.5]) {
++      const d = recusa((a) => {
++        ;(a["materiality"] as unknown as Record<string, unknown>)["relevant_case_count"] = v
++      })
++      expect(d.join(" "), String(v)).toContain("relevant_case_count")
++    }
++  })
++
++  it("população mínima inválida", () => {
++    const d = recusa((a) => {
++      ;(a["materiality"] as unknown as Record<string, unknown>)["minimum_population_contracts"] = 0
++    })
++    expect(d.join(" ")).toContain("minimum_population_contracts")
++  })
++
++  it("semântica de materialidade diferente de OR", () => {
++    const d = recusa((a) => {
++      ;(a["materiality"] as unknown as Record<string, unknown>)["semantics"] = "AND"
++    })
++    expect(d.join(" ")).toContain("OR")
++  })
++
++  it("a recusa lista TODOS os problemas, não só o primeiro", () => {
++    const d = recusa((a) => {
++      ;(a["materiality"] as unknown as Record<string, unknown>)["relevant_case_count"] = 0
++      ;(a["materiality"] as unknown as Record<string, unknown>)["semantics"] = "AND"
++      // `severity = "high"` deixou de ser recusa no gate final: o valor vem do
++      // artefato. Uma comparação inválida continua sendo erro estrutural.
++      ;(a["low_ticket"] as unknown as Record<string, unknown>)["comparison"] = "less_or_equal"
++    })
++    expect(d.length).toBeGreaterThanOrEqual(3)
++  })
++
++  it("raiz que não é objeto", () => {
++    for (const v of [[], "texto", 42, null]) {
++      expect(() => validateCreditumPolicy(v)).toThrow(GatewayError)
++    }
++  })
++})
++
++describe("§18/§19 — fonte única e isolamento do TEST_CONFIG", () => {
++  /** Código do módulo, sem comentários: prosa explicando a regra não é a regra. */
++  const codigoDaPolitica = (): string =>
++    readFileSync(new URL("../src/production-policy.ts", import.meta.url), "utf8")
++      .replace(/\/\*[\s\S]*?\*\//g, "")
++      .replace(/\/\/[^\n]*/g, "")
++
++  it("o módulo de política não IMPORTA nada de tests/", () => {
++    const imports = [...codigoDaPolitica().matchAll(/^import[^\n]*from\s+"([^"]+)"/gm)].map(
++      (m) => m[1] ?? "",
++    )
++    expect(imports.length).toBeGreaterThan(0)
++    for (const i of imports) expect(i, i).not.toContain("test")
++  })
++
++  it("nenhuma referência executável a TEST_CONFIG", () => {
++    expect(codigoDaPolitica()).not.toContain("TEST_CONFIG")
++  })
++
++
++  it("não existe DEFAULT_CONFIG exportado", async () => {
++    const cfg: Record<string, unknown> = await import("../src/config")
++    const pol: Record<string, unknown> = await import("../src/production-policy")
++    for (const nome of [...Object.keys(cfg), ...Object.keys(pol)]) {
++      expect(nome).not.toMatch(/DEFAULT_CONFIG/)
++    }
++  })
++
++  it("os valores aprovados não estão escritos no CÓDIGO — vêm do artefato", () => {
++    // Defesa secundária. A prova principal é a projeção exata, mais acima: esta
++    // varredura pega o caso grosseiro de alguém colar um número no módulo.
++    // Comentários ficam de fora — explicar por que 1000 e 2500 são dimensões
++    // diferentes é documentação, não política embutida.
++    const codigo = codigoDaPolitica()
++    for (const numero of ["5000000", "5_000_000", "149999", "149_999"]) {
++      expect(codigo, numero).not.toContain(numero)
++    }
++  })
++
++
++  it("política de produção ausente falha fechado, sem cair para teste", () => {
++    expect(() => validateCreditumPolicy(undefined)).toThrow(GatewayError)
++    expect(() => validateCreditumPolicy({})).toThrow(GatewayError)
++  })
++})
++
++describe("§1/§2 — estratégia de base de severidade para A e C", () => {
++  for (const [rotulo, pol] of [
++    ["A", CREDITUM_POLICY_V1.installment_severity],
++    ["C", CREDITUM_POLICY_V1.first_due_severity],
++  ] as const) {
++    it(`${rotulo} — a estratégia é max_available_participation`, () => {
++      expect(pol.severity_strategy).toBe("max_available_participation")
++    })
++
++    it(`${rotulo} — as candidatas são as duas participações governadas`, () => {
++      expect([...pol.candidates].sort()).toEqual(["share_amount_bp", "share_count_bp"])
++    })
++
++    it(`${rotulo} — o desempate é fechado e é uma das candidatas`, () => {
++      expect(pol.candidates).toContain(pol.tie_break_dimension)
++    })
++  }
++
++  it("recusa estratégia desconhecida", () => {
++    const d = recusa((a) => {
++      ;(
++        (a["detector_severity"] as unknown as Record<string, Record<string, unknown>>)[
++          "installment_concentration"
++        ] as Record<string, unknown>
++      )["severity_strategy"] = "first_available"
++    })
++    expect(d.join(" ")).toContain("max_available_participation")
++  })
++
++  it("recusa desempate fora das candidatas", () => {
++    const d = recusa((a) => {
++      ;(
++        (a["detector_severity"] as unknown as Record<string, Record<string, unknown>>)[
++          "first_due_concentration"
++        ] as Record<string, unknown>
++      )["tie_break_dimension"] = "relative_delta_bp"
++    })
++    expect(d.join(" ")).toContain("tie_break_dimension")
++  })
++})
++
++describe("§4/§5 — Detector D não usa relative_delta como participação", () => {
++  it("a base aprovada é share_of_total_bp", () => {
++    expect(CREDITUM_POLICY_V1.single_case_severity_basis).toBe("share_of_total_bp")
++  })
++
++  it("recusa relative_delta_bp como base", () => {
++    const d = recusa((a) => {
++      ;(
++        (a["detector_severity"] as unknown as Record<string, Record<string, unknown>>)[
++          "material_single_case"
++        ] as Record<string, unknown>
++      )["basis"] = "relative_delta_bp"
++    })
++    expect(d.join(" ")).toContain("não é participação")
++  })
++
++  it("recusa estratégia diferente da aprovada", () => {
++    const d = recusa((a) => {
++      ;(
++        (a["detector_severity"] as unknown as Record<string, Record<string, unknown>>)[
++          "material_single_case"
++        ] as Record<string, unknown>
++      )["severity_strategy"] = "max_available_participation"
++    })
++    expect(d.join(" ")).toContain("share_of_total_when_applicable")
++  })
++})
++
++describe("§7/§9 — severidade estrutural do Detector B", () => {
++  it("é medium, fixa e qualitativa", () => {
++    expect(CREDITUM_POLICY_V1.structural_severity).toBe("medium")
++  })
++
++  const mudarEstrutural = (valor: unknown): unknown =>
++    comMudanca((a) => {
++      ;(
++        (a["detector_severity"] as unknown as Record<string, Record<string, unknown>>)[
++          "cross_source_conflict"
++        ] as Record<string, unknown>
++      )["structural_severity"] = valor
++    })
++
++  it("§8 — a severidade vem do ARTEFATO: medium não é pinado em TypeScript", () => {
++    // Fixture de TESTE. O artefato real continua declarando medium.
++    for (const sev of ["low", "high", "critical"] as const) {
++      expect(validateCreditumPolicy(mudarEstrutural(sev)).structural_severity, sev).toBe(sev)
++    }
++  })
++
++  it("ausente ou fora do vocabulário continua recusada", () => {
++    for (const ruim of [undefined, "", "urgente", 3, null]) {
++      expect(() => validateCreditumPolicy(mudarEstrutural(ruim)), JSON.stringify(ruim)).toThrow(
++        GatewayError,
++      )
++    }
++  })
++
++  it("a regra continua QUALITATIVA: não é calculada da tolerância", () => {
++    // Conflito de data não tem denominador. A severidade é declarada, não derivada
++    // — e nenhuma banda percentual participa dela.
++    expect(CREDITUM_POLICY_V1.structural_tolerance_bp).toBe(0)
++    expect(CREDITUM_POLICY_V1.structural_severity).toBe("medium")
++    const bandaEm1000 = CREDITUM_POLICY_V1.severity_scale.find((b) => b.at_least === 1000)
++    // Coincidirem em `medium` é coincidência numérica, não derivação: a estrutural
++    // segue o artefato mesmo quando as bandas ficam iguais.
++    expect(bandaEm1000?.severity).toBe("medium")
++    expect(validateCreditumPolicy(mudarEstrutural("critical")).structural_severity).toBe("critical")
++  })
++
++  it("tolerância zero NÃO é reinterpretada como critical", () => {
++    expect(CREDITUM_POLICY_V1.structural_tolerance_bp).toBe(0)
++    expect(CREDITUM_POLICY_V1.structural_severity).not.toBe("critical")
++  })
++
++  it("não vaza para o conflito numérico, que mantém a base relativa", () => {
++    expect(CREDITUM_POLICY_V1.numeric_tolerance_bp).toBe(200)
++  })
++
++  it("§17 — é entrada de política INDEPENDENTE do low-ticket", () => {
++    // As duas valem `medium` por coincidência de decisão, não por compartilharem
++    // origem. Agora que nenhuma é pinada, a independência tem prova direta: mexer
++    // numa não move a outra.
++    const soLowTicket = validateCreditumPolicy(
++      comMudanca((a) => {
++        ;(a["low_ticket"] as unknown as Record<string, unknown>)["severity"] = "high"
++      }),
++    )
++    expect(soLowTicket.low_ticket_severity).toBe("high")
++    expect(soLowTicket.structural_severity).toBe("medium")
++
++    const soEstrutural = validateCreditumPolicy(mudarEstrutural("critical"))
++    expect(soEstrutural.structural_severity).toBe("critical")
++    expect(soEstrutural.low_ticket_severity).toBe("medium")
++  })
++})
++
++describe("§11/§12/§20 — política completa vs configuração montável", () => {
++  it("as quatro decisões de severidade fecharam: nada pendente", () => {
++    expect(POLICY_DECISIONS_PENDING).toEqual([])
++    expect(POLICY_V1_COMPLETE).toBe(true)
++  })
++
++  it("a asserção de política completa passa — sem ter sido enfraquecida", () => {
++    expect(() => assertProductionPolicyComplete(POLICY_DECISIONS_PENDING)).not.toThrow()
++    // A validação ficou mais estrita, não menos: quatro blocos novos e
++    // obrigatórios entraram no artefato.
++    expect(() => validateCreditumPolicy({ ...ARTEFATO, detector_severity: {} })).toThrow(
++      GatewayError,
++    )
++  })
++
++  it("§14 — a configuração de produção agora é MONTÁVEL: nada pendente", () => {
++    // Os três campos que bloqueavam a projeção foram aprovados na Fase 2.7c.
++    // A lista esvaziou porque o artefato passou a decidi-los, não porque a
++    // validação afrouxou — `validateDetectorConfig` continua no caminho.
++    expect(PRODUCTION_CONFIG_FIELDS_PENDING).toEqual([])
++    expect(() => buildProductionDetectorConfig()).not.toThrow()
++  })
++
++  it("§14 — o mecanismo de recusa continua vivo para a próxima lacuna", () => {
++    try {
++      assertProductionConfigComplete(["algumCampo.pendente"])
++    } catch (e) {
++      expect((e as GatewayError).details).toEqual(["algumCampo.pendente"])
++      return
++    }
++    throw new Error("esperava recusa")
++  })
++
++  it("política completa e dado disponível são perguntas separadas", () => {
++    // `expected_units` sem fonte não é lacuna de política.
++    expect(POLICY_V1_COMPLETE).toBe(true)
++    expect(CREDITUM_POLICY_V1.expected_units_values_source).toBe("UNRESOLVED")
++  })
++})
++
++describe("§18 — projeção exata: nenhum valor injetado por TypeScript", () => {
++  it("cada valor da política vem do artefato", () => {
++    const m = ARTEFATO["materiality"] as Record<string, number>
++    expect(CREDITUM_POLICY_V1.relevant_participation_bp).toBe(m["relevant_participation_bp"])
++    expect(CREDITUM_POLICY_V1.financial_materiality_cents).toBe(m["financial_materiality_cents"])
++    expect(CREDITUM_POLICY_V1.relevant_case_count).toBe(m["relevant_case_count"])
++    expect(CREDITUM_POLICY_V1.minimum_population_contracts).toBe(m["minimum_population_contracts"])
++
++    const lt = ARTEFATO["low_ticket"] as Record<string, unknown>
++    expect(CREDITUM_POLICY_V1.low_ticket_floor_cents).toBe(lt["floor_cents"])
++    expect(CREDITUM_POLICY_V1.low_ticket_severity).toBe(lt["severity"])
++
++    const sd = ARTEFATO["source_disagreement"] as Record<string, unknown>
++    expect(CREDITUM_POLICY_V1.numeric_tolerance_bp).toBe(sd["numeric_tolerance_bp"])
++    expect(CREDITUM_POLICY_V1.structural_fields).toEqual(sd["structural_fields"])
++
++    const ds = ARTEFATO["detector_severity"] as Record<string, Record<string, unknown>>
++    expect(CREDITUM_POLICY_V1.structural_severity).toBe(
++      ds["cross_source_conflict"]?.["structural_severity"],
++    )
++    expect(CREDITUM_POLICY_V1.installment_severity.tie_break_dimension).toBe(
++      ds["installment_concentration"]?.["tie_break_dimension"],
++    )
++    expect(CREDITUM_POLICY_V1.first_due_severity.tie_break_dimension).toBe(
++      ds["first_due_concentration"]?.["tie_break_dimension"],
++    )
++  })
++
++  it("as bandas projetadas são exatamente as do artefato", () => {
++    const bandas = ARTEFATO["severity_bands"] as { at_least_bp: number; severity: string }[]
++    expect(CREDITUM_POLICY_V1.severity_scale.map((b) => [b.at_least, b.severity])).toEqual(
++      bandas.map((b) => [b.at_least_bp, b.severity]),
++    )
++  })
++
++  it("a projeção não acrescenta nem remove campo de severidade", () => {
++    expect(CREDITUM_POLICY_V1.severity_scale).toHaveLength(
++      (ARTEFATO["severity_bands"] as unknown[]).length,
++    )
++  })
++})
++
++
++// ═════════════════════════════════════════════════════════════════════════════
++// Fase 2.7c — projeção exata e independência dos dois "5"
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("§13 — os dois \"5\" são campos independentes", () => {
++  const PROD = buildProductionDetectorConfig()
++
++  it("hoje os dois valem 5", () => {
++    expect(CREDITUM_POLICY_V1.relevant_case_count).toBe(5)
++    const regra = PROD.installmentConcentration.contributing_case_rule
++    expect(regra.mode === "top_n" && regra.n).toBe(5)
++  })
++
++  it("mexer em relevant_case_count NÃO move o top_n", () => {
++    const outro = validateCreditumPolicy(
++      comMudanca((a) => {
++        ;(a as unknown as { materiality: { relevant_case_count: number } }).materiality.relevant_case_count = 7
++      }),
++    )
++    expect(outro.relevant_case_count).toBe(7)
++    const regra = outro.contributing_case_rule
++    expect(regra.mode === "top_n" && regra.n).toBe(5)
++  })
++
++  it("mexer no top_n NÃO move relevant_case_count", () => {
++    const outro = validateCreditumPolicy(
++      comMudanca((a) => {
++        ;(
++          a as unknown as {
++            detector_config: { installment_concentration: { contributing_case_rule: { top_n: number } } }
++          }
++        ).detector_config.installment_concentration.contributing_case_rule.top_n = 9
++      }),
++    )
++    expect(outro.relevant_case_count).toBe(5)
++    const regra = outro.contributing_case_rule
++    expect(regra.mode === "top_n" && regra.n).toBe(9)
++  })
++
++  it("a configuração projetada também mantém os dois separados", () => {
++    const outro = validateCreditumPolicy(
++      comMudanca((a) => {
++        ;(a as unknown as { materiality: { relevant_case_count: number } }).materiality.relevant_case_count = 7
++      }),
++    )
++    const cfg = buildProductionDetectorConfig(outro)
++    // A materialidade de contagem seguiu para 7...
++    expect(cfg.installmentConcentration.material_count_above).toBe(7)
++    // ...e a apresentação continuou em 5.
++    const regra = cfg.installmentConcentration.contributing_case_rule
++    expect(regra.mode === "top_n" && regra.n).toBe(5)
++  })
++
++  it("a invariante é do módulo, não da suíte", () => {
++    expect(assertDistinctFiveFields(CREDITUM_POLICY_V1)).toBe(true)
++  })
++})
++
++describe("§2 — until_share_bp = 8000 não é política de produção", () => {
++  it("estratégia fora de top_n é recusada pelo validador", () => {
++    expect(() =>
++      validateCreditumPolicy(
++        comMudanca((a) => {
++          ;(
++            a as unknown as {
++              detector_config: { installment_concentration: { contributing_case_rule: unknown } }
++            }
++          ).detector_config.installment_concentration.contributing_case_rule = {
++            strategy: "until_share_bp",
++            share_bp: 8000,
++          }
++        }),
++      ),
++    ).toThrow(GatewayError)
++  })
++
++  it("a recusa nomeia o campo e a única estratégia aprovada", () => {
++    try {
++      validateCreditumPolicy(
++        comMudanca((a) => {
++          ;(
++            a as unknown as {
++              detector_config: { installment_concentration: { contributing_case_rule: unknown } }
++            }
++          ).detector_config.installment_concentration.contributing_case_rule = {
++            strategy: "until_share_bp",
++            share_bp: 8000,
++          }
++        }),
++      )
++    } catch (e) {
++      const d = (e as GatewayError).details ?? []
++      expect(d.some((x) => x.includes("contributing_case_rule") && x.includes("top_n"))).toBe(true)
++      return
++    }
++    throw new Error("esperava recusa")
++  })
++
++  it("nenhum 8000 bp entra na configuração de produção", () => {
++    const cfg = buildProductionDetectorConfig()
++    // `similarity_threshold_bp` é 8000 e é aprovado — não é limiar de Pareto.
++    // A asserção é sobre a regra de contribuintes.
++    expect(JSON.stringify(cfg.installmentConcentration.contributing_case_rule)).not.toContain("8000")
++  })
++})
++
++describe("§15 — projeção exata: nenhum valor de negócio injetado por TypeScript", () => {
++  const PROD = buildProductionDetectorConfig()
++  const dc = ARTEFATO["detector_config"] as Record<string, Record<string, unknown>>
++  const m = ARTEFATO["materiality"] as Record<string, number>
++
++  it("os três campos novos vêm do artefato", () => {
++    expect(PROD.installmentConcentration.contributing_case_rule).toEqual({
++      mode: "top_n",
++      n: (dc["installment_concentration"]?.["contributing_case_rule"] as { top_n: number }).top_n,
++    })
++    expect(PROD.crossSourceConflict.material_absolute_basis_points).toBe(
++      dc["cross_source_conflict"]?.["material_absolute_basis_points"],
++    )
++    expect(PROD.materialSingleCase.material_relative_delta_bp).toBe(
++      dc["material_single_case"]?.["material_relative_delta_bp"],
++    )
++  })
++
++  it("os valores RELOCADOS são idênticos aos aprovados antes — nada foi redecidido", () => {
++    const eng = dc["engine"] as Record<string, unknown>
++    expect(eng["business_timezone"]).toBe(BUSINESS_TIMEZONE)
++    expect(eng["similarity_threshold_bp"]).toBe(APPROVED_THRESHOLDS.similarity_threshold_bp)
++    expect(dc["installment_concentration"]?.["installment_threshold"]).toBe(
++      APPROVED_THRESHOLDS.installment_threshold,
++    )
++    // E a configuração projetada usa exatamente esses.
++    expect(PROD.businessTimezone).toBe(BUSINESS_TIMEZONE)
++    expect(PROD.similarity_threshold_bp).toBe(APPROVED_THRESHOLDS.similarity_threshold_bp)
++    expect(PROD.installmentConcentration.installment_threshold).toBe(
++      APPROVED_THRESHOLDS.installment_threshold,
++    )
++  })
++
++  it("cada dimensão de participação vem de relevant_participation_bp", () => {
++    const p = m["relevant_participation_bp"]
++    expect(PROD.installmentConcentration.material_share_count_bp).toBe(p)
++    expect(PROD.installmentConcentration.material_share_amount_bp).toBe(p)
++    expect(PROD.crossSourceConflict.material_relative_difference_bp).toBe(p)
++    expect(PROD.crossSourceConflict.material_share_bp).toBe(p)
++    expect(PROD.firstDueConcentration.material_share_count_bp).toBe(p)
++    expect(PROD.firstDueConcentration.material_share_amount_bp).toBe(p)
++    expect(PROD.materialSingleCase.material_share_of_total_bp).toBe(p)
++  })
++
++  it("cada dimensão monetária vem de financial_materiality_cents", () => {
++    const c = m["financial_materiality_cents"]
++    expect(PROD.installmentConcentration.material_amount_cents).toBe(c)
++    expect(PROD.crossSourceConflict.material_amount_cents).toBe(c)
++    expect(PROD.firstDueConcentration.material_amount_cents).toBe(c)
++    expect(PROD.materialSingleCase.material_absolute_delta_cents).toBe(c)
++  })
++
++  it("cada dimensão de contagem vem de relevant_case_count", () => {
++    const n = m["relevant_case_count"]
++    expect(PROD.installmentConcentration.material_count_above).toBe(n)
++    expect(PROD.crossSourceConflict.material_absolute_count).toBe(n)
++    expect(PROD.firstDueConcentration.material_count).toBe(n)
++    expect(PROD.materialSingleCase.material_count_delta).toBe(n)
++  })
++
++  it("amostra mínima e população após remoção vêm de minimum_population_contracts", () => {
++    const n = m["minimum_population_contracts"]
++    expect(PROD.installmentConcentration.minimum_sample_size).toBe(n)
++    expect(PROD.firstDueConcentration.minimum_sample_size).toBe(n)
++    expect(PROD.materialSingleCase.min_population_after_removal).toBe(n)
++  })
++
++  it("as escalas de severidade são a mesma projeção das bandas aprovadas", () => {
++    expect(PROD.installmentConcentration.severity_scale).toEqual(CREDITUM_POLICY_V1.severity_scale)
++    expect(PROD.firstDueConcentration.severity_scale).toEqual(CREDITUM_POLICY_V1.severity_scale)
++    expect(PROD.materialSingleCase.severity_scale).toEqual(CREDITUM_POLICY_V1.severity_scale)
++    expect(PROD.crossSourceConflict.severity_by_relative_bp).toEqual(CREDITUM_POLICY_V1.severity_scale)
++    // Nenhuma banda `info`: a política aprovada começa em `low`.
++    expect(PROD.installmentConcentration.severity_scale.map((b) => b.severity)).not.toContain("info")
++  })
++
++  it("cobertura vem da primitive de tradução, não de números duplicados", () => {
++    expect(PROD.coverage).toEqual(coverageThresholdsFromPolicy(CREDITUM_POLICY_V1))
++    expect(PROD.installmentConcentration.minimum_coverage_bp).toBe(PROD.coverage.emit_event_below_bp)
++  })
++
++  it("a configuração projetada é a MESMA a cada montagem", () => {
++    expect(buildProductionDetectorConfig()).toEqual(buildProductionDetectorConfig())
++  })
++
++  it("config_version é a versão da política, não um número novo", () => {
++    expect(PROD.config_version).toBe(CREDITUM_POLICY_V1.policy_version)
++    expect(PROD.config_version).toBe(ARTEFATO["policy_version"])
++  })
++})
++
++describe("§7 — janelas do Detector C: nenhuma é escolhida implicitamente", () => {
++  const JANELAS = [{ mode: "same_day" }, { mode: "next_n_days", days: 7 }]
++
++  it("H — a configuração de produção NÃO carrega janela", () => {
++    // O defeito que a 2.7c.1 corrige: a projeção elegia `same_day` porque era a
++    // única que dispensa `reference_date`. Ausência de data de referência é
++    // característica de FORMA, não semântica de negócio — a forma do
++    // `DetectorConfig` estava decidindo qual análise a Creditum executa.
++    expect(buildProductionDetectorConfig().firstDueConcentration.window).toBeUndefined()
++  })
++
++  it("H — nem existe mais função que derive janela de reference_date", () => {
++    const fonte = readFileSync(new URL("../src/production-policy.ts", import.meta.url), "utf8")
++    // O nome da regra removida não pode voltar como código. Comentário histórico
++    // é permitido; declaração, não.
++    expect(fonte).not.toMatch(/function\s+janelaBase/)
++    expect(fonte).not.toMatch(/dispensa.*reference_date.*\)\s*[:{]/)
++  })
++
++  it("o conjunto aprovado tem exatamente as duas janelas executivas", () => {
++    expect(productionFirstDueWindows()).toEqual(JANELAS)
++  })
++
++  it("calendar_month é CONTEXTO, e não vira janela executiva", () => {
++    expect(productionFirstDueContext()).toEqual(["calendar_month"])
++    expect(productionFirstDueWindows().map((j) => j.mode)).not.toContain("calendar_month")
++  })
++
++  it("A — same_day aprovada constrói configuração de execução", () => {
++    const cfg = buildFirstDueExecutionConfig(CREDITUM_POLICY_V1, { window: "same_day" })
++    expect(cfg.firstDueConcentration.window).toEqual({ mode: "same_day" })
++  })
++
++  it("B — next_n_days com reference_date válida constrói", () => {
++    const cfg = buildFirstDueExecutionConfig(CREDITUM_POLICY_V1, {
++      window: "next_n_days",
++      reference_date: "2026-09-01",
++    })
++    expect(cfg.firstDueConcentration.window).toEqual({ mode: "next_n_days", days: 7 })
++  })
++
++  it("C — next_n_days sem reference_date não compila, e vazia falha fechado", () => {
++    // A união discriminada torna a omissão um erro de tipo. Em runtime, uma
++    // string inválida vinda de fronteira não tipada também é recusa.
++    for (const ruim of ["", "hoje", "01/09/2026", "2026-09-01T00:00:00Z", "2026-9-1"]) {
++      expect(() =>
++        buildFirstDueExecutionConfig(CREDITUM_POLICY_V1, {
++          window: "next_n_days",
++          reference_date: ruim,
++        }),
++      ).toThrow(GatewayError)
++    }
++  })
++
++  it("D — `days` ausente é recusado; 7 não é fabricado", () => {
++    const d = recusa((a) => {
++      delete (
++        a["first_due_windows"] as unknown as { approved_event_windows: Record<string, unknown>[] }
++      ).approved_event_windows[1]!["days"]
++    })
++    expect(d.join(" ")).toContain("days")
++  })
++
++  it("D — same_day com `days` é recusado: o modo não tem parâmetro", () => {
++    const d = recusa((a) => {
++      ;(
++        a["first_due_windows"] as unknown as { approved_event_windows: Record<string, unknown>[] }
++      ).approved_event_windows[0]!["days"] = 7
++    })
++    expect(d.join(" ")).toContain("same_day")
++  })
++
++  it("F — o construtor de execução também falha fechado sem a janela", () => {
++    // Uma política VALIDADA nunca chega aqui incompleta: a totalidade garante as
++    // duas janelas. O guarda existe para política montada à mão, e continua
++    // recusando em vez de escolher a que sobrou.
++    const mutilada = {
++      ...CREDITUM_POLICY_V1,
++      first_due_event_windows: [{ mode: "same_day" as const }],
++    }
++    expect(() =>
++      buildFirstDueExecutionConfig(mutilada, {
++        window: "next_n_days",
++        reference_date: "2026-09-01",
++      }),
++    ).toThrow(GatewayError)
++  })
++
++  it("F — calendar_month no conjunto executivo é recusado no load", () => {
++    expect(() =>
++      validateCreditumPolicy(
++        comMudanca((a) => {
++          ;(
++            a as unknown as { first_due_windows: { approved_event_windows: unknown[] } }
++          ).first_due_windows.approved_event_windows.push({ mode: "calendar_month" })
++        }),
++      ),
++    ).toThrow(GatewayError)
++  })
++
++  it("F — modo inventado é recusado; business_days não entra por acidente", () => {
++    for (const modo of ["business_days", "next_n_business_days", "week", "trimester"]) {
++      expect(() =>
++        validateCreditumPolicy(
++          comMudanca((a) => {
++            ;(
++              a as unknown as { first_due_windows: { approved_event_windows: unknown[] } }
++            ).first_due_windows.approved_event_windows.push({ mode: modo, days: 7 })
++          }),
++        ),
++      ).toThrow(GatewayError)
++    }
++  })
++
++  it("G — a ordem no artefato não altera o conjunto semântico", () => {
++    const invertida = validateCreditumPolicy(
++      comMudanca((a) => {
++        const w = (
++          a as unknown as { first_due_windows: { approved_event_windows: unknown[] } }
++        ).first_due_windows
++        w.approved_event_windows = [...w.approved_event_windows].reverse()
++      }),
++    )
++    // Mesmo conjunto, independente da ordem de listagem.
++    expect([...productionFirstDueWindows(invertida)].sort((x, y) => (x.mode < y.mode ? -1 : 1))).toEqual(
++      [...JANELAS].sort((x, y) => (x.mode < y.mode ? -1 : 1)),
++    )
++    // E nenhuma das duas execuções muda de resultado.
++    expect(
++      buildFirstDueExecutionConfig(invertida, { window: "same_day" }).firstDueConcentration.window,
++    ).toEqual({ mode: "same_day" })
++    expect(
++      buildFirstDueExecutionConfig(invertida, {
++        window: "next_n_days",
++        reference_date: "2026-09-01",
++      }).firstDueConcentration.window,
++    ).toEqual({ mode: "next_n_days", days: 7 })
++  })
++
++  it("G — janela duplicada é recusada: a lista é um conjunto", () => {
++    expect(() =>
++      validateCreditumPolicy(
++        comMudanca((a) => {
++          ;(
++            a as unknown as { first_due_windows: { approved_event_windows: unknown[] } }
++          ).first_due_windows.approved_event_windows.push({ mode: "same_day" })
++        }),
++      ),
++    ).toThrow(GatewayError)
++  })
++
++  it("lista vazia de janelas executivas é recusada", () => {
++    expect(() =>
++      validateCreditumPolicy(
++        comMudanca((a) => {
++          ;(
++            a as unknown as { first_due_windows: { approved_event_windows: unknown[] } }
++          ).first_due_windows.approved_event_windows = []
++        }),
++      ),
++    ).toThrow(GatewayError)
++  })
++
++  it("dias corridos continuam sendo a base — feriado exigiria calendário governado", () => {
++    expect(() =>
++      validateCreditumPolicy(
++        comMudanca((a) => {
++          ;(a as unknown as { first_due_windows: { day_basis: string } }).first_due_windows.day_basis =
++            "business_days"
++        }),
++      ),
++    ).toThrow(GatewayError)
++  })
++
++  it("§17 — configuração montável NÃO significa que expected_units existe", () => {
++    expect(() => buildProductionDetectorConfig()).not.toThrow()
++    expect(CREDITUM_POLICY_V1.expected_units_values_source).toBe("UNRESOLVED")
++    // O modelo está aprovado; os valores não existem.
++    expect(CREDITUM_POLICY_V1.expected_units_model).toEqual(["period", "dataset_id", "unit_id"])
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// §8 — auditoria de fonte única dos valores relocados
++//
++// A 2.7c moveu `installment_threshold`, `similarity_threshold_bp` e
++// `business_timezone` para o artefato, mas deixou os literais em `config.ts`
++// vivos ao lado. Duas fontes executáveis para a mesma decisão: editar o JSON não
++// movia o runtime, e a igualdade entre os dois lugares era coincidência mantida
++// por atenção humana — exatamente o defeito D13 da Fase 2.6c.
++//
++// Provar por igualdade entre duas constantes independentes não vale: se ambas
++// forem literais iguais, o teste passa e o problema continua. As provas abaixo
++// são de DERIVAÇÃO — o valor de runtime tem de acompanhar o arquivo em disco, e
++// o literal não pode existir no fonte.
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("§8 — os valores relocados vêm do artefato, não de literais", () => {
++  const DISCO = JSON.parse(
++    readFileSync(
++      new URL("../../governance/policy/creditum-policy.v1.json", import.meta.url),
++      "utf8",
++    ),
++  ) as Record<string, Record<string, Record<string, unknown>>>
++
++  const engine = DISCO["detector_config"]?.["engine"] as Record<string, unknown>
++  const parcelas = DISCO["detector_config"]?.["installment_concentration"] as Record<string, unknown>
++
++  it("as constantes de runtime acompanham o arquivo EM DISCO", () => {
++    // Lido do disco nesta execução, não do módulo importado. Se alguém voltasse
++    // a escrever 19 em TypeScript e o artefato dissesse 21, isto quebraria.
++    expect(APPROVED_THRESHOLDS.installment_threshold).toBe(parcelas["installment_threshold"])
++    expect(APPROVED_THRESHOLDS.similarity_threshold_bp).toBe(engine["similarity_threshold_bp"])
++    expect(BUSINESS_TIMEZONE).toBe(engine["business_timezone"])
++  })
++
++  it("o resto de APPROVED_THRESHOLDS também é derivado", () => {
++    const m = DISCO["materiality"] as unknown as Record<string, number>
++    const lt = DISCO["low_ticket"] as unknown as Record<string, number>
++    expect(APPROVED_THRESHOLDS.material_share_bp).toBe(m["relevant_participation_bp"])
++    expect(APPROVED_THRESHOLDS.material_amount_cents).toBe(m["financial_materiality_cents"])
++    expect(APPROVED_THRESHOLDS.material_count).toBe(m["relevant_case_count"])
++    expect(APPROVED_THRESHOLDS.minimum_sample_size).toBe(m["minimum_population_contracts"])
++    expect(APPROVED_THRESHOLDS.low_ticket_floor_cents).toBe(lt["floor_cents"])
++  })
++
++  it("nenhum literal concorrente sobrou no fonte de configuração", () => {
++    const semComentarios = (caminho: string): string =>
++      readFileSync(new URL(caminho, import.meta.url), "utf8")
++        .replace(/\/\*[\s\S]*?\*\//g, "")
++        .replace(/\/\/.*$/gm, "")
++
++    const config = semComentarios("../src/config.ts")
++    const derivados = semComentarios("../src/governed-thresholds.ts")
++
++    // O fuso não pode estar escrito em lugar nenhum a não ser no artefato.
++    expect(config).not.toContain("America/Sao_Paulo")
++    expect(derivados).not.toContain("America/Sao_Paulo")
++
++    // Nem os números aprovados como atribuição.
++    for (const fonte of [config, derivados]) {
++      expect(fonte).not.toMatch(/installment_threshold:\s*\d/)
++      expect(fonte).not.toMatch(/similarity_threshold_bp:\s*\d/)
++      expect(fonte).not.toMatch(/low_ticket_floor_cents:\s*\d/)
++    }
++  })
++
++  it("a ProductionDetectorConfig obtém os três do artefato", () => {
++    const PROD = buildProductionDetectorConfig()
++    expect(PROD.installmentConcentration.installment_threshold).toBe(
++      parcelas["installment_threshold"],
++    )
++    expect(PROD.similarity_threshold_bp).toBe(engine["similarity_threshold_bp"])
++    expect(PROD.businessTimezone).toBe(engine["business_timezone"])
++  })
++
++  it("mudar o artefato move a configuração projetada", () => {
++    const outro = validateCreditumPolicy(
++      comMudanca((a) => {
++        const dc = (a as unknown as { detector_config: Record<string, Record<string, unknown>> })
++          .detector_config
++        dc["engine"]!["similarity_threshold_bp"] = 7500
++        dc["engine"]!["business_timezone"] = "America/Fortaleza"
++      }),
++    )
++    const cfg = buildFirstDueExecutionConfig(outro, { window: "same_day" })
++    expect(cfg.similarity_threshold_bp).toBe(7500)
++    expect(cfg.businessTimezone).toBe("America/Fortaleza")
++  })
++
++  it("o limiar de parcelas é FIXADO pelo artefato — nem a projeção o contorna", () => {
++    // `validateDetectorConfig` compara `installment_threshold` contra o valor
++    // governado e recusa divergência. Isso torna impossível projetar uma política
++    // hipotética com outro limiar, e é intencional: 19 é regra de negócio do
++    // briefing, não parâmetro configurável. Fixar contra o artefato carregado é
++    // seguro justamente porque não existe segunda fonte — o valor pinado e o
++    // valor projetado saem do mesmo arquivo.
++    const outro = validateCreditumPolicy(
++      comMudanca((a) => {
++        ;(
++          a as unknown as {
++            detector_config: { installment_concentration: { installment_threshold: number } }
++          }
++        ).detector_config.installment_concentration.installment_threshold = 21
++      }),
++    )
++    // A política validada acompanha o artefato...
++    expect(outro.installment_threshold).toBe(21)
++    // ...e a projeção recusa, porque o artefato EM VIGOR diz 19.
++    expect(() => buildProductionDetectorConfig(outro)).toThrow(GatewayError)
++    expect(APPROVED_THRESHOLDS.installment_threshold).toBe(
++      CREDITUM_POLICY_V1.installment_threshold,
++    )
++  })
++
++  it("o artefato é a única autoridade: fuso inválido nele derruba a política", () => {
++    expect(() =>
++      validateCreditumPolicy(
++        comMudanca((a) => {
++          ;(
++            a as unknown as { detector_config: { engine: { business_timezone: string } } }
++          ).detector_config.engine.business_timezone = "Marte/Olympus"
++        }),
++      ),
++    ).toThrow(GatewayError)
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// Gate final — o artefato é a ÚNICA autoridade, e o conjunto de C é exato
++//
++// O que o gate encontrou: `validarJanelasAprovadas` iterava os membros
++// fornecidos e dizia "cada um é válido". Um artefato com `same_day` só validava,
++// `POLICY_V1_COMPLETE` continuava `true`, a configuração era montável — e uma
++// análise obrigatória de produção desaparecia em silêncio. Pior, o antigo
++// `diasDaJanelaCorrida` devolvia 7 quando a janela não existia, fabricando o
++// parâmetro de uma janela que a política não aprovava.
++//
++// A correção exige TOTALIDADE sobre o vocabulário do protocolo: cada modo que o
++// Detector C sabe executar precisa estar governado exatamente uma vez. Não existe
++// lista de "janelas requeridas" em TypeScript, e `days` é lido, nunca pinado.
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("§17 — conjunto exato das janelas de C", () => {
++  /** Remove uma janela do artefato pelo modo. */
++  const semJanela = (modo: string): string[] =>
++    recusa((a) => {
++      const w = a["first_due_windows"] as unknown as {
++        approved_event_windows: { mode: string }[]
++      }
++      w.approved_event_windows = w.approved_event_windows.filter((j) => j.mode !== modo)
++    })
++
++  it("A — o artefato atual é válido, e projeta as duas janelas", () => {
++    expect(() => validateCreditumPolicy(ARTEFATO)).not.toThrow()
++    expect(CREDITUM_POLICY_V1.first_due_event_windows).toEqual([
++      { mode: "same_day" },
++      { mode: "next_n_days", days: 7 },
++    ])
++  })
++
++  it("B — remover same_day INVALIDA a política", () => {
++    const d = semJanela("same_day")
++    // A mensagem tem de ser a da TOTALIDADE. Asserção genérica de "ausente"
++    // deixaria uma segunda defesa a jusante mascarar a falta desta.
++    expect(d.join(" ")).toContain("same_day: janela executável ausente do conjunto governado")
++  })
++
++  it("B — sem same_day nada é construível, e next_n_days não a substitui", () => {
++    const artefato = comMudanca((a) => {
++      const w = a["first_due_windows"] as unknown as {
++        approved_event_windows: { mode: string }[]
++      }
++      w.approved_event_windows = w.approved_event_windows.filter((j) => j.mode !== "same_day")
++    })
++    expect(() => validateCreditumPolicy(artefato)).toThrow(GatewayError)
++    // Sem política validada não existe configuração — nem parcial.
++    expect(() => buildProductionDetectorConfig(validateCreditumPolicy(artefato))).toThrow(
++      GatewayError,
++    )
++  })
++
++  it("C — remover next_n_days INVALIDA a política (o HIGH do gate)", () => {
++    const d = semJanela("next_n_days")
++    expect(d.join(" ")).toContain("next_n_days: janela executável ausente do conjunto governado")
++  })
++
++  it("K — sem next_n_days NADA fabrica 7", () => {
++    // Não existe mais campo derivado guardando os dias: `productionNextNDays`
++    // lê a janela governada. Numa política mutilada à mão o resultado é
++    // `undefined` — nunca 7.
++    const mutilada = {
++      ...CREDITUM_POLICY_V1,
++      first_due_event_windows: [{ mode: "same_day" as const }],
++    }
++    expect(productionNextNDays(mutilada)).toBeUndefined()
++    // E a política com a janela removida nem carrega.
++    const artefato = comMudanca((a) => {
++      const w = a["first_due_windows"] as unknown as {
++        approved_event_windows: { mode: string }[]
++      }
++      w.approved_event_windows = w.approved_event_windows.filter((j) => j.mode !== "next_n_days")
++    })
++    expect(() => validateCreditumPolicy(artefato)).toThrow(GatewayError)
++  })
++
++  it("K — a função que fabricava 7 não existe mais", () => {
++    const fonte = readFileSync(new URL("../src/production-policy.ts", import.meta.url), "utf8")
++    expect(fonte).not.toMatch(/function\s+diasDaJanelaCorrida/)
++    // E nenhum retorno de 7 por conveniência, em nenhuma forma.
++    const semComentarios = fonte.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "")
++    expect(semComentarios).not.toMatch(/return\s+7\b/)
++    expect(semComentarios).not.toMatch(/\?\?\s*7\b/)
++  })
++
++  it("E — same_day duplicado é recusado", () => {
++    const d = recusa((a) => {
++      ;(
++        a["first_due_windows"] as unknown as { approved_event_windows: unknown[] }
++      ).approved_event_windows.push({ mode: "same_day" })
++    })
++    expect(d.join(" ")).toContain("duplicado")
++  })
++
++  it("F — next_n_days duplicado é recusado", () => {
++    const d = recusa((a) => {
++      ;(
++        a["first_due_windows"] as unknown as { approved_event_windows: unknown[] }
++      ).approved_event_windows.push({ mode: "next_n_days", days: 7 })
++    })
++    expect(d.join(" ")).toContain("duplicado")
++  })
++
++  it("F — mesmo modo com days diferentes também é duplicata", () => {
++    const d = recusa((a) => {
++      ;(
++        a["first_due_windows"] as unknown as { approved_event_windows: unknown[] }
++      ).approved_event_windows.push({ mode: "next_n_days", days: 14 })
++    })
++    expect(d.join(" ")).toContain("duplicado")
++  })
++
++  it("membro extra fora do vocabulário é recusado", () => {
++    for (const modo of ["calendar_month", "business_days", "week", "trimester"]) {
++      const d = recusa((a) => {
++        ;(
++          a["first_due_windows"] as unknown as { approved_event_windows: unknown[] }
++        ).approved_event_windows.push({ mode: modo, days: 7 })
++      })
++      expect(d.join(" "), modo).toContain("não executável")
++    }
++  })
++
++  it("lista vazia é recusada", () => {
++    const d = recusa((a) => {
++      ;(
++        a["first_due_windows"] as unknown as { approved_event_windows: unknown[] }
++      ).approved_event_windows = []
++    })
++    expect(d.join(" ")).toContain("approved_event_windows")
++  })
++
++  it("I — ordem invertida é aceita e semanticamente idêntica", () => {
++    const invertida = validateCreditumPolicy(
++      comMudanca((a) => {
++        const w = a["first_due_windows"] as unknown as { approved_event_windows: unknown[] }
++        w.approved_event_windows = [...w.approved_event_windows].reverse()
++      }),
++    )
++    // A projeção é estável: derivada do vocabulário, não da ordem do JSON.
++    expect(invertida.first_due_event_windows).toEqual(CREDITUM_POLICY_V1.first_due_event_windows)
++    expect(productionNextNDays(invertida)).toBe(productionNextNDays())
++    // E nenhuma das duas se torna padrão.
++    expect(buildProductionDetectorConfig(invertida).firstDueConcentration.window).toBeUndefined()
++  })
++})
++
++describe("§10/§17 — conjunto exato do contexto", () => {
++  it("G — remover calendar_month INVALIDA a política", () => {
++    const d = recusa((a) => {
++      ;(a["first_due_windows"] as unknown as { context: unknown[] }).context = []
++    })
++    expect(d.join(" ")).toContain("context")
++  })
++
++  it("G — contexto ausente é recusado; calendar_month não é fabricado", () => {
++    const d = recusa((a) => {
++      delete (a["first_due_windows"] as unknown as Record<string, unknown>)["context"]
++    })
++    expect(d.join(" ")).toContain("context")
++  })
++
++  it("H — contexto extra é recusado", () => {
++    for (const extra of ["fiscal_quarter", "calendar_week", "same_day"]) {
++      const d = recusa((a) => {
++        ;(a["first_due_windows"] as unknown as { context: unknown[] }).context.push(extra)
++      })
++      expect(d.join(" "), extra).toContain("context")
++    }
++  })
++
++  it("calendar_month duplicado é recusado", () => {
++    const d = recusa((a) => {
++      ;(a["first_due_windows"] as unknown as { context: string[] }).context.push("calendar_month")
++    })
++    expect(d.join(" ")).toContain("duplicado")
++  })
++})
++
++describe("§11/§J — projeção exata do artefato para o runtime", () => {
++  const DISCO = JSON.parse(
++    readFileSync(
++      new URL("../../governance/policy/creditum-policy.v1.json", import.meta.url),
++      "utf8",
++    ),
++  ) as Record<string, unknown>
++
++  const fdw = DISCO["first_due_windows"] as {
++    approved_event_windows: { mode: string; days?: number }[]
++    context: string[]
++  }
++
++  /** Normalização estrutural: ordena por modo. Nenhuma outra transformação. */
++  const normalizar = (
++    janelas: readonly { readonly mode: string; readonly days?: number }[],
++  ): unknown[] =>
++    [...janelas]
++      .map((j) => (j.days === undefined ? { mode: j.mode } : { mode: j.mode, days: j.days }))
++      .sort((a, b) => (a.mode < b.mode ? -1 : 1))
++
++  it("J — as janelas do runtime são exatamente as do artefato", () => {
++    expect(normalizar(CREDITUM_POLICY_V1.first_due_event_windows)).toEqual(
++      normalizar(fdw.approved_event_windows),
++    )
++  })
++
++  it("J — o contexto do runtime é exatamente o do artefato", () => {
++    expect([...CREDITUM_POLICY_V1.first_due_context].sort()).toEqual([...fdw.context].sort())
++  })
++
++  it("J — nenhum valor intermediário novo entra na projeção", () => {
++    // Cardinalidade igual: nada acrescentado, nada descartado.
++    expect(CREDITUM_POLICY_V1.first_due_event_windows).toHaveLength(
++      fdw.approved_event_windows.length,
++    )
++    expect(CREDITUM_POLICY_V1.first_due_context).toHaveLength(fdw.context.length)
++    // E o parâmetro é o do arquivo, não um número deste código.
++    const corrida = fdw.approved_event_windows.find((j) => j.mode === "next_n_days")
++    expect(productionNextNDays()).toBe(corrida?.days)
++  })
++
++  it("a execução consome o `days` governado, não uma constante", () => {
++    const cfg = buildFirstDueExecutionConfig(CREDITUM_POLICY_V1, {
++      window: "next_n_days",
++      reference_date: "2026-09-01",
++    })
++    expect(cfg.firstDueConcentration.window).toEqual({
++      mode: "next_n_days",
++      days: fdw.approved_event_windows.find((j) => j.mode === "next_n_days")?.days,
++    })
++  })
++})
++
++describe("§15 — agregadores de D: vocabulário no código, subconjunto no artefato", () => {
++  it("o subconjunto habilitado vem do artefato", () => {
++    const doDisco = (
++      JSON.parse(
++        readFileSync(
++          new URL("../../governance/policy/creditum-policy.v1.json", import.meta.url),
++          "utf8",
++        ),
++      ) as Record<string, string[]>
++    )["single_case_aggregators"]
++    expect(CREDITUM_POLICY_V1.single_case_aggregators).toEqual(doDisco)
++    expect(buildProductionDetectorConfig().materialSingleCase.supported_metrics).toEqual(doDisco)
++  })
++
++  it("remover `amount_mean_cents` do artefato NÃO é reintroduzido pelo runtime", () => {
++    const semMedia = validateCreditumPolicy(
++      comMudanca((a) => {
++        a["single_case_aggregators"] = (
++          a["single_case_aggregators"] as unknown as string[]
++        ).filter((x) => x !== "amount_mean_cents") as never
++      }),
++    )
++    expect(semMedia.single_case_aggregators).toEqual(["amount_sum_cents", "case_count"])
++    const cfg = buildProductionDetectorConfig(semMedia)
++    expect(cfg.materialSingleCase.supported_metrics).not.toContain("amount_mean_cents")
++    // O Detector D passa a recusar a métrica — não a recebe de volta por constante.
++    expect(cfg.materialSingleCase.supported_metrics).toHaveLength(2)
++  })
++
++  it("nome fora do vocabulário implementado é recusado", () => {
++    const d = recusa((a) => {
++      ;(a["single_case_aggregators"] as unknown as string[]).push("amount_median_cents")
++    })
++    expect(d.join(" ")).toContain("single_case_aggregators")
++  })
++
++  it("lista vazia é recusada — não cai para os três", () => {
++    const d = recusa((a) => {
++      a["single_case_aggregators"] = [] as never
++    })
++    expect(d.join(" ")).toContain("single_case_aggregators")
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// §6/§7/§8/§9 — projeção exata e autoridade do artefato sobre os três valores
++//
++// Os três últimos pinos executáveis saíram: `days !== 7`,
++// `low_ticket.severity !== "medium"` e `structural_severity !== "medium"`. Eram
++// escolhas de negócio duplicadas em TypeScript — segunda autoridade executável
++// para uma decisão que já vivia no artefato governado.
++//
++// O que o código valida hoje: estrutura, tipo, vocabulário implementado, campo
++// obrigatório. O que o artefato decide: qual valor.
++//
++// As fixtures abaixo NÃO alteram a Policy v1 real. São cópias em memória, e o
++// artefato de produção continua declarando 7 / medium / medium — provado no
++// primeiro bloco, contra o arquivo em disco.
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("§6 — projeção exata: o runtime é o artefato, sem transformação de valor", () => {
++  const DISCO = JSON.parse(
++    readFileSync(
++      new URL("../../governance/policy/creditum-policy.v1.json", import.meta.url),
++      "utf8",
++    ),
++  ) as Record<string, unknown>
++
++  const lowTicket = DISCO["low_ticket"] as Record<string, unknown>
++  const csc = (DISCO["detector_severity"] as Record<string, Record<string, unknown>>)[
++    "cross_source_conflict"
++  ] as Record<string, unknown>
++  const janelaCorrida = (
++    DISCO["first_due_windows"] as { approved_event_windows: { mode: string; days?: number }[] }
++  ).approved_event_windows.find((j) => j.mode === "next_n_days")
++
++  it("low_ticket.severity: artefato === runtime", () => {
++    expect(CREDITUM_POLICY_V1.low_ticket_severity).toBe(lowTicket["severity"])
++  })
++
++  it("structural_severity: artefato === runtime", () => {
++    expect(CREDITUM_POLICY_V1.structural_severity).toBe(csc["structural_severity"])
++  })
++
++  it("next_n_days.days: artefato === política de execução governada", () => {
++    expect(productionNextNDays()).toBe(janelaCorrida?.days)
++    const cfg = buildFirstDueExecutionConfig(CREDITUM_POLICY_V1, {
++      window: "next_n_days",
++      reference_date: "2026-09-01",
++    })
++    expect(cfg.firstDueConcentration.window).toEqual({
++      mode: "next_n_days",
++      days: janelaCorrida?.days,
++    })
++  })
++
++  it("§10 — o artefato REAL continua com os três valores aprovados", () => {
++    expect(janelaCorrida?.days).toBe(7)
++    expect(lowTicket["severity"]).toBe("medium")
++    expect(csc["structural_severity"]).toBe("medium")
++  })
++
++  it("a configuração de produção projeta a severidade estrutural do artefato", () => {
++    expect(buildProductionDetectorConfig().crossSourceConflict.structural_severity).toBe(
++      csc["structural_severity"],
++    )
++  })
++})
++
++describe("§9 — fixture 7→6 prova que o artefato manda nos dias", () => {
++  const seisDias = (): CreditumPolicy =>
++    validateCreditumPolicy(
++      comMudanca((a) => {
++        ;(
++          a as unknown as { first_due_windows: { approved_event_windows: { days: number }[] } }
++        ).first_due_windows.approved_event_windows[1]!.days = 6
++      }),
++    )
++
++  it("a política carrega — 6 é inteiro positivo e o protocolo suporta next_n_days", () => {
++    expect(() => seisDias()).not.toThrow()
++    expect(productionNextNDays(seisDias())).toBe(6)
++  })
++
++  it("a execução usa 6 — nenhum reescrita para 7", () => {
++    const cfg = buildFirstDueExecutionConfig(seisDias(), {
++      window: "next_n_days",
++      reference_date: "2026-09-01",
++    })
++    expect(cfg.firstDueConcentration.window).toEqual({ mode: "next_n_days", days: 6 })
++  })
++
++  it("e o artefato REAL não foi tocado", () => {
++    expect(productionNextNDays()).toBe(7)
++  })
++})
++
++describe("§7 — fixture medium→high prova que o artefato manda no low-ticket", () => {
++  const alta = (): CreditumPolicy =>
++    validateCreditumPolicy(
++      comMudanca((a) => {
++        ;(a["low_ticket"] as unknown as Record<string, unknown>)["severity"] = "high"
++      }),
++    )
++
++  it("a política carrega e projeta high", () => {
++    expect(alta().low_ticket_severity).toBe("high")
++  })
++
++  it("o piso e a comparação não se movem com a severidade", () => {
++    expect(alta().low_ticket_floor_cents).toBe(CREDITUM_POLICY_V1.low_ticket_floor_cents)
++  })
++
++  it("e o artefato REAL continua medium", () => {
++    expect(CREDITUM_POLICY_V1.low_ticket_severity).toBe("medium")
++  })
++})
++
++describe("§8 — fixture medium→high prova que o artefato manda no conflito estrutural", () => {
++  const alta = (): CreditumPolicy =>
++    validateCreditumPolicy(
++      comMudanca((a) => {
++        ;(
++          (a["detector_severity"] as unknown as Record<string, Record<string, unknown>>)[
++            "cross_source_conflict"
++          ] as Record<string, unknown>
++        )["structural_severity"] = "high"
++      }),
++    )
++
++  it("a política carrega e projeta high", () => {
++    expect(alta().structural_severity).toBe("high")
++  })
++
++  it("a configuração projetada leva high para o Detector B", () => {
++    expect(buildProductionDetectorConfig(alta()).crossSourceConflict.structural_severity).toBe(
++      "high",
++    )
++  })
++
++  it("não contamina a escala relativa nem a tolerância", () => {
++    const p = alta()
++    expect(p.numeric_tolerance_bp).toBe(CREDITUM_POLICY_V1.numeric_tolerance_bp)
++    expect(p.severity_scale).toEqual(CREDITUM_POLICY_V1.severity_scale)
++  })
++
++  it("e o artefato REAL continua medium", () => {
++    expect(CREDITUM_POLICY_V1.structural_severity).toBe("medium")
++  })
++})
++
++describe("§12 — auditoria: nenhum pino de valor de negócio sobrou no fonte", () => {
++  const semComentarios = (caminho: string): string =>
++    readFileSync(new URL(caminho, import.meta.url), "utf8")
++      .replace(/\/\*[\s\S]*?\*\//g, "")
++      .replace(/\/\/.*$/gm, "")
++
++  const FONTES = [
++    "../src/production-policy.ts",
++    "../src/config.ts",
++    "../src/governed-thresholds.ts",
++  ] as const
++
++  it("nenhuma comparação com `medium` como autoridade", () => {
++    for (const f of FONTES) {
++      expect(semComentarios(f), f).not.toMatch(/[!=]==\s*"medium"/)
++    }
++  })
++
++  it("nenhum pino nem fabricação de 7", () => {
++    for (const f of FONTES) {
++      const src = semComentarios(f)
++      expect(src, f).not.toMatch(/days\s*[!=]==\s*7\b/)
++      expect(src, f).not.toMatch(/\?\?\s*7\b/)
++      expect(src, f).not.toMatch(/return\s+7\b/)
++    }
++  })
++
++  it("o vocabulário de severidade permanece — é capacidade, não escolha", () => {
++    // `SEVERIDADES` diz o que o motor sabe executar. Qual severidade cada regra
++    // usa é do artefato, e os blocos acima provam isso.
++    const src = semComentarios("../src/production-policy.ts")
++    expect(src).toMatch(/SEVERIDADES/)
++  })
++})
+diff --git a/intelligence/docs/FASE_2_7_PRODUCTION_POLICY_CLOSURE.md b/intelligence/docs/FASE_2_7_PRODUCTION_POLICY_CLOSURE.md
+new file mode 100644
+index 0000000..55ebb7d
+--- /dev/null
++++ b/intelligence/docs/FASE_2_7_PRODUCTION_POLICY_CLOSURE.md
+@@ -0,0 +1,945 @@
++# Fase 2.7 — Fechamento da Política Creditum v1
++
++As decisões humanas aprovadas viraram fonte governada, validada e fail-closed.
++Nenhum valor da Creditum ficou em constante de TypeScript.
++
++## 1. Fonte governada
++
++```
++intelligence/governance/policy/creditum-policy.v1.json
++```
++
++O runtime **projeta** esse artefato em `DetectorConfig`. Não existe
++`DEFAULT_CONFIG`; política ausente ou inválida recusa em bloco, listando tudo o
++que está errado. `TEST_CONFIG` continua em `tests/` e não é alcançável do
++caminho de produção — `production-policy.ts` não importa nada de teste, e um
++teste afirma isso lendo as declarações de import.
++
++A regra veio da Fase 2.6c: três aliases D13 viviam em TypeScript e o runtime os
++enxertava depois do load. Duas fontes de governança, a segunda invisível. A
++mesma trava vale agora para política de negócio.
++
++## 2. Valores APROVADOS
++
++| Item | Valor |
++| --- | --- |
++| Participação relevante | 10% (1000 bp) |
++| Materialidade financeira | R$ 50.000 (5.000.000 centavos) — *approved initial / calibratable* |
++| Quantidade relevante | 5 casos |
++| População mínima | 10 contratos |
++| Piso low-ticket | < R$ 1.499,99 (149.999 centavos, estritamente menor) |
++| Severidade low-ticket | `medium` — **fixa**, não derivada das bandas |
++| Bandas de severidade | `<10%` low · `10–25%` medium · `25–50%` high · `≥50%` critical |
++| Cobertura degraded | ≥1 faltante com ausência < 10% |
++| Cobertura insufficient | ausência ≥ 10% |
++| Tolerância numérica entre fontes | 2% (200 bp) |
++| Tolerância estrutural | **zero** |
++| Janelas do Detector C | `same_day` + próximos 7 dias civis + mês como contexto |
++| Agregadores do Detector D | `amount_sum_cents`, `amount_mean_cents`, `case_count` |
++| Modelo de `expected_units` | period + dataset_id + unit_id |
++
++**"Calibratable" não é autoajustável.** O estado está registrado como
++`approved_initial_calibratable`; nada no runtime escreve no artefato, e um teste
++afirma a ausência de escrita no módulo.
++
++## 3. Validação fail-closed
++
++A política é recusada quando: `schema_version` não suportada · dinheiro que não é
++inteiro em centavos · participação fora de 0..10000 bp · contagem de casos não
++inteira ou não positiva · população mínima inválida · semântica diferente de
++`OR` · bandas sobrepostas, com buraco no piso, ou com ordem de severidade
++incoerente · tolerância estrutural diferente de zero · lista estrutural vazia ·
++`next_n_days` diferente de 7 · base de dias diferente de civil · agregador fora
++dos três aprovados · severidade low-ticket diferente de `medium` · comparação
++low-ticket diferente de estritamente menor · limiar de cobertura zero.
++
++A recusa lista **todos** os problemas, não o primeiro.
++
++## 4. Cobertura: uma representação só
++
++A política é escrita em fração **ausente**, a linguagem em que foi aprovada. Os
++detectores comparam `unit_coverage.ratio_bp`, que é a fração **presente**. A
++tradução `ausente = 10000 − presente` vive num lugar só,
++`coverageThresholdsFromPolicy`, e é testada nos limites. Gravar os números já
++traduzidos no artefato criaria duas representações da mesma decisão — o defeito
++da 2.6c.
++
++Verificado: 20/0 → ok · 20/1 → degraded · 20/2 → insufficient · 10/1 →
++insufficient · 11/1 → degraded · 9,99% → degraded · 10,00% → insufficient.
++Aritmética inteira, sem float.
++
++## 5. Low-ticket: o Event executivo saiu do bloqueio
++
++A severidade `medium` foi aprovada, então `SEVERITY_POLICY_UNRESOLVED` deixou de
++existir para o caminho válido. Um contrato abaixo do piso emite Event com
++`severity: medium`, `event_id` estável, escopo do próprio contrato, evidência
++própria e `deepFreeze`.
++
++`not_emitted_reason` continua existindo para os motivos **factuais**:
++`NOT_BELOW_FLOOR`, `TICKET_UNAVAILABLE`, `INVALID_TICKET`.
++
++O Event afirma exatamente uma coisa: o ticket está abaixo do piso comercial
++aprovado. Não há `reference_metric` — um contrato individual não tem
++denominador, e inventar um (ticket médio da unidade, por exemplo) mudaria o
++significado do alerta sem aprovação. Um teste varre a saída atrás de "fraude",
++"prejuízo", "inadimplência" e "causa", e exige ausência.
++
++Um teste separado prova que a severidade **não** deriva de participação: o mesmo
++contrato de R$ 1.000 sai `medium` sozinho e `medium` num lote com três contratos
++de R$ 50.000.
++
++## 6. Auditoria de base de severidade por detector
++
++| Detector | Base relativa governada | Situação |
++| --- | --- | --- |
++| A — installment_concentration | `share_count_bp` ou `share_amount_bp` | base existe; **falta decidir qual** |
++| B — cross_source_conflict (numérico) | `share_of_total_bp`, senão `relative_difference_bp` | base existe |
++| B — cross_source_conflict (estrutural) | **nenhuma** | data e identidade não têm denominador |
++| C — first_due_concentration | `share_count_bp` ou `share_amount_bp` | base existe; **falta decidir qual** |
++| D — material_single_case | `relative_delta_bp` ou `share_of_total_bp` | base existe; **falta decidir qual** |
++
++Nenhuma fórmula de detector foi alterada para encaixar severidade.
++
++### 6.1 Defeito encontrado: o Detector B fabricava a base
++
++`cross-source-conflict.ts` calculava:
++
++```ts
++severity: classifySeverity(cfg.severity_by_relative_bp, shareBp ?? relativaBp ?? 0)
++```
++
++O `?? 0` inventa a base quando nenhuma medida relativa é computável. Sob as
++bandas aprovadas isso vira `low` — um número executivo saído do nada. A/C/D já
++falhavam fechado nesse ponto; B era o único que preenchia o buraco.
++
++Corrigido: `severity` passou a `Severity | null`, com `severity_gap` tipado.
++
++**Reachability, medida e não presumida.** Para tipos numéricos, toda versão que
++sobrevive à normalização tem `numeric`, e denominador zero implica versão única —
++ou seja, sem conflito. O `?? 0` era **latente**, não vivo. Um mutante que o
++restaura não mata nenhum teste, e isso está registrado aqui como resultado
++honesto: a correção é endurecimento defensivo, não conserto de bug ativo.
++
++### 6.2 O caminho estrutural, esse, é vivo
++
++Conflito de data e de identidade não tem denominador. As bandas do §5 são
++relativas e não se aplicam, e a Política v1 deliberadamente não decide um valor
++próprio. `structural_severity` virou opcional na configuração; sem ela, o
++conflito sai em `material_not_emitted` — bucket novo, com `severity: null` e
++motivo explícito.
++
++Ele **não** é rebaixado para `non_material`: a divergência é real e passou do
++critério. O que falta é como graduá-la.
++
++## 7. Testes
++
++| Suíte | Antes | Depois |
++| --- | --- | --- |
++| `production-policy` (nova) | — | 52 |
++| `low-ticket` | 82 | 84 |
++| `cross-source-conflict` (B) | 74 | 80 |
++| A / C / D | 164 / 196 / 147 | inalterados |
++| integração | 45 | 47 |
++
++**Mutação:**
++
++| Mutante | Resultado |
++| --- | --- |
++| low-ticket `medium` → `low` | morto — o validador recusa no load, suíte vermelha |
++| low-ticket `medium` → `high` | morto — idem |
++| restaurar `?? 0` no Detector B | **sobrevive** — o caminho é inalcançável hoje; ver §6.1 |
++| severidade estrutural com default `low` | morto (3 testes) |
++| conflito sem severidade cai em `non_material` | morto (3 testes) |
++
++## 8. Fragilidade corrigida no próprio teste
++
++`catalog-import.test.ts` passava sozinho e estourava 5 s sob a suíte completa:
++cada teste dispara `python3`, e com 26 arquivos em paralelo o subprocesso espera
++na fila. Não era regressão de produto. O limite subiu para 60 s, com a razão
++registrada no arquivo — o teste mede o conversor, não a contenção da máquina.
++
++## 9. O que a política NÃO decide
++
++`POLICY_DECISIONS_PENDING` nomeia os quatro campos, e
++`assertProductionPolicyComplete` recusa a configuração de produção enquanto
++existirem:
++
++1. `installmentConcentration.severity_dimension` — graduar por participação em
++   QUANTIDADE ou em VALOR. Muitos contratos pequenos e poucos grandes produzem
++   leituras opostas.
++2. `firstDueConcentration.severity_dimension` — mesma escolha.
++3. `materialSingleCase.severity_dimension` — `relative_delta_bp` mede quanto o
++   agregado MUDA se o caso sair; `share_of_total_bp` mede quanto o caso
++   REPRESENTA. Um caso que dobra a média tem delta 10000 bp e participação
++   pequena.
++4. `crossSourceConflict.structural_severity` — ver §6.2.
++
++O artefato lista os **candidatos** de cada um, nunca uma escolha. Um teste exige
++que cada entrada tenha mais de um candidato, para que preencher um deles seja
++decisão registrada e não um preenchimento silencioso.
++
++## 10. Dados ainda ausentes
++
++`expected_units`: o **modelo** está aprovado (period + dataset_id + unit_id). Os
++**valores** não existem em fonte governada. Catálogo ativo não é `expected_units`
++— um teste exige que o artefato não enumere unidade nenhuma. Sem os dados, a
++avaliação de cobertura de produção falha fechado; nenhum denominador é inventado.
++
++Isto não é threshold pendente. A política está fechada; a população é que não
++existe.
++
++## 11. Bloqueios externos remanescentes
++
++| | Item |
++| --- | --- |
++| A | `expected_units` — fonte e dados governados reais |
++| B | Leonardo → Supabase: tabela/view/schema e contrato de `as_of` |
++| C | Lucas → contrato de armazenamento/provedor/arquivo mensal |
++| D | Engenharia do briefing determinístico |
++| E | Engenharia do read-model do Hermes |
++
++Nenhum deles é decisão de política. Todos dependem de fonte externa ou de
++engenharia ainda não iniciada.
++
++## 12. Verificação
++
++`npm run verify`: schemas ✓, lint ✓, typecheck ✓, **1436 testes / 26 arquivos**.
++Portal `tsc --noEmit` limpo, 182 testes do motor CEO verdes. A/B/C/D sem
++regressão em 164 / 80 / 196 / 147 — B subiu de 74 por testes novos, sem
++alteração de lógica de negócio.
++
++---
++
++# 13. Fase 2.7b — as quatro decisões de severidade fecharam
++
++Artefato: `governance/policy/creditum-policy.v1.json`
++SHA-256 `05578f8bb90d36dd3563416b26b63e6563f37814e7680ee69f63c23644ff1a44`
++
++## 13.1 A e C — `max_available_participation`
++
++Nenhum dos dois escolhe permanentemente entre quantidade e valor. A severidade
++sai da **maior participação governada válida** entre `share_count_bp` e
++`share_amount_bp`, e o evento publica qual dimensão forneceu o máximo.
++
++O motivo é que escolher uma esconderia metade dos casos: uma data com muitos
++contratos pequenos e outra com poucos grandes produzem leituras opostas, e
++nenhuma dimensão é "a certa" para todo evento.
++
++**Desempate:** `share_amount_bp`, governado no artefato. No empate os dois
++valores são numericamente iguais, então a severidade é a mesma — o desempate
++decide apenas o rótulo publicado. A ordem de entrada nunca decide: a função
++recebe os dois argumentos nomeados, não uma lista.
++
++A regra vive em `participation-severity.ts`, compartilhada. Uma cópia em cada
++detector divergiria — foi assim que a Fase 2.5 descobriu que o Detector C tinha
++esquecido de ler `snapshot.quality_status`.
++
++**Sem participação válida → `severity: null`** e lacuna tipada. Nunca zero,
++nunca `info`, nunca a outra dimensão, nunca R$ ou contagem absoluta como
++substituto de percentual.
++
++`severity_dimension` continua obrigatória na configuração e passa a ser o
++desempate — o campo não é ignorado em silêncio quando a estratégia está ativa.
++
++## 13.2 D — participação de verdade, ou nenhuma
++
++Base aprovada: `share_of_total_bp`, **somente** quando tem semântica real de
++parte-do-todo.
++
++`relative_delta_bp` não entra. Ela é mudança contrafactual: pode ser negativa e
++passar de 10000 bp. Classificá-la pelas bandas de participação conflagraria duas
++grandezas diferentes — um caso que dobra a média teria 10000 bp e seria
++`critical` por uma medida que não é participação.
++
++**Média:** `share_of_total_bp` não é aplicável. O fato factual/contrafactual
++continua calculado e auditável; o Event executivo não sai, com razão tipada
++`SEVERITY_BASIS_NOT_APPLICABLE`. Isto **não** é `non_material` — o fato pode ser
++material por delta absoluto. O que falta é a semântica executiva de gravidade.
++
++## 13.3 B — severidade estrutural fixa
++
++Conflito estrutural de tolerância zero (data civil, ID canônico, identidade de
++unidade) tem severidade **`medium`**, fixa e qualitativa.
++
++Não é calculada da tolerância numérica de 2%, não cria basis point sintético,
++não fabrica denominador. Tolerância zero **não** é reinterpretada como
++`critical`: uma data divergente precisa ser olhada, não tratada como incêndio.
++
++Conflito numérico não muda: mantém a base relativa existente e os 200 bp.
++
++A entrada é **independente** da severidade do low-ticket. As duas são `medium`
++por coincidência de decisão, não por origem comum — um teste muda uma e exige
++que a recusa não mencione a outra.
++
++## 13.4 `POLICY_DECISIONS_PENDING` está vazia
++
++As quatro decisões entraram no artefato e a validação ficou **mais** estrita, não
++menos: quatro blocos novos e obrigatórios, cada um com conjunto fechado.
++`assertProductionPolicyComplete` passa porque as decisões existem, não porque a
++asserção foi contornada. Um teste prova isso removendo `detector_severity` do
++artefato e exigindo recusa.
++
++`POLICY_V1_COMPLETE === true`.
++
++## 13.5 A configuração de produção ainda NÃO é montável
++
++Construir a projeção real expôs três campos que as quatro decisões de severidade
++não cobriam — e que eu não havia auditado ao reportar a Fase 2.7:
++
++| Campo | Por que não é derivável |
++| --- | --- |
++| `installmentConcentration.contributing_case_rule` | `top_n: 5` e `until_share_bp: 8000` produzem eventos diferentes para o mesmo dado |
++| `crossSourceConflict.material_absolute_basis_points` | diferença ABSOLUTA entre métricas que já são bp; não é a tolerância relativa de 200 bp — `0` vs `2000` e `1000` vs `2500` têm a mesma diferença absoluta e divergências relativas opostas |
++| `materialSingleCase.material_relative_delta_bp` | mudança relativa, não participação; reusar os 1000 bp seria a conflação que a política de severidade acabou de proibir para este detector |
++
++`buildProductionDetectorConfig` recusa nomeando os três. Nenhum foi inventado.
++
++Três estados distintos, que continuam separados:
++
++- **Política v1: COMPLETA** — toda decisão de negócio aprovada está no artefato.
++- **Configuração de produção: NÃO montável** — três campos sem decisão.
++- **Fonte de dados: indisponível** — `expected_units` sem dados governados.
++
++> **SUPERSEDIDO pela Fase 2.7c.** Os três campos foram aprovados e a configuração
++> de produção passou a ser montável. O parágrafo acima fica como registro do
++> estado em que a 2.7b terminou; o estado corrente está na §14.
++
++## 13.6 Testes
++
++| Suíte | Antes | Depois |
++| --- | --- | --- |
++| `participation-severity` (nova) | — | 14 |
++| `production-policy` | 52 | 71 |
++| A / B / C / D | 164 / 80 / 196 / 147 | inalterados |
++| low-ticket | 84 | 84 |
++| integração | 47 | 47 |
++
++**Mutação:**
++
++| Mutante | Mortos |
++| --- | --- |
++| `max` vira "primeira disponível" (ordem decide) | 5 |
++| participação ausente vira 0 | 1 |
++| D cai para `relative_delta_bp` na média | 5 |
++| severidade estrutural do B para `critical` | recusa no load da política |
++
++## 13.7 Projeção exata
++
++A prova principal deixou de ser a varredura de números literais: agora um teste
++compara campo a campo o artefato contra a política projetada — materialidade,
++bandas, low-ticket, tolerâncias, desempates e severidade estrutural. A varredura
++literal continua como defesa secundária, restrita ao **código** com comentários
++removidos: explicar por que 1000 e 2500 são dimensões diferentes é documentação,
++não política embutida.
++
++## 13.8 Verificação
++
++`npm run verify`: **1469 testes / 27 arquivos**. Portal `tsc` limpo, motor CEO
++182. A/B/C/D em 164 / 80 / 196 / 147, sem regressão.
++
++---
++
++# 14. Fase 2.7c — fechamento da configuração de produção
++
++As três decisões que faltavam foram aprovadas como Política Creditum v1. A
++`ProductionDetectorConfig` passou a ser montável — e não por afrouxamento: a
++validação do artefato ganhou um bloco novo e obrigatório, e a projeção continua
++passando por `validateDetectorConfig`.
++
++## 14.1 As três decisões
++
++### Detector A — regra de contribuintes: `top_n = 5`
++
++Quando um Event de concentração apresenta casos contribuintes, publica os **5
++maiores** segundo a ordenação já governada do detector: valor decrescente, com
++desempate por `subject_ref` em code units. Menos de 5 elegíveis publica os que
++existem — nunca completa com caso inválido ou ausente.
++
++Este 5 é parâmetro de **explicação** do evento. `relevant_case_count = 5` decide
++se um fato é material. São perguntas diferentes, e a §14.2 prova que os campos
++são independentes.
++
++`until_share_bp = 8000` foi **recusado** como política de produção. Não existe
++regra Pareto/80% aprovada na Creditum, e o validador rejeita qualquer estratégia
++fora de `top_n` — um artefato editado não consegue reintroduzi-la por baixo.
++
++### Detector B — `material_absolute_basis_points = 1000`
++
++1000 bp = **10 pontos percentuais** de diferença absoluta, aplicável somente
++quando a métrica comparada já é governadamente expressa em basis points.
++
++Não é a tolerância de conflito. As duas escalas convivem e medem coisas
++diferentes:
++
++| | mede | valor | decide |
++| --- | --- | --- | --- |
++| `numeric_tolerance_bp` | divergência **relativa** | 200 bp | equal vs conflict |
++| `material_absolute_basis_points` | diferença **absoluta** | 1000 bp | materialidade em métricas bp |
++
++`1000` vs `1900` tem 900 bp de diferença absoluta e 4737 bp de divergência
++relativa. Usar um limiar no lugar do outro esconde conflito num caso e o fabrica
++no outro.
++
++Dinheiro, contagem, data, ID e identidade de unidade **não** são convertidos em
++bp para usar esta dimensão: cada unidade tem seu campo. Conflito estrutural
++continua com tolerância zero e severidade `medium` fixa.
++
++### Detector D — `material_relative_delta_bp = 1000`, em MAGNITUDE
++
++Uma mudança contrafactual relativa de 10% ou mais **em magnitude** é material por
++esta dimensão:
++
++```
++material_relative = abs(relative_delta_bp) >= 1000
++```
++
++O valor **assinado** continua no resultado e na evidência. `-1500` sai como
++`-1500`; a magnitude é usada para decidir, não para publicar, e não existe campo
++`relative_delta_magnitude_bp` na saída.
++
++Antes desta decisão a comparação era `valor >= limiar` sobre o número assinado, e
++`-1500 >= 1000` é falso: uma queda de 15% no agregado desaparecia da
++materialidade sem deixar rastro.
++
++**O `abs()` está autorizado só aqui.** Não vale para severidade, participação, A,
++B, C, nem outra métrica de D. A severidade de D continua em `share_of_total_bp`
++(decisão da 2.7b): uma média que fica material pelo delta relativo, sem
++participação parte-do-todo válida, mantém o fato e o Event executivo bloqueado.
++
++## 14.2 Os dois "5" são campos independentes
++
++`materiality.relevant_case_count` e
++`detector_config.installment_concentration.contributing_case_rule.top_n` valem 5
++os dois na v1. É exatamente por isso que a independência precisa de prova: um
++`top_n: cfg.material_count_above` passaria em todo teste de valor e amarraria os
++dois para sempre.
++
++Provado nos dois sentidos: mudar `relevant_case_count` para 7 mantém `top_n` em
++5, e a configuração projetada leva a materialidade de contagem para 7 sem mover a
++apresentação. O mutante que amarra os campos mata o teste.
++
++## 14.3 A projeção
++
++Cada valor de negócio vem do artefato. O TypeScript faz **tradução de forma**,
++não decisão:
++
++| artefato | vira |
++| --- | --- |
++| `relevant_participation_bp` | toda dimensão `*_share_*_bp` de A, B, C e D |
++| `financial_materiality_cents` | toda dimensão em centavos |
++| `relevant_case_count` | toda dimensão de contagem |
++| `minimum_population_contracts` | amostra mínima de A e C, população após remoção de D |
++| `coverage.missing_share_insufficient_at_bp` | os limiares de cobertura, via a primitive de tradução |
++| `severity_bands` | as quatro escalas de severidade |
++
++Uma dimensão receber o mesmo número que outra não as torna o mesmo campo: são
++campos independentes que a v1 preencheu com o mesmo valor aprovado, e cada um
++pode mudar sozinho.
++
++### Valores RELOCADOS — nenhum redecidido
++
++Três valores já aprovados viviam em TypeScript (`APPROVED_THRESHOLDS`,
++`BUSINESS_TIMEZONE`) e a projeção os injetaria de lá, o que contradiz "nenhum
++valor de negócio injetado por TypeScript". Passaram a viver no artefato:
++
++| campo | valor | aprovado em |
++| --- | --- | --- |
++| `installment_threshold` | 19 | briefing do Bloco 1, §14 Caso A |
++| `similarity_threshold_bp` | 8000 | Fase 2.6b |
++| `business_timezone` | `America/Sao_Paulo` | constante de negócio do projeto |
++
++Nenhum valor mudou, e um teste afirma a igualdade com as constantes originais. É
++relocação de fonte, não decisão nova. O `installment_comparison` foi registrado
++junto porque `>= 19` e `> 19` classificam o contrato de 19 parcelas de formas
++opostas.
++
++## 14.4 A janela do Detector C
++
++> **SUPERSEDIDO pela Fase 2.7c.1 (§15).** A 2.7c derivava a janela base de "a
++> única aprovada que dispensa `reference_date`". A regra foi removida: ausência
++> de data de referência é característica de forma, não semântica de negócio.
++
++## 14.5 Harness de produção
++
++`integration/tests/production-config-e2e.test.ts` roda a cadeia inteira sob a
++configuração **real**: artefato → `ProductionDetectorConfig` → lote bruto → D13
++governado → snapshot/evidência → store → A → B → C → D → low-ticket.
++
++Duas provas de que não há queda para configuração de teste: o arquivo não importa
++`TEST_CONFIG`, verificado lendo as próprias linhas de `import`; e não importa nada
++de dentro de `tests/` de outro pacote além de `gateway/tests/helpers`, que
++constrói objetos brutos e não carrega política.
++
++O fixture tem **15 vendas**, não 7. A população mínima aprovada é 10 contratos:
++com 7 o Detector A recusaria por amostra pequena, o que é o comportamento certo e
++não provaria nada sobre a política.
++
++O harness sintético (`end-to-end.test.ts`) continua existindo e continua usando
++`TEST_CONFIG`. Ele não foi convertido: os casos fail-closed dele são calibrados
++para limiares sintéticos, e convertê-los apagaria cobertura em vez de movê-la. Os
++dois provam coisas diferentes — aquele prova composição e encanamento, este prova
++que a política governada produz eventos executivos.
++
++## 14.6 Estado final
++
++| | estado |
++| --- | --- |
++| Política Creditum v1 | **COMPLETA** |
++| `ProductionDetectorConfig` | **MONTÁVEL / READY** |
++| Dados operacionais de `expected_units` | **INDISPONÍVEIS — blocker de dado externo** |
++
++Configuração montável **não** significa que os dados de cobertura existem.
++`expected_units` tem modelo aprovado (`period`, `dataset_id`, `unit_id`) e
++`values_source: "UNRESOLVED"`. Catálogo ativo não é `expected_units`, e cobertura
++que dependa dos memberships reais continua falhando fechado.
++
++## 14.7 Testes
++
++| Suíte | Antes | Depois |
++| --- | --- | --- |
++| A `installment-concentration` | 164 | **173** |
++| B `cross-source-conflict` | 74 | **91** |
++| C `first-due-date-concentration` | 196 | 196 |
++| D `material-single-case` | 147 | **157** |
++| `production-policy` | 71 | **96** |
++| `production-config-e2e` (novo) | — | **29** |
++
++**Mutação — cinco mutantes, todos mortos:**
++
++| Mutante | Resultado |
++| --- | --- |
++| A: `top_n` → `until_share_bp: 8000` | recusa no load da política; 3 arquivos não carregam |
++| B: `material_absolute_basis_points` 1000 → 900 | 5 testes |
++| D: magnitude removida (volta ao assinado) | 3 testes |
++| D: `basis` → `relative_delta_bp` (severidade) | recusa no load da política |
++| Os dois "5" amarrados na projeção | 1 teste |
++
++## 14.8 Verificação
++
++`npm run verify`: schemas ✓, lint ✓, typecheck ✓, **1553 testes / 28 arquivos**.
++Portal `tsc --noEmit` limpo, portal 182, motor CEO 182. A/B/C/D sem regressão.
++
++## 14.9 Blockers restantes — todos externos ou de engenharia
++
++Nenhum threshold, severidade ou campo de configuração continua pendente.
++
++1. **`expected_units`** — dados reais governados. Modelo aprovado, valores sem fonte.
++2. **Leonardo → Supabase** — tabela/view/schema/`as_of` reais.
++3. **Lucas → arquivo mensal** — contrato de arquivo, storage, provider.
++4. **Briefing determinístico** — engenharia, dependente da decisão de read-model.
++5. **Hermes read-model** — não iniciado, por decisão.
++
++---
++
++# 15. Fase 2.7c.1 — execução do Detector C e fonte única
++
++Duas correções de engenharia. Nenhum threshold mudou, nenhum detector SHIP teve
++matemática alterada.
++
++## 15.1 Não existe janela implícita
++
++A 2.7c escolhia `same_day` porque era a única janela aprovada que dispensa
++`reference_date`. O problema não é o resultado — é o critério: **ausência de
++`reference_date` é característica de FORMA, não semântica de negócio**. Uma
++limitação do tipo `DetectorConfig`, que comporta uma janela só, estava decidindo
++qual análise a Creditum executa.
++
++A regra foi removida. `janelaBase()` não existe mais, e um teste lê o fonte para
++garantir que não volte.
++
++### O artefato expressa o conjunto aprovado
++
++```json
++"first_due_windows": {
++  "approved_event_windows": [
++    { "mode": "same_day" },
++    { "mode": "next_n_days", "days": 7 }
++  ],
++  "context": ["calendar_month"],
++  "day_basis": "civil_calendar_days"
++}
++```
++
++`approved_event_windows` é um **conjunto**: a ordem não carrega significado,
++nenhuma janela é padrão, e duplicata é recusa. `calendar_month` fica em
++`context` — promovê-lo a janela executiva criaria um Event que ninguém aprovou,
++e o validador recusa se ele aparecer no conjunto executivo.
++
++Dias úteis e feriados continuam proibidos: exigiriam calendário governado.
++
++### A configuração não carrega janela
++
++`buildProductionDetectorConfig()` devolve `firstDueConcentration.window`
++**ausente**. O campo virou opcional em `DetectorConfig`, e a obrigatoriedade
++**mudou de lugar** — não foi afrouxada: o Detector C recusa quando recebe
++configuração sem janela, nomeando o campo e apontando o construtor de execução.
++
++### A execução escolhe
++
++```ts
++buildFirstDueExecutionConfig(policy, { window: "same_day" })
++buildFirstDueExecutionConfig(policy, { window: "next_n_days", reference_date: "2026-09-20" })
++```
++
++`FirstDueExecution` é união discriminada de propósito: `reference_date` só existe
++no ramo em que significa alguma coisa. Com um campo opcional solto,
++`{ window: "same_day", reference_date }` compilaria e a data seria ignorada em
++silêncio, e `{ window: "next_n_days" }` sem data também compilaria — deixando a
++falta para runtime.
++
++**A política define "7 dias corridos". A execução informa "a partir de quando".**
++`reference_date` não aparece na política nem na configuração projetada; um teste
++do harness afirma isso serializando as duas.
++
++Janela não aprovada é recusa. `next_n_days` com 6 ou 8 dias é recusado no load da
++política — o N é decisão de negócio, e a execução só escolhe qual janela e a
++partir de quando.
++
++## 15.2 Fonte única dos valores de negócio
++
++A 2.7c relocou `installment_threshold`, `similarity_threshold_bp` e
++`business_timezone` para o artefato, mas deixou os literais em `config.ts` vivos
++ao lado. Duas fontes executáveis para a mesma decisão: editar o JSON não movia o
++runtime, e a igualdade entre os dois lugares era coincidência mantida por atenção
++humana — o mesmo defeito D13 da Fase 2.6c.
++
++`detectors/src/governed-thresholds.ts` passou a derivar **todo** o
++`APPROVED_THRESHOLDS` e o `BUSINESS_TIMEZONE` do artefato. Não há número escrito
++lá. `config.ts` reexporta para os consumidores antigos; a autoridade é o JSON.
++
++O módulo é separado de `production-policy.ts` para não fechar ciclo — aquele
++importa `config.ts`, e constantes de topo de módulo num ciclo ESM podem ser lidas
++como `undefined`. `governed-thresholds.ts` não importa nenhum dos dois.
++
++### Como isso é provado
++
++Igualdade entre duas constantes independentes não prova nada: se ambas forem
++literais iguais, o teste passa e o problema continua. As provas são de derivação:
++
++1. O runtime é comparado com o arquivo **lido do disco na execução do teste** —
++   um literal divergente quebra.
++2. O fonte de `config.ts` e `governed-thresholds.ts`, com comentários removidos,
++   não pode conter `America/Sao_Paulo` nem atribuições numéricas dos campos.
++3. Mudar o artefato move a configuração projetada.
++
++### Um acoplamento que vale registrar
++
++`validateDetectorConfig` fixa `installment_threshold` contra o valor governado e
++recusa divergência. Isso torna impossível projetar uma política hipotética com
++outro limiar — e é intencional: 19 é regra do briefing, não parâmetro
++configurável. Fixar contra o artefato carregado é seguro **porque não existe
++segunda fonte**: o valor pinado e o projetado saem do mesmo arquivo.
++
++## 15.3 Os dois harnesses, e por quê
++
++| harness | usa | prova |
++| --- | --- | --- |
++| `end-to-end.test.ts` | `TEST_CONFIG` — **TEST_ONLY** | composição dos detectores, casos adversariais, fail-closed |
++| `production-config-e2e.test.ts` | `ProductionDetectorConfig` | a projeção exata da Política Creditum v1 |
++
++Os dois ficam. Os 14 casos sintéticos não foram migrados: eles são calibrados
++para limiares sintéticos, e convertê-los apagaria cobertura em vez de movê-la.
++Uniformizar aparência não é motivo para perder teste.
++
++O harness de produção prova ausência de queda para configuração de teste lendo as
++próprias linhas de `import`: nada de `TEST_CONFIG`, e nada de dentro de `tests/`
++além de `gateway/tests/helpers`, que constrói objetos brutos e não carrega
++política.
++
++## 15.4 Estado
++
++| | estado |
++| --- | --- |
++| Política Creditum v1 | **COMPLETA** |
++| `ProductionDetectorConfig` | **MONTÁVEL** |
++| Execução de produção do Detector C | **as DUAS janelas aprovadas, explicitamente** |
++| `TEST_CONFIG` | **TEST_ONLY** |
++| Dados de `expected_units` | **blocker de dado externo** |
++
++## 15.5 Testes
++
++| Suíte | 2.7c | 2.7c.1 |
++| --- | --- | --- |
++| A `installment-concentration` | 173 | 173 |
++| B `cross-source-conflict` | 91 | 91 |
++| C `first-due-date-concentration` | 196 | **200** |
++| D `material-single-case` | 157 | 157 |
++| `production-policy` | 96 | **113** |
++| `config` | 66 | **67** |
++| `production-config-e2e` | 29 | **40** |
++| `end-to-end` (sintético) | 47 | 47 |
++
++**Mutação — quatro mutantes, todos mortos:**
++
++| Mutante | Resultado |
++| --- | --- |
++| C cai para `same_day` quando a janela falta | 4 testes |
++| A projeção volta a eleger uma janela | 3 testes |
++| Literal `America/Sao_Paulo` volta ao fonte | 1 teste |
++| A ordem do artefato passa a decidir a janela | 3 testes |
++
++## 15.6 Verificação
++
++`npm run verify`: schemas ✓, lint ✓, typecheck ✓, **1586 testes / 28 arquivos**.
++Portal `tsc --noEmit` limpo, portal 182, motor CEO 182. Todos os detectores SHIP
++preservados.
++
++---
++
++# 16. Gate final — autoridade única e conjunto exato do Detector C
++
++O gate adversarial encontrou um HIGH válido: era possível remover `next_n_days` do
++artefato e a política **continuava válida**, `POLICY_V1_COMPLETE` continuava
++`true`, a configuração continuava montável, e `diasDaJanelaCorrida` **fabricava
++7** para uma janela que a política não aprovava. Uma análise obrigatória de
++produção desaparecia em silêncio.
++
++O artefato não mudou. SHA-256 continua
++`db7a880b1d9ab357b2c2d46ddedf712699cfd351488e24482b1cd03832167a73`.
++
++## 16.1 A linha entre vocabulário e valor governado
++
++A correção depende de separar duas coisas que estavam misturadas no validador:
++
++**Vocabulário / capacidade — pode viver em TypeScript.** Diz o que o runtime
++*sabe executar*. Uma política fora disso não é "outra decisão da Creditum": é um
++pedido sem código para atender, e recusar é checagem de capacidade.
++
++| permaneceu | por quê |
++| --- | --- |
++| `FirstDueEventWindowMode` = `same_day \| next_n_days` | os dois modos que o Detector C implementa como alvo de Event |
++| `FirstDueContextMode` = `calendar_month` | leitura de contexto; não existe Event por mês calendário |
++| `VOCABULARIO_DE_METRICAS` | os nomes que `SingleCaseMetric` fecha e D sabe calcular |
++| `BASE_DE_DIAS_IMPLEMENTADA` | dia útil exigiria calendário de feriados governado, que não existe |
++| `SEVERIDADES`, `DIMENSOES_DE_PARTICIPACAO`, `SCHEMAS_SUPORTADOS` | vocabulário de tipos e de schema |
++
++**Valor governado — só no artefato.** Removidos deste arquivo:
++
++| removido | era |
++| --- | --- |
++| `DIAS_CORRIDOS_APROVADOS = 7` | pino numérico: `days !== 7` recusava |
++| `CONTEXTOS_APROVADOS = {calendar_month}` | lista de contexto aprovado |
++| `AGREGADORES_APROVADOS` | renomeado para vocabulário; o subconjunto habilitado vem do artefato |
++| `diasDaJanelaCorrida()` | **deletada** — devolvia 7 por fallback |
++| `CreditumPolicy.first_due_next_n_days` | **deletado** — cópia derivada do parâmetro |
++
++Os vocabulários têm companheiro de runtime à prova de deriva:
++`Readonly<Record<Modo, true>>`. Se um modo entrar no tipo e não no companheiro, o
++TypeScript reclama de propriedade faltando; se entrar no companheiro e não no
++tipo, de propriedade excedente. Uma lista literal solta poderia divergir em
++silêncio.
++
++## 16.2 Conjunto exato, sem criar segunda fonte
++
++A exigência é de **totalidade sobre o vocabulário do protocolo**: cada modo que o
++Detector C sabe executar precisa aparecer no conjunto governado exatamente uma
++vez. Não existe lista de "janelas requeridas" escrita em TypeScript — a
++obrigatoriedade é estrutural, derivada do vocabulário, e não carrega parâmetro
++nenhum.
++
++Recusas:
++
++| condição | resultado |
++| --- | --- |
++| `same_day` ausente | política inválida |
++| `next_n_days` ausente | política inválida — **o HIGH** |
++| modo duplicado (mesmo com `days` diferente) | inválida |
++| membro fora do vocabulário (`calendar_month`, `business_days`, …) | inválida |
++| lista vazia | inválida |
++| `days` ausente, zero, negativo ou não inteiro | inválida |
++| `same_day` com `days` | inválida — o modo não tem parâmetro |
++| `context` ausente, vazio, duplicado ou com membro extra | inválida |
++| ordem invertida | **válida**, projeção idêntica |
++
++## 16.3 O `days` deixou de ser pinado
++
++`days` é lido do artefato. Um artefato com `days: 6` descreve uma política
++**diferente**, e o runtime a executa como 6 — o que nenhum código pode fazer é
++dizer "se não for 7, uso 7".
++
++Isto é uma mudança de comportamento em relação à 2.7c.1, que recusava 6 e 8 por
++uma constante TypeScript. Aquela constante era a segunda autoridade que o gate
++apontou: o artefato dizia 7 e o código também, e a igualdade era coincidência
++mantida à mão. O controle compensatório é o próprio artefato — versionado, com
++hash conhecido — e um teste que afirma que o valor **em disco** é 7.
++
++## 16.4 O fallback morreu por deleção
++
++`first_due_next_n_days` era uma cópia derivada do parâmetro, alimentada pela
++função que fabricava 7. Os dois foram deletados. Quem precisa do número chama
++`productionNextNDays(policy)`, que **lê a janela governada** e devolve
++`undefined` se ela não existir — nunca um número inventado.
++
++Deletar foi melhor que corrigir: um `throw` no lugar do fallback seria código
++inalcançável (a totalidade garante a janela), e código inalcançável não pode ser
++provado por teste nenhum.
++
++## 16.5 Projeção exata
++
++Teste de projeção compara, campo a campo, o artefato **lido do disco** contra a
++política em runtime: mesmas janelas, mesmo contexto, mesma cardinalidade, e o
++`days` da execução igual ao do arquivo. A varredura de literais no fonte continua
++como defesa secundária, não como prova principal.
++
++## 16.6 Mutação
++
++Duas fraquezas apareceram na primeira rodada e foram corrigidas: as asserções
++diziam só "ausente", e uma segunda defesa a jusante mascarava a falta da
++totalidade. As mensagens agora são específicas.
++
++| Mutante | Resultado |
++| --- | --- |
++| Validador volta a checar só os membros fornecidos | **4 testes** |
++| Fallback de 7 reintroduzido no acessor | **1 teste** |
++| Runtime reintroduz `amount_mean_cents` fora do artefato | **1 teste** |
++| Runtime devolve o vocabulário de contexto em vez do declarado | **sobreviveu — equivalente** |
++
++O último é honestamente um **mutante equivalente**: `context` tem um membro só, e
++sob a totalidade reconstruir do vocabulário e projetar o artefato dão o mesmo
++resultado. Nenhum teste pode distingui-los sem uma política que a validação
++proíbe. O código foi trocado para projeção de qualquer forma, para que a diferença
++apareça no dia em que o contexto ganhar um segundo membro. A variante do mesmo
++mutante que **pode** divergir — agregadores, que têm três membros — é morta.
++
++## 16.7 Auditoria dos demais pinos
++
++Continuam pinando valor, e ficaram fora deste escopo por instrução explícita:
++`low_ticket.severity !== "medium"`, `structural_severity !== "medium"`,
++`structural_tolerance_bp !== 0`, `semantics !== "OR"`,
++`installment_comparison`, `comparison !== "strictly_less_than"`, e as três
++estratégias (`top_n`, `max_available_participation`,
++`share_of_total_when_applicable`).
++
++As estratégias e comparações são vocabulário de capacidade — só existe uma
++implementação de cada. As **severidades** `medium` são escolha entre opções
++implementáveis, e portanto são pinos de valor da mesma natureza do `days !== 7`
++que acabou de sair. Ficam registradas aqui como dívida conhecida, não como
++resolvidas.
++
++## 16.8 Verificação
++
++`npm run verify`: schemas ✓, lint ✓, typecheck ✓, **1612 testes / 28 arquivos**.
++Portal `tsc --noEmit` limpo, portal 182, motor CEO 182.
++
++A 173 · B 91 · C 200 · D 157 · low-ticket 84 · `production-policy` **139** ·
++`config` 67 · `production-config-e2e` 40 · `end-to-end` 47.
++
++---
++
++# 17. Limpeza final — os três últimos valores governados
++
++Saíram os três últimos pinos executáveis de valor de negócio. O artefato de
++produção **não mudou**: SHA-256 continua
++`db7a880b1d9ab357b2c2d46ddedf712699cfd351488e24482b1cd03832167a73`, e ele segue
++declarando `days: 7`, `low_ticket.severity: "medium"` e
++`structural_severity: "medium"`.
++
++## 17.1 A regra de autoridade, agora aplicada sem exceção
++
++| TypeScript valida | Artefato decide |
++| --- | --- |
++| estrutura e tipo | valores Creditum |
++| vocabulário / capacidade implementada | thresholds |
++| campo obrigatório | severidades escolhidas |
++| relações semânticas genéricas | dias |
++| totalidade de conjunto | estratégias habilitadas e subconjuntos de capacidade |
++
++## 17.2 Pinos removidos
++
++| pino | onde | era |
++| --- | --- | --- |
++| `days !== 7` | validação das janelas de C | escolha numérica governada |
++| `low_ticket.severity !== "medium"` | validação de low-ticket | escolha entre severidades implementáveis |
++| `structural_severity !== "medium"` | validação de severidade do B | idem |
++
++Em cada caso o que ficou é: **campo obrigatório**, **dentro do vocabulário**,
++**valor projetado do artefato sem transformação**.
++
++O `!== "medium"` era o caso mais insidioso dos três, porque parecia um invariante
++de negócio legítimo. Não era: `medium` é uma escolha entre quatro severidades que
++o motor executa igualmente bem. O artefato dizia `medium`, o código também, e a
++igualdade era coincidência mantida por atenção humana — a mesma forma do defeito
++D13 da Fase 2.6c e do `days !== 7` do gate anterior.
++
++## 17.3 O que ficou como vocabulário / capacidade
++
++Nada disso é escolha de negócio; é o que existe implementação para executar.
++
++| permanece | significa |
++| --- | --- |
++| `SEVERIDADES` | as severidades que o motor sabe emitir |
++| `FirstDueEventWindowMode`, `FirstDueContextMode` | os modos de janela e de contexto que C implementa |
++| `VOCABULARIO_DE_METRICAS` | as métricas que D sabe calcular |
++| `BASE_DE_DIAS_IMPLEMENTADA` | dia útil exigiria calendário de feriados governado |
++| `DIMENSOES_DE_PARTICIPACAO`, `SCHEMAS_SUPORTADOS` | vocabulário de tipo e de schema |
++| estratégias (`top_n`, `max_available_participation`, `share_of_total_when_applicable`) e comparações (`strictly_less_than`, `strictly_greater_than`) | existe uma implementação de cada |
++
++`SEVERIDADES` inclui `info`. Isso significa que o motor sabe emitir `info`, não que
++a Creditum a aprove para alguma regra — e agora que os pinos saíram, um artefato
++poderia selecioná-la. Fica registrado: é decisão de governança, e apareceria no
++diff e no hash como qualquer outra.
++
++## 17.4 Projeção exata
++
++Testes comparam o artefato **lido do disco** contra o runtime, campo a campo, sem
++transformação de valor:
++
++```
++artefato.low_ticket.severity                     === runtime.low_ticket_severity
++artefato.detector_severity.…structural_severity   === runtime.structural_severity
++artefato.…next_n_days.days                        === productionNextNDays()
++                                                  === execução.window.days
++```
++
++E um teste afirma que os três valores **em disco** continuam 7 / medium / medium.
++
++## 17.5 As fixtures que provam a autoridade
++
++Nenhuma altera a Policy v1 real — são cópias em memória.
++
++| fixture | resultado |
++| --- | --- |
++| `days: 7 → 6` | política carrega; `productionNextNDays()` devolve 6; a execução usa 6; nenhuma reescrita para 7 |
++| `low_ticket.severity: medium → high` | política carrega; runtime projeta `high`; piso e comparação não se movem |
++| `structural_severity: medium → high` | política carrega; a configuração leva `high` ao Detector B; escala relativa e tolerância intactas |
++
++A independência das duas severidades ganhou prova direta, que o pino antes tornava
++impossível: mudar a do low-ticket deixa a estrutural em `medium`, e vice-versa.
++
++Ausente, vazio, fora do vocabulário, tipo errado — tudo continua recusado.
++
++## 17.6 Mudar política não é configuração técnica
++
++Trocar `7` por `6`, ou `medium` por `high`, é **mudança de política Creditum**. As
++consequências são de processo, não de código:
++
++- diff no artefato governado;
++- SHA-256 novo;
++- revisão e aprovação humanas;
++- testes de produção contra o novo valor.
++
++O schema não substitui esse processo com hard-code, e não é papel dele esconder ou
++reverter a mudança. O controle é o artefato ser versionado e ter hash conhecido.
++
++## 17.7 Auditoria §12
++
++Busca por `!== "medium"`, `=== "medium"`, `days === 7`, `days !== 7`, `?? 7`,
++`return 7` e subconjuntos Creditum hard-coded em `production-policy.ts`,
++`config.ts` e `governed-thresholds.ts`:
++
++- **A — expectativa de teste sobre o artefato atual:** aceitável, e é o que
++  restou nos testes.
++- **B — vocabulário de protocolo:** aceitável, listado em §17.3.
++- **C — autoridade de produção:** **zero ocorrências.** Há teste que varre os três
++  fontes, com comentários removidos, e falha se qualquer uma voltar.
++
++`TEST_CONFIG` continua sintético e TEST_ONLY; produção não cai nele, provado no
++harness de produção pelas linhas de `import`.
++
++## 17.8 Verificação
++
++`npm run verify`: schemas ✓, lint ✓, typecheck ✓, **1633 testes / 28 arquivos**.
++Portal `tsc --noEmit` limpo, portal 182, motor CEO 182.
++
++A 173 · B 91 · C 200 · D 157 · low-ticket 84 · `production-policy` **160** ·
++`config` 67 · integração 87 (40 produção + 47 sintético).

@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://creditum.internal/intelligence/contracts/snapshot.schema.json",
+  "title": "Snapshot governado",
+  "description": "Recorte versionado e imutável de uma fonte, produzido pelo plano de ingestão e exposto somente para leitura ao plano de consulta. Não carrega PII.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "snapshot_id",
+    "schema_version",
+    "source_system",
+    "dataset_id",
+    "period_start",
+    "period_end",
+    "observed_at",
+    "ingested_at",
+    "content_hash",
+    "record_count",
+    "rows_skipped",
+    "coverage",
+    "quality_status",
+    "conflicts",
+    "missing_fields",
+    "evidence_refs",
+    "payload"
+  ],
+  "properties": {
+    "snapshot_id": { "$ref": "#/$defs/identifier" },
+    "schema_version": { "$ref": "#/$defs/schema_version" },
+    "source_system": {
+      "description": "Sistema de origem. Allowlist fechada: o gateway recusa qualquer valor fora dela.",
+      "enum": ["google_sheets", "bitrix24", "omie", "omie_criteria", "supabase_ceo", "manual_upload"]
+    },
+    "dataset_id": {
+      "description": "Identificador estável do dataset dentro da fonte (ex.: id da planilha). Obrigatório — sem ele a linha 42 de agosto colide com a linha 42 de setembro (D14).",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "period_start": { "type": "string", "format": "date" },
+    "period_end": { "type": "string", "format": "date" },
+    "observed_at": {
+      "description": "Quando a fonte foi lida. É este timestamp que sustenta a rastreabilidade, não o de ingestão.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "ingested_at": { "type": "string", "format": "date-time" },
+    "content_hash": { "$ref": "#/$defs/sha256" },
+    "record_count": { "type": "integer", "minimum": 0 },
+    "rows_skipped": {
+      "description": "Linhas descartadas e CONTADAS. Descarte silencioso é proibido — ver briefing CEO Intelligence, achado 15.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "coverage": { "$ref": "#/$defs/coverage" },
+    "quality_status": { "$ref": "#/$defs/quality_status" },
+    "conflicts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/conflict" }
+    },
+    "missing_fields": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/identifier" }
+    },
+    "payload": { "$ref": "#/$defs/payload" }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.:-]{2,127}$"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "cents": {
+      "description": "Dinheiro é SEMPRE inteiro em centavos. Nunca float.",
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "count": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "basis_points": { "type": "integer", "minimum": 0, "maximum": 10000 },
+    "untrusted_text": {
+      "description": "Envelope obrigatório para QUALQUER texto livre vindo da fonte. O rótulo existe para que o texto seja tratado como dado, nunca como instrução (§12.3). Não há caminho alternativo: o payload é fechado e nenhum outro campo aceita texto livre.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["untrusted", "content"],
+      "properties": {
+        "untrusted": { "const": true },
+        "content": { "type": "string", "maxLength": 2048 },
+        "origin": { "type": "string", "maxLength": 256 }
+      }
+    },
+    "unit_name": {
+      "description": "Nome canônico de unidade, aprovado pelo CEO (D13). Restrito a letras e espaço: pontuação, dois-pontos e quebra de linha ficam de fora, o que impede que texto de instrução caiba aqui. O fechamento completo depende do vocabulário canônico de unidades — ver THREAT_MODEL, resíduo R1.",
+      "type": "string",
+      "pattern": "^[A-ZÀ-Ý][A-Za-zÀ-ÿ ]{1,63}$"
+    },
+    "payload": {
+      "description": "Conteúdo governado, FECHADO. Cada campo tem forma explícita; nenhum aceita texto livre. Texto de fonte só entra por `source_notes`, dentro do envelope untrusted_text.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "period_label": {
+          "description": "Rótulo gerado pela ingestão, não copiado da fonte. Padrão fechado: mês em minúsculas + barra + ano.",
+          "type": "string",
+          "pattern": "^[a-zç]{3,12}/[0-9]{4}$"
+        },
+        "sales_count": { "$ref": "#/$defs/count" },
+        "leads_received": { "$ref": "#/$defs/count" },
+        "leads_eligible": { "$ref": "#/$defs/count" },
+        "volume_contracted_cents": { "$ref": "#/$defs/cents" },
+        "average_ticket_cents": { "$ref": "#/$defs/cents" },
+        "gross_conversion_bp": { "$ref": "#/$defs/basis_points" },
+        "eligible_conversion_bp": { "$ref": "#/$defs/basis_points" },
+        "installments_histogram": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ate_12": { "$ref": "#/$defs/count" },
+            "de_13_a_19": { "$ref": "#/$defs/count" },
+            "de_20_a_24": { "$ref": "#/$defs/count" },
+            "acima_de_24": { "$ref": "#/$defs/count" }
+          }
+        },
+        "first_due_date_histogram": {
+          "type": "object",
+          "propertyNames": { "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$" },
+          "additionalProperties": { "$ref": "#/$defs/count" }
+        },
+        "unit_breakdown": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/unit_name" },
+          "additionalProperties": { "$ref": "#/$defs/count" }
+        },
+        "internal_margin_bp": {
+          "description": "Campo legítimo da ingestão que o plano de consulta NÃO expõe. Existe no contrato e fica de fora da allowlist do gateway — é o que prova que schema e allowlist são camadas distintas.",
+          "$ref": "#/$defs/basis_points"
+        },
+        "source_notes": {
+          "description": "Único lugar do payload onde texto de fonte pode existir, e sempre rotulado.",
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/untrusted_text" }
+        }
+      }
+    },
+    "quality_status": {
+      "description": "ok = utilizável. degraded = utilizável com ressalva explícita. conflicted = fontes discordam, valor NÃO resolvido. insufficient = cobertura baixa demais para afirmar.",
+      "enum": ["ok", "degraded", "conflicted", "insufficient"]
+    },
+    "coverage": {
+      "description": "Modelo de cobertura (D10): uma unidade sem reporte não pode apagar as outras 19.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expected_units", "reporting_units", "ratio_bp"],
+      "properties": {
+        "expected_units": { "type": "integer", "minimum": 0 },
+        "reporting_units": { "type": "integer", "minimum": 0 },
+        "ratio_bp": {
+          "description": "Cobertura em basis points (10000 = 100%). Percentual nunca é float neste sistema. A coerência com expected/reporting é verificada em `semantic.ts` — JSON Schema não compara campos entre si.",
+          "$ref": "#/$defs/basis_points"
+        },
+        "missing_units": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/unit_name" }
+        }
+      }
+    },
+    "conflict": {
+      "description": "Divergência entre fontes. O sistema declara as duas versões e NÃO escolhe.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["conflict_id", "field", "versions", "resolved"],
+      "properties": {
+        "conflict_id": { "$ref": "#/$defs/identifier" },
+        "field": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "versions": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["source_system", "value_repr"],
+            "properties": {
+              "source_system": { "type": "string", "minLength": 1, "maxLength": 64 },
+              "value_repr": {
+                "description": "Representação textual do valor divergente. Nunca resolvida em um único valor. Comprimento curto de propósito: é para caber um número ou uma data, não um texto de fonte.",
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "evidence_ref": { "$ref": "#/$defs/identifier" }
+            }
+          }
+        },
+        "resolved": {
+          "description": "OBRIGATÓRIO e sempre false. A arquitetura inteira depende disto: o conflito nunca é fechado pelo sistema nem pelo agente. Fechá-lo é evento humano no ledger (`decision.conflict_resolutions`), que não altera este registro.",
+          "const": false
+        }
+      }
+    }
+  }
+}

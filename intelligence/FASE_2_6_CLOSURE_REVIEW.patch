@@ -1,0 +1,1605 @@
+diff --git a/intelligence/docs/FASE_2_6_CLOSURE_AND_INTEGRATION.md b/intelligence/docs/FASE_2_6_CLOSURE_AND_INTEGRATION.md
+new file mode 100644
+index 0000000..7fac71b
+--- /dev/null
++++ b/intelligence/docs/FASE_2_6_CLOSURE_AND_INTEGRATION.md
+@@ -0,0 +1,512 @@
++# Fase 2.6 — Closure & Integration Gate
++
++**Data:** 2026-08-17
++**Estado:** fechamento da Fase 2. Hermes não instalada, Fase 3 não iniciada.
++**Escopo:** inventário real do working tree, arquitetura end-to-end, contratos de
++fonte, governança do catálogo D13, thresholds, provenance, matriz de falhas,
++limite de confiança da Hermes e critérios de entrada da Fase 3.
++
++> **Nada neste documento foi estimado de memória.** Cada linha do inventário
++> corresponde a arquivo lido. Onde não há evidência no repositório, o status é
++> `OPEN DECISION` — não uma suposição plausível.
++
++---
++
++## 1. Componentes entregues
++
++### 1.1 Inventário
++
++| Componente | Arquivo | Estado |
++|---|---|---|
++| Contratos JSON (6) | `contracts/*.schema.json` | **READY** |
++| Gateway / egress / PII | `gateway/src/{gateway,egress,pii,allowlist}.ts` | **READY** |
++| Store read-only + TOCTOU | `gateway/src/store.ts` | **READY** |
++| Factory + validação semântica | `gateway/src/{factory,semantic,integrity}.ts` | **READY** |
++| deepFreeze compartilhado | `gateway/src/immutability.ts` | **READY** |
++| Motor (re-export puro) | `detectors/src/engine.ts` | **READY** |
++| D13 canonicalização | `detectors/src/canonical-units.ts` | **READY** (catálogo é entrada) |
++| Datas de negócio | `detectors/src/dates.ts` | **READY** |
++| Data civil estrita | `detectors/src/civil-date.ts` | **READY** |
++| Severidade | `detectors/src/severity.ts` | **READY** |
++| Lattice de qualidade | `detectors/src/quality.ts` | **READY** |
++| Parte-do-todo | `detectors/src/part-of-whole.ts` | **READY** |
++| Identidade estrutural | `detectors/src/structural-id.ts` | **READY** |
++| Identidade de conflito | `detectors/src/conflict-id.ts` | **READY** |
++| Contrafactual | `detectors/src/counterfactual.ts` | **READY** |
++| Provenance de evidência calculada | `detectors/src/counterfactual-provenance.ts` | **READY** |
++| Materialidade / comparação | `detectors/src/{materiality,comparison}.ts` | **READY** |
++| Config de detectores | `detectors/src/config.ts` | **PARTIAL** — ver §5 |
++| **Detector A** installment_concentration | `detectors/src/installment-concentration.ts` | **READY** — SHIP |
++| **Detector B** data_quality_conflict | `detectors/src/cross-source-conflict.ts` | **READY** — SHIP |
++| **Detector C** first_due_date_concentration | `detectors/src/first-due-date-concentration.ts` | **READY** — SHIP |
++| **Detector D** material_single_case | `detectors/src/material-single-case.ts` | **READY** — SHIP |
++| Portas de ingestão | `integration/src/ports.ts` | **PARTIAL** — interfaces sem adaptador |
++| Harness end-to-end | `integration/tests/end-to-end.test.ts` | **READY** — 31 testes |
++| Catálogo D13 governado | `ceo.schools` / `ceo.school_aliases` | **BLOCKED** — vazias, ver §4 |
++| `expected_units` por período | — | **NOT_IMPLEMENTED** — ver §4.4 |
++| Adaptador Leonardo/Supabase | — | **NOT_IMPLEMENTED** — ver §3.1 |
++| Adaptador Lucas/pasta mensal | — | **NOT_IMPLEMENTED** — ver §3.2 |
++| Read-model da Hermes | — | **NOT_IMPLEMENTED** — ver §9.2 |
++| Briefing Aros | `contracts/aros-briefing.schema.json` | **PARTIAL** — inadequado, ver §9.1 |
++
++### 1.2 Contagem de testes
++
++| Suíte | Testes |
++|---|---|
++| `intelligence/` total | **1.123** (22 arquivos) |
++| Gateway | 257 |
++| Detector A | 164 |
++| Detector B | 74 |
++| Detector C | 196 |
++| Detector D | 147 |
++| Config | 66 |
++| **Integração end-to-end (novo)** | **31** |
++| Portal | 182 |
++| Motor `src/lib/ceo` | 182 |
++
++---
++
++## 2. Arquitetura end-to-end
++
++```
++  FONTE                    │ Google Sheets (Lucas) · Supabase (Leonardo) · Omie · Bitrix
++    ↓                      │
++  SourceAdapter            │ PLANO DE INGESTÃO — escreve
++    ↓                      │ produz: RawBatch (observed_at, collected_at, content_hash)
++  DETACH / NORMALIZE       │ motor: parse.ts, normalize.ts
++    ↓                      │
++  D13 canonicalizeUnit     │ catálogo é ENTRADA governada, nunca inferência
++    ↓                      │ produz: matched | unknown | ambiguous
++  SNAPSHOT                 │ único produtor de snapshot_id
++    ↓                      │ valida: schema + semântica (factory.ts)
++  EVIDENCE                 │ observação → row/cell
++    │                      │ cálculo    → computed + ComputedEvidenceProvenance
++    ↓                      │
++  InMemoryStore            │ PLANO DE CONSULTA — somente leitura
++    ↓                      │ valida integridade referencial, congela o grafo
++  DETECTORES A B C D       │ funções PURAS. Verificam provenance; nunca a criam.
++    ↓                      │ produzem: IntelligenceEvent validado + summary auditável
++  READ-MODEL               │ projeção fechada — §9.2
++    ↓                      │
++  HERMES (futuro)          │ OBSERVAR · ANALISAR · ALERTAR · RECOMENDAR
++```
++
++### 2.1 Quem produz cada fato governado
++
++| Fato | Produtor | Hermes pode produzir? |
++|---|---|---|
++| `snapshot_id` | `DatasetSnapshotBuilder` (ingestão) | **NÃO** |
++| `evidence_id` de observação | `EvidenceBuilder` (ingestão) | **NÃO** |
++| `evidence_id` de cálculo | `ComputedProvenanceBuilder` (plano de cálculo) | **NÃO** |
++| `computation_id` | quem executa o cálculo, antes do detector | **NÃO** |
++| `ComputedEvidenceProvenance` | quem calculou a evidência | **NÃO** |
++| Resolução D13 | `canonicalizeUnit` sobre catálogo governado | **NÃO** |
++| Catálogo de unidades | decisão humana → `ceo.schools`/`school_aliases` | **NÃO** |
++| `expected_units` | governança do período — **OPEN** | **NÃO** |
++| Thresholds aprovados | CEO | **NÃO** |
++| `detected_at` | orquestrador da execução, explícito | **NÃO** |
++| `event_id` | detector, a partir do fato governado | **NÃO** |
++| Escrita em qualquer plano | ingestão | **NÃO** |
++| Leitura do read-model | — | **SIM**, e só isso |
++
++**Nenhuma linha da coluna direita é `SIM` exceto leitura.** Isto é estrutural, não
++política: o detector é o único plano que não escreve, e a Hermes fica um passo
++depois dele.
++
++---
++
++## 3. Fontes reais
++
++### 3.1 Leonardo — migração API → Supabase
++
++A migração é troca de **adaptador**, não mudança de detector. A `SourceAdapter`
++existe exatamente para que essa troca não atravesse o `dataset_id` lógico.
++
++| Item | Estado |
++|---|---|
++| Tabela/view de origem | **OPEN INTEGRATION DECISION** — o repositório menciona Leonardo apenas como coordenador (`CLAUDE.md:35`). Nenhum nome de tabela tem lastro. |
++| `dataset_id` lógico | Recomendado estável, ex. `ds_residencia_mensal`. Nunca conter versão nem data. |
++| Campos exigidos | Depende da tabela. Definir junto com a decisão acima. |
++| Incremental vs full | **OPEN** — `ceo.source_records` já suporta `superseded_at`/`superseded_by`, então incremental é viável sem mudança de schema. |
++| Freshness / `as_of` | `observed_at` da origem ≠ `collected_at` da ingestão. Ver §7. |
++| Ownership de evidência | Uma `Evidence` por linha lida, `locator.dataset_id` = dataset lógico. |
++| Schema drift | Campo ausente → `null` → lacuna. **Nunca zero.** Provado no harness. |
++| Tabela vazia | Lote com `rows: []` → `EMPTY_DENOMINATOR`, sem evento. Provado no harness. |
++| Indisponibilidade | Erro do adaptador, **não** lote vazio. Distinguir é obrigatório. |
++
++**Infraestrutura já existente que serve:** `ceo.source_syncs` (idempotency_key,
++content_hash, rows_skipped, conflicts_found) e `ceo.source_records` (row_key,
++locator, payload, content_hash, collected_at). O schema de ingestão já foi
++desenhado; falta só ligar a origem.
++
++### 3.2 Lucas — pasta mensal
++
++| Item | Recomendação / estado |
++|---|---|
++| Padrão de pasta | `YYYY-MM`, ex. `vendas/2026-08/` |
++| Mês de negócio | Derivado com `businessDateOf(instante, "America/Sao_Paulo")` + `monthKeyOf`. **Nunca** o locale do processo. |
++| Mês ≠ execução | `businessMonth` é do dado; `collected_at` é da leitura. Dois campos distintos no `RawBatch`. |
++| Descoberta de arquivos | **OPEN** — depende de o storage ser Drive, S3 ou filesystem. |
++| Extensões permitidas | **OPEN** — allowlist fechada, nunca "qualquer planilha". |
++| Ordenação | Determinística por nome; nunca por `mtime` (muda em cópia). |
++| Dois arquivos | **Conflito**, não "o mais recente ganha". Detector B existe para isso. |
++| Arquivo faltando | Lacuna de cobertura do período, não zero. |
++| Atrasado do mês anterior | Pertence ao mês do DADO, não ao da pasta. Precisa de regra: **OPEN**. |
++| Arquivo futuro | Recusar: `period_end > businessMonth` corrente falha fechado. |
++| Schema mismatch | Falha fechada por arquivo, não silenciosa. |
++| Arquivo vazio | `EMPTY_DENOMINATOR`. |
++| Identidade | `content_hash` sobre o conteúdo → idempotência (§6). |
++
++**Não implementei acesso a filesystem/cloud.** As duas decisões abertas acima
++(storage e regra de arquivo atrasado) determinariam o código, e escrever antes
++delas seria inventar.
++
++---
++
++## 4. Governança do catálogo D13
++
++### 4.1 Decisão desta fase: catálogo é DADO, não união compilada
++
++`UnitId` permanece `string` validada por `/^[a-z][a-z0-9_]{1,63}$/`, e o catálogo
++entra como `UnitCatalog { catalog_version, units[] }`.
++
++**Isto supersede** a proposta de `FASE_2_1_SCHEMA_V2_PROPOSAL.md` §6 e a
++recomendação final de `D13_CATALOG_VALIDATION.md` §8, que previam transformar
++`UnitId` em união literal. Com ~40 escolas e crescendo, a união literal exigiria
++recompilar o POC a cada abertura de unidade — e faria a abertura de uma escola
++virar deploy de código.
++
++**Consequência para o bloqueio B1:** ele deixa de depender de enum compilado.
++Passa a depender só do **conteúdo** governado do catálogo.
++
++### 4.2 Forma do catálogo vs. tabelas existentes
++
++| Campo pedido no briefing | `ceo.schools` / `school_aliases` | Estado |
++|---|---|---|
++| `unit_id` | `schools.id` (uuid) | mapeável |
++| `canonical_name` | `schools.name` (unique) | **READY** |
++| `aliases` | `school_aliases.alias_key` → `school_id` | **READY** |
++| `status` | `schools.active` (boolean) | **PARTIAL** — booleano, não estado |
++| `effective_from` / `effective_to` | **ausente** | **NOT_IMPLEMENTED** |
++
++**Lacuna real:** sem `effective_from/to`, uma escola inativada perde a história —
++um período anterior à inativação passaria a ter cobertura errada retroativamente.
++Registrado como decisão de governança, não implementado.
++
++### 4.3 Decisões D13 realmente pendentes
++
++Tabela fechada, derivada de `docs/D13_CATALOG_VALIDATION.md` (fontes citadas lá).
++**Nenhum nome canônico foi escolhido por mim.**
++
++| # | Nome observado | Candidato | Fonte | Status | Decisão humana? |
++|---|---|---|---|---|---|
++| 1 | `BelfordRoxo` | Belford Roxo | `public.unidades` | `ambiguous` | **SIM** — grafia do `display_name` |
++| 2 | `Maracanau` | Maracanaú | `public.unidades` | `ambiguous` | **SIM** — grafia |
++| 3 | `Jardim Angela` | Jardim Ângela | `public.unidades` | `ambiguous` | **SIM** — grafia |
++| 4 | `Presidente P.` | Prudente **(?)** | `public.unidades` + BRIEFING §3.5 | `ambiguous` | **SIM** — `P.` não é expansível |
++| 5 | `Rio Centro` | — | `public.unidades` | `unknown` | **SIM** |
++| 6 | `Bezerra` | — | `public.unidades` | `unknown` | **SIM** |
++| 7 | `Santa Cruz` | — | `public.unidades` | `unknown` | **SIM** |
++| 8 | `Grau Marabá` | Marabá **(?)** | BRIEFING §3.5, **ausente** das 27 | `unknown` | **SIM** — a fonte reporta, o catálogo não conhece |
++| — | `Rio Preto` → São José do Rio Preto | — | D13, confirmado pelo CEO | `confirmed` | não |
++| — | `Mogi` / `Grau Mogi` → Mogi das Cruzes | — | D13, confirmado pelo CEO | `confirmed` | não |
++| — | `Santos` ≠ `Santo Amaro` | — | veto estrutural D12 + teste | `confirmed` | não |
++| — | `Limeira` ≠ `Limoeiro` | — | similaridade 0,75 < 0,80 + teste | `confirmed` | não |
++
++Itens 1–3 são de **exibição** (a normalização já os une); 4–8 são de
++**identidade**. Suspeitas de duplicidade (`Rio Centro`/`Zona Norte`/`Madureira`)
++seguem sem evidência — registradas, não resolvidas.
++
++### 4.4 `expected_units` ≠ unidades ativas
++
++Formalizado: **duas dimensões distintas.**
++
++```
++catálogo ativo:       40 unidades
++esperadas no período: 37  ← denominador da cobertura
++```
++
++Usar 40 produziria degradação permanente e falsa. `ExpectedUnitsProvider.forPeriod`
++devolve `number | null`; `null` significa **lacuna de governança**, não 100%.
++
++**Fonte de `expected_units`: OPEN GOVERNANCE DECISION.** O `20` da fixture da
++Fase 1 nunca foi política e não foi promovido.
++
++---
++
++## 5. Thresholds
++
++| Threshold | Detector | Unidade | Estado |
++|---|---|---|---|
++| `installment_threshold = 19` | A | parcelas | **APPROVED** — Bloco 1 §14 Caso A |
++| `similarity_threshold_bp = 8000` | D13 | bp | **APPROVED** — calibrado (alecrim 8600 / limeira 7500) |
++| `minimum_sample_size` | A | contagem | **UNRESOLVED** |
++| `material_count_above` | A | contagem | **UNRESOLVED** |
++| `material_share_count_bp` | A | bp | **UNRESOLVED** |
++| `material_share_amount_bp` | A | bp | **UNRESOLVED** |
++| `material_amount_cents` | A | centavos | **UNRESOLVED** |
++| `contributing_case_rule` | A | política | **UNRESOLVED** |
++| `severity_dimension` + `severity_scale` | A | política | **UNRESOLVED** |
++| `minimum_coverage_bp` | A | bp | **UNRESOLVED** |
++| `material_absolute_count` / `_amount_cents` / `_basis_points` | B | 3 unidades | **UNRESOLVED** |
++| `material_relative_difference_bp` | B | bp | **UNRESOLVED** |
++| `material_share_bp` | B | bp | **UNRESOLVED** |
++| `structural_fields` | B | lista | **UNRESOLVED** |
++| `severity_by_relative_bp` / `structural_severity` | B | política | **UNRESOLVED** |
++| `window` | C | modo | **UNRESOLVED** |
++| `material_count` / `_share_count_bp` / `_amount_cents` / `_share_amount_bp` | C | 4 unidades | **UNRESOLVED** |
++| `severity_dimension` + `severity_scale` | C | política | **UNRESOLVED** |
++| `minimum_sample_size` | C | contagem | **UNRESOLVED** |
++| `supported_metrics` | D | lista | **UNRESOLVED** |
++| `min_population_after_removal` | D | contagem | **UNRESOLVED** |
++| `material_absolute_delta_cents` | D | centavos | **UNRESOLVED** |
++| `material_count_delta` | D | contagem | **UNRESOLVED** |
++| `material_relative_delta_bp` | D | bp | **UNRESOLVED** |
++| `material_share_of_total_bp` | D | bp | **UNRESOLVED** |
++| `severity_dimension` + `severity_scale` | D | política | **UNRESOLVED** |
++| `coverage.degraded_below_bp` / `emit_event_below_bp` | todos | bp | **UNRESOLVED** |
++
++**2 APPROVED, 0 TEST_ONLY em produção, ~30 UNRESOLVED.**
++
++Consequência de cada UNRESOLVED: `validateDetectorConfig` **recusa a config**. Não
++há `DEFAULT_CONFIG` — um teste verifica que o módulo não exporta `DEFAULT_CONFIG`,
++`PRODUCTION_CONFIG` nem `CREDITUM_CONFIG`. `TEST_CONFIG` vive em `tests/` e declara
++`config_version: "0.0.0"`.
++
++**Não propus nenhum número.** Cada UNRESOLVED é uma decisão de negócio: "a partir
++de quanto isto merece o tempo do CEO?".
++
++---
++
++## 6. Provenance e idempotência
++
++### 6.1 Cadeia de confiança
++
++```
++observação crua        → Evidence (row/cell)
++cálculo determinístico → Evidence (computed) + ComputedEvidenceProvenance
++detector               → VERIFICA; nunca cria
++```
++
++Três computation identities, todas estruturais (sem gramática de delimitador):
++
++| Identidade | Detector | Composta por |
++|---|---|---|
++| `conflictId` | B | field, kind, período, participantes (fonte+dataset+valor) |
++| `counterfactualComputationId` | D | detector, métrica, agregador, operação, `subject_ref`, período, escopo |
++| `firstDueComputationId` | C | detector, dimensão de agrupamento, modo de janela, referência, alvo, período, escopo, **claim_set** |
++
++`evidence_ref` fica **fora** de todas as três: a identidade é da computação, não do
++registro que a documenta.
++
++### 6.2 Quais IDs mudam em reingestão
++
++| Identidade | Reingestão do mesmo dataset lógico | Dataset diferente |
++|---|---|---|
++| `content_hash` da fonte | **igual** (se o conteúdo é igual) | diferente |
++| `dataset_id` lógico | **igual** | diferente |
++| `snapshot_id` (execução) | **muda** | muda |
++| `evidence_id` | pode mudar | muda |
++| `computation_id` | **igual** | diferente |
++| `event_id` (fato lógico) | **igual** | **diferente** |
++
++Provado no harness: dois `snapshot_id` distintos sobre o mesmo dataset lógico
++produzem o **mesmo** `event_id`; trocar o `dataset_id` produz outro.
++
++---
++
++## 7. Freshness
++
++Quatro tempos, nomeados de propósito:
++
++| Campo | Significado |
++|---|---|
++| `observed_at` | quando o dado foi observado **na origem** |
++| `collected_at` / `ingested_at` | quando a ingestão leu |
++| `period_start` / `period_end` | a que período de negócio se refere |
++| `detected_at` | quando o detector rodou — **sempre entrada explícita** |
++
++Regra da Fase 1 preservada: a freshness do resultado é a da dependência **mais
++antiga** relevante. Nenhum `Date.now()` dentro de detector — verificado por
++inspeção e pelo harness, que passa `now` explícito até ao `InMemoryStore`.
++
++---
++
++## 8. Multi-dataset
++
++`Evidence.locator` expressa **um** `dataset_id`. A, C e D falham fechado quando os
++registros atravessam mais de um escopo governado.
++
++| Cenário provável | Classificação |
++|---|---|
++| Vendas do mês, um arquivo, um dataset | **SAFE FOR CURRENT INGESTION** |
++| Vendas do mês, dois arquivos na pasta | **SAFE** se cada um for dataset próprio e o detector rodar por dataset |
++| Conflito Sheets × Omie (Detector B) | **SAFE** — B compara *entre* datasets por desenho |
++| Consolidado somando Sheets + Supabase num agregado só | **PHASE 3 BLOCKER** |
++| Cobertura de unidades sobre múltiplas fontes | **PHASE 3 BLOCKER** se o agregado for único |
++
++**Recomendação:** rodar A/C/D **por dataset** na Fase 3. Compound evidence só se
++aparecer necessidade demonstrada — não implementar por antecipação.
++
++---
++
++## 9. Briefing e read-model
++
++### 9.1 O briefing Aros NÃO serve para a Hermes
++
++Achado desta fase, por leitura do schema:
++
++| Campo do Aros | Problema como read-model |
++|---|---|
++| `context.summary` (4000 chars livres) | prosa; um detector determinístico não a produz honestamente |
++| `hypotheses[].is_inference: true` (const) | os detectores **não** produzem inferência |
++| `hypotheses[].confidence_bp` | exigiria confiança que não existe |
++| — | sem `event_id`, sem `evidence_refs`, sem `coverage`, sem `freshness`, sem conflito |
++
++O Aros é artefato para **consultor externo**, com sanitização de saída da empresa.
++A Hermes é consumidora **interna** de fatos validados. São audiências diferentes.
++
++**Proposta (não implementada):** contrato novo, fechado e versionado —
++`hermes-read-model.schema.json` — em vez de dobrar o Aros.
++
++### 9.2 Read-model proposto
++
++Projeção fechada, derivada de Events já validados. **Não** acesso ao Store.
++
++```
++read_model_version
++generated_at
++period_start / period_end
++detected_at
++events[]:
++  event_id · event_type · detector_id · detector_version
++  severity · materiality (basis + valor)
++  observed_metric / reference_metric (com data_class e formula)
++  evidence_refs[] · snapshot_ids[]
++  data_quality (quality_status, missing_fields[], conflict_ids[], coverage_ratio_bp)
++gaps[]:        metric_name · gap_reason
++conflicts[]:   conflict_id · field · resolution_state (nunca resolvido pelo sistema)
++coverage:      expected_units · reporting_units · ratio_bp   (ou lacuna)
++freshness:     oldest_relevant_observed_at
++approved_by_human: false
++```
++
++Garantias exigidas: sem texto cru da fonte, sem nome cru de unidade, sem PII, sem
++token de escrita, sem credencial de ingestão, sem service role, sem forecast.
++
++---
++
++## 10. Limite de confiança da Hermes
++
++| PODE | NÃO PODE |
++|---|---|
++| OBSERVAR o read-model | escrever no Supabase operacional |
++| ANALISAR fatos validados | alterar CRM / Bitrix / Omie |
++| ALERTAR sobre eventos materiais | alterar qualquer valor |
++| RECOMENDAR com `approved_by_human: false` | resolver conflito |
++| — | aprovar recomendação |
++| — | criar Evidence ou Provenance |
++| — | canonicalizar unidade por conta própria |
++| — | executar ação financeira ou comercial |
++| — | publicar automaticamente |
++
++### 10.1 Matriz de credenciais
++
++| Componente | Credencial | Modo | Escopo | Dono futuro |
++|---|---|---|---|---|
++| Ingestão Supabase | service role ou key dedicada | **escrita** | tabelas `ceo.*` | plano de ingestão |
++| Ingestão pasta Lucas | acesso ao storage | **leitura** | pasta `vendas/` | plano de ingestão |
++| Plano de consulta | key read-only | leitura | views do read-model | gateway |
++| Hermes | **nenhuma credencial de dado** | — | recebe projeção | runtime da Hermes |
++| Provedor de modelo | key do provedor | — | apenas inferência | runtime da Hermes |
++
++**A Hermes nunca recebe credencial de ingestão.** Nenhum secret foi criado.
++
++---
++
++## 11. Matriz de falhas
++
++| Falha | Comportamento | Evento? | Briefing? | Ação humana? |
++|---|---|---|---|---|
++| Leonardo/Supabase indisponível | **FAIL CLOSED** no adaptador | não | bloqueia o dataset | sim |
++| Pasta mensal ausente | lacuna de cobertura | não | com lacuna | sim |
++| Arquivo duplicado | **CONFLITO** (Detector B) | sim, conflito | com conflito | **sim — resolução é humana** |
++| Arquivo corrompido | **FAIL CLOSED** por arquivo | não | com lacuna | sim |
++| Schema drift | campo → `null` → **GAP** | métricas independentes seguem | com lacuna | sim |
++| Escola desconhecida | `unknown` → qualidade `degraded` | sim, degradado | sim, degradado | sim — D13 |
++| Escola ambígua | `ambiguous` → `conflicted` | sim, conflitado | sim, conflitado | **sim** |
++| `expected_units` ausente | **GAP** de cobertura, nunca 100% | conforme limiar | com lacuna | sim |
++| Threshold obrigatório ausente | **FAIL CLOSED** na config | não roda | bloqueia | sim |
++| Provenance ausente | **FAIL CLOSED** no detector | não | bloqueia | sim |
++| Snapshot `conflicted` | lineage propaga → evento `conflicted` | sim, conflitado | sim | **sim** |
++| Freshness vencida | dependência mais antiga governa | conforme política | com aviso | sim |
++| Multi-dataset sem evidência composta | **FAIL CLOSED** | não | bloqueia agregado | sim — §8 |
++
++Nenhuma linha esconde erro. Nenhuma resolve conflito automaticamente.
++
++---
++
++## 12. Harness de integração
++
++`integration/tests/end-to-end.test.ts` — **31 testes**, nenhum serviço externo.
++
++Cobre: cadeia governada completa · A/B/C/D sobre **um** snapshot e **um** catálogo ·
++D13 com alias real, unidade fora do catálogo e nome cru não vazando · datas civis
++nas duas grafias · idempotência de reingestão · e a matriz de falhas (snapshot
++conflitado, provenance ausente, evidência pendurada, lote vazio, schema drift, data
++inválida).
++
++**O que ele prova e nada provava antes:** que os quatro detectores compõem. Cada um
++tinha fixture própria; nada garantia que um único snapshot, catálogo e conjunto de
++evidências servisse aos quatro. Serve.
++
++Dois defeitos meus que ele encontrou na primeira execução: o `InMemoryStore`
++revalidava com o relógio real do processo (o harness passaria hoje e falharia
++amanhã) e a forma de `SourceVersion` do Detector B era união discriminada, não
++número nu. Ambos corrigidos no harness, nenhum no código de produção.
++
++---
++
++## 13. Critérios de entrada da Fase 3
++
++| # | Critério | Estado | Evidência |
++|---|---|---|---|
++| 1 | Catálogo D13 governado suficiente | **BLOCKED** | `ceo.schools`/`school_aliases` vazias; 8 decisões pendentes (§4.3) |
++| 2 | Fonte de `expected_units` definida | **BLOCKED** | OPEN GOVERNANCE DECISION (§4.4) |
++| 3 | Thresholds aprovados **ou** detectores desabilitados | **BLOCKED** | 2 approved, ~30 unresolved (§5) |
++| 4 | Contrato Leonardo/Supabase definido | **BLOCKED** | tabela/view sem lastro (§3.1) |
++| 5 | Contrato pasta mensal do Lucas definido | **BLOCKED** | storage e regra de atrasado abertos (§3.2) |
++| 6 | Responsabilidade de criação de provenance definida | **READY** | §6.1, estrutural nos quatro detectores |
++| 7 | Harness de integração verde | **READY** | 31 testes |
++| 8 | Briefing determinístico fechado | **BLOCKED** | Aros inadequado; read-model proposto, não implementado (§9) |
++| 9 | Read-model da Hermes fechado | **BLOCKED** | §9.2 é proposta |
++| 10 | Separação de credenciais definida | **READY** | matriz §10.1; nenhum secret criado |
++| 11 | Sem PII / nome cru / conteúdo não confiável | **READY** | barreira de egress + PII + testes de varredura |
++| 12 | A/B/C/D permanecem SHIP | **READY** | 164 + 74 + 196 + 147 verdes |
++| 13 | Gate adversarial de integração aprovado | **PENDING** | esta fase |
++
++**7 blockers.** A Fase 3 não pode começar.
++
++### 13.1 Os blockers em ordem de dependência
++
++1. **Catálogo D13** (#1) — desbloqueia #2, e sem ele toda ingestão real degrada
++   qualidade todo mês (`Grau Marabá` seria `unknown` a cada rodada).
++2. **Thresholds** (#3) — sem eles nenhum detector roda: a config é recusada.
++3. **Contratos de fonte** (#4, #5) — sem eles não há adaptador.
++4. **Read-model** (#8, #9) — depende de decidir que a Hermes lê projeção, não Store.
++
++Os itens 1–5 são **decisões suas**, não engenharia pendente.
++
++---
++
++## 14. O que esta fase deliberadamente não fez
++
++- Não instalou Hermes, não escolheu provedor de modelo, não chamou LLM.
++- Não conectou Supabase, não acessou a pasta do Lucas, não criou secret.
++- Não inventou lista de escolas nem nome canônico.
++- Não propôs nenhum threshold.
++- Não resolveu nenhuma ambiguidade de D13.
++- Não implementou o read-model — ele depende da decisão de §9.1.
++- Não implementou adaptador de fonte — dependeria de inventar nomes de tabela e
++  caminhos de pasta.
++- Nada commitado, nada empurrado.
+diff --git a/intelligence/integration/src/ports.ts b/intelligence/integration/src/ports.ts
+new file mode 100644
+index 0000000..31aeef1
+--- /dev/null
++++ b/intelligence/integration/src/ports.ts
+@@ -0,0 +1,142 @@
++/**
++ * Portas de ingestão — interfaces, sem nenhuma implementação externa.
++ *
++ * Nada aqui abre socket, lê disco ou toca credencial. São os contratos que a
++ * futura camada de ingestão terá de satisfazer, escritos agora para que os
++ * detectores já aprovados não precisem mudar quando as fontes reais entrarem.
++ *
++ * ─── Por que portas, e não código de integração ────────────────────────────────
++ *
++ * Duas decisões de integração estão ABERTAS neste momento:
++ *
++ *   Leonardo   qual tabela/view do Supabase será a origem
++ *   Lucas      onde fica a pasta mensal e em que formato
++ *
++ * Escrever o adaptador agora exigiria inventar nomes de tabela e caminhos de
++ * pasta. Inventar aqui é pior que não escrever: um nome plausível num arquivo
++ * vira verdade no dia em que alguém o encontra e assume que foi confirmado — foi
++ * o que aconteceu com os thresholds da Fase 2.1. Então: a forma do contrato é
++ * definida, o conteúdo fica em aberto.
++ *
++ * ─── Ownership: quem produz o quê ─────────────────────────────────────────────
++ *
++ * A regra que estas portas existem para tornar estrutural:
++ *
++ *   observação crua       → `Evidence` (row/cell)
++ *   cálculo determinístico → `Evidence` (computed) + `ComputedEvidenceProvenance`
++ *   detector              → VERIFICA provenance; nunca a cria
++ *
++ * O detector é o único plano que não escreve nada. Se ele pudesse produzir a
++ * própria prova, a prova não provaria nada.
++ */
++
++import type { Evidence, Snapshot } from "../../gateway/src/types"
++import type { ComputedEvidenceProvenance } from "../../detectors/src/counterfactual-provenance"
++import type { UnitCatalog } from "../../detectors/src/canonical-units"
++
++/** Identidade LÓGICA do conjunto de dados. Estável entre reingestões. */
++export interface DatasetIdentity {
++  readonly source_system: string
++  /** Estável: `vendas_mensal`, não `vendas_2026_08_v3`. */
++  readonly dataset_id: string
++}
++
++/**
++ * Uma linha crua, ainda não normalizada e ainda não canonicalizada.
++ *
++ * `readonly Record<string, unknown>` é deliberado: neste ponto o dado ainda não
++ * tem tipo, e fingir que tem seria a mentira de sempre.
++ */
++export interface RawRow {
++  /** Chave estável da linha na origem, para o localizador da evidência. */
++  readonly row_key: string
++  readonly values: Readonly<Record<string, unknown>>
++}
++
++/**
++ * Lote cru de uma origem, com a procedência temporal separada.
++ *
++ * Três tempos DIFERENTES, e confundi-los é como uma análise fica velha sem
++ * ninguém perceber:
++ *
++ *   observed_at   quando o dado foi observado NA ORIGEM
++ *   collected_at  quando a ingestão o leu
++ *   as_of         a que período de negócio ele se refere
++ *
++ * `detected_at` é um quarto tempo e NÃO mora aqui: é do detector, e vem sempre
++ * explícito na entrada dele.
++ */
++export interface RawBatch {
++  readonly dataset: DatasetIdentity
++  readonly rows: readonly RawRow[]
++  readonly observed_at: string
++  readonly collected_at: string
++  readonly period_start: string
++  readonly period_end: string
++  /** Hash do conteúdo, para identidade de conteúdo e idempotência. */
++  readonly content_hash: string
++  /** Linhas que a origem tinha e a ingestão não conseguiu ler. Nunca escondidas. */
++  readonly rows_skipped: number
++}
++
++/**
++ * Lê de uma origem governada.
++ *
++ * ERROS: precisa falhar fechado. Origem indisponível, schema divergente e tabela
++ * vazia são três situações diferentes e o chamador precisa distingui-las — devolver
++ * lote vazio para as três esconderia indisponibilidade atrás de "não houve venda".
++ */
++export interface SourceAdapter {
++  readonly dataset: DatasetIdentity
++  read(period_start: string, period_end: string): Promise<RawBatch>
++}
++
++/** Constrói o Snapshot governado. Único produtor de `snapshot_id`. */
++export interface DatasetSnapshotBuilder {
++  build(batch: RawBatch, catalog: UnitCatalog): Snapshot
++}
++
++/** Constrói evidência de OBSERVAÇÃO. Único produtor de `evidence_id` de linha. */
++export interface EvidenceBuilder {
++  forRow(snapshot: Snapshot, row: RawRow): Evidence
++}
++
++/**
++ * Constrói evidência de CÁLCULO e a âncora que a liga à computação.
++ *
++ * Os dois juntos de propósito: uma evidência `computed` sem âncora é um número
++ * sem dono, e foi exatamente o furo que os gates das Fases 2.4 e 2.5 encontraram.
++ * Quem calcula grava a identidade da computação; quem consome apenas confere.
++ */
++export interface ComputedProvenanceBuilder {
++  forComputation(
++    snapshot: Snapshot,
++    formula: string,
++    computation_id: string,
++  ): { readonly evidence: Evidence; readonly provenance: ComputedEvidenceProvenance }
++}
++
++/**
++ * Fornece o catálogo governado de unidades.
++ *
++ * NÃO é a lista observada nos arquivos. A lista observada alimenta CANDIDATOS; a
++ * promoção de um nome observado para canônico é decisão humana. Ver §5 do
++ * documento de closure e `docs/D13_CATALOG_VALIDATION.md`.
++ */
++export interface UnitCatalogProvider {
++  current(as_of: string): Promise<UnitCatalog>
++}
++
++/**
++ * Quantas unidades eram ESPERADAS no período.
++ *
++ * Dimensão distinta de "unidades ativas no catálogo": 40 ativas com 37 esperadas
++ * num relatório significa cobertura sobre 37. Usar o tamanho do catálogo como
++ * denominador produziria degradação permanente e falsa.
++ *
++ * Sem fonte governada, isto é uma DECISÃO DE GOVERNANÇA ABERTA — e a porta existe
++ * justamente para que a ausência seja visível em vez de virar um número.
++ */
++export interface ExpectedUnitsProvider {
++  forPeriod(period_start: string, period_end: string): Promise<number | null>
++}
+diff --git a/intelligence/integration/tests/end-to-end.test.ts b/intelligence/integration/tests/end-to-end.test.ts
+new file mode 100644
+index 0000000..943f962
+--- /dev/null
++++ b/intelligence/integration/tests/end-to-end.test.ts
+@@ -0,0 +1,914 @@
++/**
++ * Integração end-to-end — SEM nenhum serviço externo.
++ *
++ * O que este arquivo prova, e nenhum outro provava: que os quatro detectores
++ * aprovados **compõem** sobre a mesma cadeia governada. Cada um foi validado
++ * isoladamente com a sua própria fixture; nada garantia que um único snapshot,
++ * um único catálogo e um único conjunto de evidências servissem aos quatro.
++ *
++ * A cadeia exercitada:
++ *
++ *   linhas cruas (adaptador FALSO, em memória)
++ *     → canonicalização D13 com catálogo SINTÉTICO
++ *     → Snapshot + Evidence + ComputedEvidenceProvenance
++ *     → InMemoryStore validado (plano de consulta)
++ *     → Detectores A, B, C, D
++ *     → read-model determinístico
++ *
++ * ─── O que este harness NÃO é ─────────────────────────────────────────────────
++ *
++ * Não toca Supabase, não lê pasta do Lucas, não usa credencial, não instala
++ * Hermes. O catálogo é sintético e declarado como tal — a promoção de nome
++ * observado para canônico é decisão humana pendente (`D13_CATALOG_VALIDATION.md`).
++ * Os limiares vêm da `TEST_CONFIG` sintética e não são política da Creditum.
++ */
++
++import { describe, expect, it } from "vitest"
++import { InMemoryStore } from "../../gateway/src/store"
++import { toEvidence, toSnapshot } from "../../gateway/src/factory"
++import { GatewayError } from "../../gateway/src/errors"
++import type { Evidence, Snapshot } from "../../gateway/src/types"
++import { buildUnitIndex, canonicalizeUnit } from "../../detectors/src/canonical-units"
++import type { CanonicalUnitResult, UnitCatalog } from "../../detectors/src/canonical-units"
++import { ENGINE_UNIT_NORMALIZER } from "../../detectors/src/unit-normalizer"
++import { APPROVED_THRESHOLDS } from "../../detectors/src/config"
++import { COUNTERFACTUAL_PROVENANCE_VERSION } from "../../detectors/src/counterfactual-provenance"
++import type { ComputedEvidenceProvenance } from "../../detectors/src/counterfactual-provenance"
++import { detectInstallmentConcentration } from "../../detectors/src/installment-concentration"
++import { detectCrossSourceConflicts } from "../../detectors/src/cross-source-conflict"
++import {
++  detectFirstDueDateConcentration,
++  firstDueComputationId,
++} from "../../detectors/src/first-due-date-concentration"
++import {
++  counterfactualComputationId,
++  detectMaterialSingleCase,
++} from "../../detectors/src/material-single-case"
++import { parseCivilDateStrict } from "../../detectors/src/civil-date"
++import { isOk } from "../../detectors/src/engine"
++import { TEST_CONFIG } from "../../detectors/tests/test-config"
++import { rawEvidence, rawSnapshot } from "../../gateway/tests/helpers"
++import type { RawBatch, RawRow } from "../src/ports"
++
++// ═════════════════════════════════════════════════════════════════════════════
++// Catálogo SINTÉTICO — não é o catálogo da Creditum
++// ═════════════════════════════════════════════════════════════════════════════
++
++/**
++ * Três unidades, e uma delas com alias — o suficiente para exercitar resolvida,
++ * alias e desconhecida. Os dois aliases reais confirmados pelo CEO (`Mogi` e
++ * `Rio Preto`) estão aqui porque são os únicos com lastro documentado.
++ */
++const CATALOGO_SINTETICO: UnitCatalog = {
++  // `0.0.0` é o marcador de sintético do projeto, o mesmo da TEST_CONFIG.
++  catalog_version: "0.0.0",
++  units: [
++    {
++      unit_id: "mogi_das_cruzes",
++      display_name: "Mogi das Cruzes",
++      aliases: ["Mogi", "Grau Mogi"],
++      active: true,
++    },
++    {
++      unit_id: "sao_jose_do_rio_preto",
++      display_name: "São José do Rio Preto",
++      aliases: ["Rio Preto"],
++      active: true,
++    },
++    { unit_id: "santos", display_name: "Santos", aliases: [], active: true },
++  ],
++}
++
++const INDICE = buildUnitIndex(CATALOGO_SINTETICO, ENGINE_UNIT_NORMALIZER)
++
++const canonicalizar = (bruto: unknown): CanonicalUnitResult =>
++  canonicalizeUnit(bruto, INDICE, ENGINE_UNIT_NORMALIZER, {
++    similarity_threshold_bp: APPROVED_THRESHOLDS.similarity_threshold_bp,
++  })
++
++// ═════════════════════════════════════════════════════════════════════════════
++// Adaptador FALSO — em memória, sem rede nem disco
++// ═════════════════════════════════════════════════════════════════════════════
++
++const PERIODO = { start: "2026-08-01", end: "2026-08-31" } as const
++const OBSERVED_AT = "2026-08-31T23:00:00.000Z"
++const COLLECTED_AT = "2026-09-01T02:00:00.000Z"
++/** O relógio do detector é ENTRADA, nunca `Date.now()`. */
++const DETECTED_AT = "2026-09-01T09:00:00.000Z"
++
++const DATASET = { source_system: "google_sheets", dataset_id: "ds_vendas_mensal" } as const
++
++interface LinhaVenda {
++  readonly row: string
++  readonly unidade: unknown
++  readonly parcelas: number | null
++  readonly valor: number | null
++  readonly primeiro_vencimento: unknown
++}
++
++function loteFalso(linhas: readonly LinhaVenda[]): RawBatch {
++  const rows: RawRow[] = linhas.map((l) => ({
++    row_key: l.row,
++    values: {
++      unidade: l.unidade,
++      parcelas: l.parcelas,
++      valor: l.valor,
++      primeiro_vencimento: l.primeiro_vencimento,
++    },
++  }))
++  return {
++    dataset: DATASET,
++    rows,
++    observed_at: OBSERVED_AT,
++    collected_at: COLLECTED_AT,
++    period_start: PERIODO.start,
++    period_end: PERIODO.end,
++    // Determinístico: em produção é hash do conteúdo; aqui é fixo para o fixture.
++    content_hash: "c".repeat(64),
++    rows_skipped: 0,
++  }
++}
++
++// ═════════════════════════════════════════════════════════════════════════════
++// Construtores governados — o plano de ESCRITA
++// ═════════════════════════════════════════════════════════════════════════════
++
++const SNAPSHOT_ID = "snap_e2e_2026_08"
++
++/** O contrato exige `^[a-f0-9]{64}$` — `r1` não é hex. Derivação determinística. */
++const hexRowKey = (row: string): string =>
++  row.replace(/\D/g, "").padStart(64, "0")
++
++function construirSnapshot(lote: RawBatch, over: Record<string, unknown> = {}): Snapshot {
++  return toSnapshot(
++    rawSnapshot({
++      snapshot_id: SNAPSHOT_ID,
++      source_system: lote.dataset.source_system,
++      dataset_id: lote.dataset.dataset_id,
++      period_start: lote.period_start,
++      period_end: lote.period_end,
++      observed_at: lote.observed_at,
++      ingested_at: lote.collected_at,
++      content_hash: lote.content_hash,
++      record_count: lote.rows.length,
++      rows_skipped: lote.rows_skipped,
++      ...over,
++    }),
++    { now: new Date(DETECTED_AT) },
++  )
++}
++
++function evidenciaDeLinha(row: RawRow): Evidence {
++  return toEvidence(
++    rawEvidence({
++      evidence_id: `ev_row_${row.row_key}`,
++      snapshot_id: SNAPSHOT_ID,
++      kind: "row",
++      locator: {
++        dataset_id: DATASET.dataset_id,
++        sheet: "Vendas",
++        row_key: hexRowKey(row.row_key),
++      },
++      observed_at: OBSERVED_AT,
++    }),
++    { now: new Date(DETECTED_AT) },
++  )
++}
++
++function evidenciaComputada(id: string, formula: string): Evidence {
++  return toEvidence(
++    rawEvidence({
++      evidence_id: id,
++      snapshot_id: SNAPSHOT_ID,
++      kind: "computed",
++      locator: { dataset_id: DATASET.dataset_id, sheet: "Vendas", column: "Valor" },
++      formula,
++      observed_at: OBSERVED_AT,
++    }),
++    { now: new Date(DETECTED_AT) },
++  )
++}
++
++const ancorar = (
++  evidence_ref: string,
++  computation_id: string,
++): ComputedEvidenceProvenance => ({
++  evidence_ref,
++  computation_id,
++  provenance_version: COUNTERFACTUAL_PROVENANCE_VERSION,
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// A população compartilhada pelos quatro detectores
++// ═════════════════════════════════════════════════════════════════════════════
++
++/**
++ * Sete vendas, escritas como a planilha real escreve: `Grau Mogi`, `Rio Preto`,
++ * data em `dd/MM/yyyy` e em ISO, e uma unidade fora do catálogo.
++ */
++const VENDAS: readonly LinhaVenda[] = [
++  { row: "r1", unidade: "Grau Mogi", parcelas: 24, valor: 900_000, primeiro_vencimento: "04/09/2026" },
++  { row: "r2", unidade: "Mogi", parcelas: 24, valor: 300_000, primeiro_vencimento: "2026-09-04" },
++  { row: "r3", unidade: "Rio Preto", parcelas: 24, valor: 200_000, primeiro_vencimento: "04/09/2026" },
++  { row: "r4", unidade: "Santos", parcelas: 20, valor: 100_000, primeiro_vencimento: "2026-09-04" },
++  { row: "r5", unidade: "Santos", parcelas: 12, valor: 100_000, primeiro_vencimento: "2026-09-20" },
++  { row: "r6", unidade: "Grau Mogi", parcelas: 6, valor: 100_000, primeiro_vencimento: "20/09/2026" },
++  { row: "r7", unidade: "Grau Marabá", parcelas: 6, valor: 100_000, primeiro_vencimento: "2026-09-20" },
++]
++
++const subjectRef = (row: string): string =>
++  `subj_${row.replace(/\D/g, "").padStart(16, "0").slice(0, 16)}`
++
++interface Cadeia {
++  readonly snapshot: Snapshot
++  readonly evidence: readonly Evidence[]
++  readonly store: InMemoryStore
++  readonly canonicas: ReadonlyMap<string, CanonicalUnitResult>
++}
++
++function montarCadeia(
++  linhas: readonly LinhaVenda[] = VENDAS,
++  overSnapshot: Record<string, unknown> = {},
++): Cadeia {
++  const lote = loteFalso(linhas)
++  const snapshot = construirSnapshot(lote, overSnapshot)
++  const evidencias = lote.rows.map(evidenciaDeLinha)
++
++  const canonicas = new Map<string, CanonicalUnitResult>(
++    linhas.map((l) => [l.row, canonicalizar(l.unidade)]),
++  )
++
++  // `now` EXPLÍCITO também aqui: o store revalida o grafo, e sem isto ele
++  // usaria o relógio do processo — o harness passaria hoje e falharia amanhã.
++  const store = new InMemoryStore(
++    {
++      snapshots: [snapshot as unknown],
++      evidence: evidencias as unknown[],
++      events: [],
++    },
++    { now: new Date(DETECTED_AT) },
++  )
++
++  return { snapshot, evidence: evidencias, store, canonicas }
++}
++
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("cadeia governada: fonte falsa → D13 → snapshot/evidência → store", () => {
++  const cadeia = montarCadeia()
++
++  it("o snapshot passa schema + semântica do gateway", () => {
++    expect(cadeia.snapshot.snapshot_id).toBe(SNAPSHOT_ID)
++    expect(cadeia.snapshot.dataset_id).toBe(DATASET.dataset_id)
++  })
++
++  it("o store valida o grafo inteiro e é somente leitura", () => {
++    expect(cadeia.store.allSnapshots()).toHaveLength(1)
++    expect(cadeia.store.allEvidence()).toHaveLength(VENDAS.length)
++    expect(Object.isFrozen(cadeia.store)).toBe(true)
++  })
++
++  it("D13 resolve alias real confirmado pelo CEO", () => {
++    expect(cadeia.canonicas.get("r1")?.status).toBe("matched")
++    expect(cadeia.canonicas.get("r2")?.status).toBe("matched")
++    const r1 = cadeia.canonicas.get("r1")
++    const r2 = cadeia.canonicas.get("r2")
++    // `Grau Mogi` e `Mogi` são a MESMA unidade.
++    expect(r1?.status === "matched" && r1.unit_id).toBe("mogi_das_cruzes")
++    expect(r2?.status === "matched" && r2.unit_id).toBe("mogi_das_cruzes")
++  })
++
++  it("`Rio Preto` resolve para o nome composto", () => {
++    const r3 = cadeia.canonicas.get("r3")
++    expect(r3?.status === "matched" && r3.unit_id).toBe("sao_jose_do_rio_preto")
++  })
++
++  it("unidade FORA do catálogo fica unknown — não é promovida", () => {
++    // `Grau Marabá` é o achado real do D13: a fonte reporta, o catálogo não
++    // conhece. Aqui ele NÃO vira uma unidade nova por similaridade.
++    const r7 = cadeia.canonicas.get("r7")
++    expect(r7?.status).toBe("unknown")
++  })
++
++  it("nenhum nome cru de unidade atravessa a canonicalização", () => {
++    const serializado = JSON.stringify([...cadeia.canonicas.values()])
++    expect(serializado).not.toContain("Grau Marabá")
++    expect(serializado).not.toContain("Grau Mogi")
++  })
++
++  it("as datas civis canonicalizam nas duas grafias da fonte", () => {
++    expect(parseCivilDateStrict("04/09/2026")).toBe("2026-09-04")
++    expect(parseCivilDateStrict("2026-09-04")).toBe("2026-09-04")
++  })
++})
++
++describe("Detector A sobre a cadeia compartilhada", () => {
++  const cadeia = montarCadeia()
++  const AGG = "ev_agg_parcelas"
++
++  const rodar = (): ReturnType<typeof detectInstallmentConcentration> =>
++    detectInstallmentConcentration(
++      {
++        detected_at: DETECTED_AT,
++        period_start: PERIODO.start,
++        period_end: PERIODO.end,
++        contracts: VENDAS.map((l) => ({
++          subject_ref: subjectRef(l.row),
++          unit: cadeia.canonicas.get(l.row) ?? { status: "unknown", raw_fingerprint: "0".repeat(16) },
++          installment_count: l.parcelas,
++          amount_cents: l.valor,
++          evidence_refs: [`ev_row_${l.row}`],
++          snapshot_id: SNAPSHOT_ID,
++        })),
++        snapshots: [cadeia.snapshot],
++        evidence: [
++          ...cadeia.evidence,
++          evidenciaComputada(AGG, "count(elegiveis where installments > 19) / count(elegiveis)"),
++        ],
++        aggregate_evidence_ref: AGG,
++      },
++      TEST_CONFIG,
++    )
++
++  const r = rodar()
++
++  it("o limiar aprovado governa: 20 parcelas entra, 12 e 6 não", () => {
++    expect(r.summary.population.eligible_contracts).toBe(7)
++    expect(r.summary.population.contracts_above_threshold).toBe(4)
++  })
++
++  it("a participação em quantidade é exata", () => {
++    const s = r.summary.metrics.share_count_bp
++    expect(isOk(s) && s.value).toBe(5714)
++  })
++
++  it("a unidade unknown degrada a qualidade — não é escondida", () => {
++    expect(r.summary.quality_status).not.toBe("ok")
++  })
++
++  it("o evento sai válido contra o contrato", () => {
++    expect(r.event).not.toBeNull()
++    expect(r.event?.event_type).toBe("installment_concentration")
++  })
++
++  it("determinístico: mesma cadeia, mesmo resultado", () => {
++    expect(structuredClone(rodar())).toEqual(structuredClone(r))
++  })
++})
++
++describe("Detector C sobre a MESMA cadeia", () => {
++  const cadeia = montarCadeia()
++  const AGG = "ev_agg_vencimento"
++
++  /** O alvo é 04/09: três vendas. A âncora vem de quem calculou o agregado. */
++  const claims = ["amount_cents", "contract_count", "share_amount_bp", "share_count_bp"] as const
++  const computationId = firstDueComputationId({
++    grouping_dimension: "first_due_date",
++    window_mode: "same_day",
++    reference_date: null,
++    target_start: "2026-09-04",
++    target_end: "2026-09-04",
++    period_start: PERIODO.start,
++    period_end: PERIODO.end,
++    scope: [DATASET],
++    claim_set: [...claims],
++  })
++
++  const r = detectFirstDueDateConcentration(
++    {
++      detected_at: DETECTED_AT,
++      period_start: PERIODO.start,
++      period_end: PERIODO.end,
++      contracts: VENDAS.map((l) => ({
++        subject_ref: subjectRef(l.row),
++        unit: cadeia.canonicas.get(l.row) ?? { status: "unknown", raw_fingerprint: "0".repeat(16) },
++        first_due_date_raw: l.primeiro_vencimento,
++        amount_cents: l.valor,
++        evidence_refs: [`ev_row_${l.row}`],
++        snapshot_id: SNAPSHOT_ID,
++      })),
++      snapshots: [cadeia.snapshot],
++      evidence: [
++        ...cadeia.evidence,
++        evidenciaComputada(AGG, "count(elegiveis where first_due_date in target)"),
++      ],
++      aggregate_evidence_ref: AGG,
++      aggregate_provenance: [ancorar(AGG, computationId)],
++    },
++    TEST_CONFIG,
++  )
++
++  it("as duas grafias de data caem no mesmo bucket", () => {
++    expect(r.summary.buckets.map((b) => b.date)).toEqual(["2026-09-04", "2026-09-20"])
++    expect(r.summary.buckets[0]?.contract_count).toBe(4)
++  })
++
++  it("o alvo é o dia mais concentrado", () => {
++    expect(r.summary.target?.dates).toEqual(["2026-09-04"])
++  })
++
++  it("a provenance do alvo é conferida — e casa", () => {
++    expect(r.event).not.toBeNull()
++    expect(r.event?.evidence_refs).toContain(AGG)
++  })
++})
++
++describe("Detector D sobre a MESMA cadeia", () => {
++  const cadeia = montarCadeia()
++  const AGG = "ev_agg_soma"
++
++  const casos = VENDAS.map((l) => ({
++    subject_ref: subjectRef(l.row),
++    unit: cadeia.canonicas.get(l.row) ?? ({ status: "unknown", raw_fingerprint: "0".repeat(16) } as CanonicalUnitResult),
++    amount_cents: l.valor,
++    evidence_refs: [`ev_row_${l.row}`],
++    snapshot_id: SNAPSHOT_ID,
++  }))
++
++  const bindings = casos.map((c) => ({
++    evidence_ref: `ev_cf_${c.subject_ref}`,
++    subject_ref: c.subject_ref,
++    metric: "amount_sum_cents" as const,
++    aggregator: "sum" as const,
++    operation: "exclude_subject" as const,
++    period_start: PERIODO.start,
++    period_end: PERIODO.end,
++    scope: [DATASET],
++  }))
++
++  const r = detectMaterialSingleCase(
++    {
++      detected_at: DETECTED_AT,
++      period_start: PERIODO.start,
++      period_end: PERIODO.end,
++      metric: "amount_sum_cents",
++      cases: casos,
++      snapshots: [cadeia.snapshot],
++      evidence: [
++        ...cadeia.evidence,
++        evidenciaComputada(AGG, "sum(amount_cents of all eligible cases)"),
++        ...bindings.map((b) =>
++          evidenciaComputada(b.evidence_ref, "sum(amount_cents ... except the subject case)"),
++        ),
++      ],
++      aggregate_evidence_ref: AGG,
++      counterfactual_bindings: bindings,
++      counterfactual_provenance: bindings.map((b) =>
++        ancorar(b.evidence_ref, counterfactualComputationId(b)),
++      ),
++    },
++    TEST_CONFIG,
++  )
++
++  it("todos os candidatos são avaliados — nada descartado", () => {
++    expect(r.summary.candidates_evaluated).toBe(VENDAS.length)
++  })
++
++  it("o delta de cada caso é o próprio valor (propriedade da soma)", () => {
++    for (const [i, l] of VENDAS.entries()) {
++      const d = r.evaluated[i]?.delta
++      expect(d !== undefined && isOk(d) && d.value, l.row).toBe(l.valor)
++    }
++  })
++
++  it("o caso dominante é material e emite evento", () => {
++    const dominante = r.evaluated.find((i) => isOk(i.delta) && i.delta.value === 900_000)
++    expect(dominante?.outcome).toBe("material")
++    expect(r.events.length).toBeGreaterThan(0)
++  })
++
++  it("cada caso carrega a identidade da SUA computação", () => {
++    const ids = r.evaluated.map((i) => i.counterfactual_computation_id)
++    expect(new Set(ids).size).toBe(ids.length)
++  })
++})
++
++describe("Detector B sobre a mesma cadeia governada", () => {
++  const cadeia = montarCadeia()
++
++  /** Uma segunda fonte discorda da contagem de vendas do período. */
++  const outroSnapshot = toSnapshot(
++    rawSnapshot({
++      snapshot_id: "snap_e2e_financeiro",
++      source_system: "omie",
++      dataset_id: "ds_financeiro_mensal",
++      period_start: PERIODO.start,
++      period_end: PERIODO.end,
++      observed_at: OBSERVED_AT,
++      ingested_at: COLLECTED_AT,
++    }),
++    { now: new Date(DETECTED_AT) },
++  )
++
++  const evOutro = toEvidence(
++    rawEvidence({
++      evidence_id: "ev_agg_financeiro",
++      snapshot_id: "snap_e2e_financeiro",
++      kind: "aggregate",
++      locator: { dataset_id: "ds_financeiro_mensal", sheet: "Financeiro" },
++      observed_at: OBSERVED_AT,
++    }),
++    { now: new Date(DETECTED_AT) },
++  )
++
++  const evVendas = evidenciaComputada("ev_agg_contagem", "count(vendas do periodo)")
++
++  const r = detectCrossSourceConflicts(
++    {
++      detected_at: DETECTED_AT,
++      period_start: PERIODO.start,
++      period_end: PERIODO.end,
++      disputes: [
++        {
++          field: "sales_count",
++          kind: "count",
++          versions: [
++            {
++              source_system: DATASET.source_system,
++              snapshot_id: SNAPSHOT_ID,
++              evidence_ref: "ev_agg_contagem",
++              // `value` é união discriminada: ausência tem razão própria e nunca
++              // vira zero. Aqui as duas fontes têm valor presente e discordam.
++              value: { status: "present", raw: 7 },
++            },
++            {
++              source_system: "omie",
++              snapshot_id: "snap_e2e_financeiro",
++              evidence_ref: "ev_agg_financeiro",
++              value: { status: "present", raw: 5 },
++            },
++          ],
++        },
++      ],
++      snapshots: [cadeia.snapshot, outroSnapshot],
++      evidence: [...cadeia.evidence, evVendas, evOutro],
++    },
++    TEST_CONFIG,
++  )
++
++  it("o conflito é detectado, não resolvido automaticamente", () => {
++    const total = r.events.length + r.non_material.length
++    expect(total).toBe(1)
++  })
++
++  it("as duas versões continuam registradas com suas evidências", () => {
++    const resumo = [...r.events, ...r.non_material]
++    expect(resumo.length).toBe(1)
++  })
++
++  it("nenhuma fonte é escolhida como vencedora", () => {
++    // A resolução é humana. O detector registra a disputa e para.
++    const texto = JSON.stringify(r)
++    expect(texto).not.toContain("winner")
++    expect(texto).not.toContain("resolved_to")
++  })
++})
++
++describe("os quatro compõem sobre UM snapshot e UM catálogo", () => {
++  it("a mesma cadeia alimenta A, B, C e D sem adaptação por detector", () => {
++    // O valor deste teste é estrutural: se algum detector exigisse um formato de
++    // snapshot, evidência ou canonicalização próprio, este arquivo não compilaria
++    // com uma cadeia só — e a integração da Fase 3 descobriria isso tarde.
++    const cadeia = montarCadeia()
++    expect(cadeia.store.allSnapshots()[0]?.snapshot_id).toBe(SNAPSHOT_ID)
++    expect(cadeia.canonicas.size).toBe(VENDAS.length)
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// Falhas reais — todas devem falhar FECHADO
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("matriz de falhas: nada passa em silêncio", () => {
++  it("snapshot conflicted contamina o evento — lineage preservada", () => {
++    const cadeia = montarCadeia(VENDAS, { quality_status: "conflicted" })
++    const AGG = "ev_agg_vencimento"
++    const claims = ["amount_cents", "contract_count", "share_amount_bp", "share_count_bp"] as const
++    const r = detectFirstDueDateConcentration(
++      {
++        detected_at: DETECTED_AT,
++        period_start: PERIODO.start,
++        period_end: PERIODO.end,
++        contracts: VENDAS.map((l) => ({
++          subject_ref: subjectRef(l.row),
++          unit: cadeia.canonicas.get(l.row) ?? { status: "unknown", raw_fingerprint: "0".repeat(16) },
++          first_due_date_raw: l.primeiro_vencimento,
++          amount_cents: l.valor,
++          evidence_refs: [`ev_row_${l.row}`],
++          snapshot_id: SNAPSHOT_ID,
++        })),
++        snapshots: [cadeia.snapshot],
++        evidence: [...cadeia.evidence, evidenciaComputada(AGG, "count(...)")],
++        aggregate_evidence_ref: AGG,
++        aggregate_provenance: [
++          ancorar(
++            AGG,
++            firstDueComputationId({
++              grouping_dimension: "first_due_date",
++              window_mode: "same_day",
++              reference_date: null,
++              target_start: "2026-09-04",
++              target_end: "2026-09-04",
++              period_start: PERIODO.start,
++              period_end: PERIODO.end,
++              scope: [DATASET],
++              claim_set: [...claims],
++            }),
++          ),
++        ],
++      },
++      TEST_CONFIG,
++    )
++    expect(r.summary.quality_status).toBe("conflicted")
++    expect(r.event?.data_quality.quality_status).toBe("conflicted")
++  })
++
++  it("provenance do agregado ausente: Detector C falha fechado", () => {
++    const cadeia = montarCadeia()
++    const AGG = "ev_agg_vencimento"
++    expect(() =>
++      detectFirstDueDateConcentration(
++        {
++          detected_at: DETECTED_AT,
++          period_start: PERIODO.start,
++          period_end: PERIODO.end,
++          contracts: VENDAS.map((l) => ({
++            subject_ref: subjectRef(l.row),
++            unit: cadeia.canonicas.get(l.row) ?? { status: "unknown", raw_fingerprint: "0".repeat(16) },
++            first_due_date_raw: l.primeiro_vencimento,
++            amount_cents: l.valor,
++            evidence_refs: [`ev_row_${l.row}`],
++            snapshot_id: SNAPSHOT_ID,
++          })),
++          snapshots: [cadeia.snapshot],
++          evidence: [...cadeia.evidence, evidenciaComputada(AGG, "count(...)")],
++          aggregate_evidence_ref: AGG,
++          aggregate_provenance: [],
++        },
++        TEST_CONFIG,
++      ),
++    ).toThrowError(/sem provenance/)
++  })
++
++  it("evidência de linha pendurada: Detector A falha fechado", () => {
++    const cadeia = montarCadeia()
++    expect(() =>
++      detectInstallmentConcentration(
++        {
++          detected_at: DETECTED_AT,
++          period_start: PERIODO.start,
++          period_end: PERIODO.end,
++          contracts: [
++            {
++              subject_ref: subjectRef("r1"),
++              unit: cadeia.canonicas.get("r1") ?? { status: "unknown", raw_fingerprint: "0".repeat(16) },
++              installment_count: 24,
++              amount_cents: 900_000,
++              evidence_refs: ["ev_row_inexistente"],
++              snapshot_id: SNAPSHOT_ID,
++            },
++          ],
++          snapshots: [cadeia.snapshot],
++          evidence: cadeia.evidence,
++          aggregate_evidence_ref: "ev_row_r1",
++        },
++        TEST_CONFIG,
++      ),
++    ).toThrowError(GatewayError)
++  })
++
++  it("arquivo/lote VAZIO não vira zero — vira lacuna de denominador", () => {
++    const cadeia = montarCadeia([])
++    const r = detectInstallmentConcentration(
++      {
++        detected_at: DETECTED_AT,
++        period_start: PERIODO.start,
++        period_end: PERIODO.end,
++        contracts: [],
++        snapshots: [cadeia.snapshot],
++        evidence: [evidenciaComputada("ev_agg_vazio", "count(...)")],
++        aggregate_evidence_ref: "ev_agg_vazio",
++      },
++      TEST_CONFIG,
++    )
++    expect(r.summary.population.total_records).toBe(0)
++    expect(isOk(r.summary.population.eligibility_ratio_bp)).toBe(false)
++    expect(r.event).toBeNull()
++  })
++
++  it("schema drift na origem: campo ausente vira lacuna, não zero", () => {
++    // A linha existe, mas o valor não veio. `null` percorre a cadeia inteira sem
++    // virar 0 em nenhum ponto.
++    const semValor: readonly LinhaVenda[] = VENDAS.map((l) =>
++      l.row === "r1" ? { ...l, valor: null } : l,
++    )
++    const cadeia = montarCadeia(semValor)
++    const r = detectInstallmentConcentration(
++      {
++        detected_at: DETECTED_AT,
++        period_start: PERIODO.start,
++        period_end: PERIODO.end,
++        contracts: semValor.map((l) => ({
++          subject_ref: subjectRef(l.row),
++          unit: cadeia.canonicas.get(l.row) ?? { status: "unknown", raw_fingerprint: "0".repeat(16) },
++          installment_count: l.parcelas,
++          amount_cents: l.valor,
++          evidence_refs: [`ev_row_${l.row}`],
++          snapshot_id: SNAPSHOT_ID,
++        })),
++        snapshots: [cadeia.snapshot],
++        evidence: [...cadeia.evidence, evidenciaComputada("ev_agg_drift", "sum(...)")],
++        aggregate_evidence_ref: "ev_agg_drift",
++      },
++      TEST_CONFIG,
++    )
++    expect(isOk(r.summary.metrics.amount_above_cents)).toBe(false)
++    // Mas a CONTAGEM segue exata — métricas independentes.
++    expect(isOk(r.summary.metrics.share_count_bp)).toBe(true)
++  })
++
++  it("data inválida na origem: exclusão explícita, sem conserto heurístico", () => {
++    const comDataRuim: readonly LinhaVenda[] = VENDAS.map((l) =>
++      l.row === "r1" ? { ...l, primeiro_vencimento: "31/02/2026" } : l,
++    )
++    const cadeia = montarCadeia(comDataRuim)
++    const AGG = "ev_agg_venc"
++    const claims = ["amount_cents", "contract_count", "share_amount_bp", "share_count_bp"] as const
++    const r = detectFirstDueDateConcentration(
++      {
++        detected_at: DETECTED_AT,
++        period_start: PERIODO.start,
++        period_end: PERIODO.end,
++        contracts: comDataRuim.map((l) => ({
++          subject_ref: subjectRef(l.row),
++          unit: cadeia.canonicas.get(l.row) ?? { status: "unknown", raw_fingerprint: "0".repeat(16) },
++          first_due_date_raw: l.primeiro_vencimento,
++          amount_cents: l.valor,
++          evidence_refs: [`ev_row_${l.row}`],
++          snapshot_id: SNAPSHOT_ID,
++        })),
++        snapshots: [cadeia.snapshot],
++        evidence: [...cadeia.evidence, evidenciaComputada(AGG, "count(...)")],
++        aggregate_evidence_ref: AGG,
++        aggregate_provenance: [
++          ancorar(
++            AGG,
++            firstDueComputationId({
++              grouping_dimension: "first_due_date",
++              window_mode: "same_day",
++              reference_date: null,
++              target_start: "2026-09-04",
++              target_end: "2026-09-04",
++              period_start: PERIODO.start,
++              period_end: PERIODO.end,
++              scope: [DATASET],
++              claim_set: [...claims],
++            }),
++          ),
++        ],
++      },
++      TEST_CONFIG,
++    )
++    expect(r.summary.population.excluded.INVALID_DUE_DATE).toBe(1)
++    expect(r.summary.quality_status).not.toBe("ok")
++  })
++})
++
++describe("idempotência: reingestão do mesmo fato lógico", () => {
++  /** Mesmo dataset lógico, `snapshot_id` novo — é o que reingestão faz. */
++  const reingerir = (snapshotId: string): string => {
++    const lote = loteFalso(VENDAS)
++    const snap = toSnapshot(
++      rawSnapshot({
++        snapshot_id: snapshotId,
++        source_system: DATASET.source_system,
++        dataset_id: DATASET.dataset_id,
++        period_start: PERIODO.start,
++        period_end: PERIODO.end,
++        observed_at: lote.observed_at,
++        ingested_at: lote.collected_at,
++        content_hash: lote.content_hash,
++        record_count: lote.rows.length,
++      }),
++      { now: new Date(DETECTED_AT) },
++    )
++    const evs = lote.rows.map((row) =>
++      toEvidence(
++        rawEvidence({
++          evidence_id: `ev_row_${row.row_key}`,
++          snapshot_id: snapshotId,
++          kind: "row",
++          locator: {
++            dataset_id: DATASET.dataset_id,
++            sheet: "Vendas",
++            row_key: hexRowKey(row.row_key),
++          },
++          observed_at: lote.observed_at,
++        }),
++        { now: new Date(DETECTED_AT) },
++      ),
++    )
++    const agg = toEvidence(
++      rawEvidence({
++        evidence_id: "ev_agg_parcelas",
++        snapshot_id: snapshotId,
++        kind: "computed",
++        locator: { dataset_id: DATASET.dataset_id, sheet: "Vendas", column: "Valor" },
++        formula: "count(elegiveis where installments > 19) / count(elegiveis)",
++        observed_at: lote.observed_at,
++      }),
++      { now: new Date(DETECTED_AT) },
++    )
++
++    const canon = new Map(VENDAS.map((l) => [l.row, canonicalizar(l.unidade)]))
++    const r = detectInstallmentConcentration(
++      {
++        detected_at: DETECTED_AT,
++        period_start: PERIODO.start,
++        period_end: PERIODO.end,
++        contracts: VENDAS.map((l) => ({
++          subject_ref: subjectRef(l.row),
++          unit: canon.get(l.row) ?? { status: "unknown", raw_fingerprint: "0".repeat(16) },
++          installment_count: l.parcelas,
++          amount_cents: l.valor,
++          evidence_refs: [`ev_row_${l.row}`],
++          snapshot_id: snapshotId,
++        })),
++        snapshots: [snap],
++        evidence: [...evs, agg],
++        aggregate_evidence_ref: "ev_agg_parcelas",
++      },
++      TEST_CONFIG,
++    )
++    return r.summary.event_id
++  }
++
++  it("`snapshot_id` diferente NÃO cria fato executivo novo", () => {
++    expect(reingerir("snap_reing_2")).toBe(reingerir("snap_reing_1"))
++  })
++
++  it("dataset lógico diferente SIM cria fato diferente", () => {
++    const a = reingerir("snap_x")
++    const lote = loteFalso(VENDAS)
++    const outroDataset = toSnapshot(
++      rawSnapshot({
++        snapshot_id: "snap_outro_ds",
++        source_system: DATASET.source_system,
++        dataset_id: "ds_outro_mensal",
++        period_start: PERIODO.start,
++        period_end: PERIODO.end,
++        observed_at: lote.observed_at,
++        ingested_at: lote.collected_at,
++      }),
++      { now: new Date(DETECTED_AT) },
++    )
++    const evs = lote.rows.map((row) =>
++      toEvidence(
++        rawEvidence({
++          evidence_id: `ev_row_${row.row_key}`,
++          snapshot_id: "snap_outro_ds",
++          kind: "row",
++          locator: {
++            dataset_id: "ds_outro_mensal",
++            sheet: "Vendas",
++            row_key: hexRowKey(row.row_key),
++          },
++          observed_at: lote.observed_at,
++        }),
++        { now: new Date(DETECTED_AT) },
++      ),
++    )
++    const agg = toEvidence(
++      rawEvidence({
++        evidence_id: "ev_agg_parcelas",
++        snapshot_id: "snap_outro_ds",
++        kind: "computed",
++        locator: { dataset_id: "ds_outro_mensal", sheet: "Vendas", column: "Valor" },
++        formula: "count(...)",
++        observed_at: lote.observed_at,
++      }),
++      { now: new Date(DETECTED_AT) },
++    )
++    const canon = new Map(VENDAS.map((l) => [l.row, canonicalizar(l.unidade)]))
++    const b = detectInstallmentConcentration(
++      {
++        detected_at: DETECTED_AT,
++        period_start: PERIODO.start,
++        period_end: PERIODO.end,
++        contracts: VENDAS.map((l) => ({
++          subject_ref: subjectRef(l.row),
++          unit: canon.get(l.row) ?? { status: "unknown", raw_fingerprint: "0".repeat(16) },
++          installment_count: l.parcelas,
++          amount_cents: l.valor,
++          evidence_refs: [`ev_row_${l.row}`],
++          snapshot_id: "snap_outro_ds",
++        })),
++        snapshots: [outroDataset],
++        evidence: [...evs, agg],
++        aggregate_evidence_ref: "ev_agg_parcelas",
++      },
++      TEST_CONFIG,
++    ).summary.event_id
++    expect(b).not.toBe(a)
++  })
++})
+diff --git a/intelligence/vitest.config.mts b/intelligence/vitest.config.mts
+new file mode 100644
+index 0000000..e07fdf3
+--- /dev/null
++++ b/intelligence/vitest.config.mts
+@@ -0,0 +1,13 @@
++import { defineConfig } from "vitest/config"
++
++export default defineConfig({
++  test: {
++    environment: "node",
++    include: [
++      "gateway/**/*.test.ts",
++      "detectors/**/*.test.ts",
++      // Harness end-to-end da Fase 2.6. Fakes em memória, sem serviço externo.
++      "integration/**/*.test.ts",
++    ],
++  },
++})

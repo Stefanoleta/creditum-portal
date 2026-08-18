@@ -1,0 +1,478 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://creditum.internal/intelligence/contracts/event.schema.json",
+  "title": "Evento determinístico",
+  "description": "Sinal produzido por um detector em CÓDIGO, não por LLM. O Hermes recebe eventos; ele não os inventa nem recalcula os números que eles carregam.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "event_type",
+    "detector_id",
+    "detector_version",
+    "snapshot_ids",
+    "period_start",
+    "period_end",
+    "detected_at",
+    "severity",
+    "materiality",
+    "evidence_refs",
+    "data_quality"
+  ],
+  "properties": {
+    "event_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "event_type": {
+      "description": "Allowlist fechada. Um detector não pode inventar um tipo novo sem passar por revisão. `low_ticket_contract` adicionado na Fase 2.6b: contrato individual abaixo do piso comercial aprovado de R$ 1.499,99. É alerta operacional factual — não afirma fraude, erro, prejuízo nem risco.",
+      "enum": [
+        "installment_concentration",
+        "data_quality_conflict",
+        "first_due_date_concentration",
+        "material_single_case",
+        "coverage_degraded",
+        "low_ticket_contract"
+      ]
+    },
+    "detector_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "detector_version": {
+      "$ref": "#/$defs/schema_version"
+    },
+    "snapshot_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/identifier"
+      }
+    },
+    "period_start": {
+      "type": "string",
+      "format": "date"
+    },
+    "period_end": {
+      "type": "string",
+      "format": "date"
+    },
+    "detected_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "severity": {
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ]
+    },
+    "materiality": {
+      "$ref": "#/$defs/materiality"
+    },
+    "observed_metric": {
+      "$ref": "#/$defs/metric"
+    },
+    "reference_metric": {
+      "description": "Referência contra a qual o observado foi comparado (baseline, meta, período anterior).",
+      "$ref": "#/$defs/metric"
+    },
+    "contributing_cases": {
+      "description": "Casos individuais responsáveis pelo impacto. Identificados por pseudônimo estável — NUNCA nome, CPF, telefone ou e-mail.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/contributing_case"
+      }
+    },
+    "evidence_refs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/identifier"
+      }
+    },
+    "data_quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "quality_status"
+      ],
+      "properties": {
+        "quality_status": {
+          "enum": [
+            "ok",
+            "degraded",
+            "conflicted",
+            "insufficient"
+          ]
+        },
+        "conflict_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        },
+        "missing_fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "coverage_ratio_bp": {
+          "$ref": "#/$defs/basis_points"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.:-]{2,127}$"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "basis_points": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10000
+    },
+    "cents": {
+      "description": "Dinheiro é SEMPRE inteiro em centavos. Nunca float.",
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "subject_ref": {
+      "description": "Pseudônimo estável e segregado. Não é derivável de PII sem a tabela de correspondência, que vive fora do plano de consulta.",
+      "type": "string",
+      "pattern": "^subj_[a-f0-9]{16}$"
+    },
+    "materiality": {
+      "description": "Quanto do consolidado este evento move. É o que separa ruído de coisa que merece o tempo do humano. O `basis` declara a unidade — e o campo correspondente passa a ser obrigatório, senão o evento diz 'meço em reais' sem dizer quantos.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "basis"
+      ],
+      "properties": {
+        "basis": {
+          "enum": [
+            "amount_cents",
+            "count",
+            "ratio_bp"
+          ]
+        },
+        "amount_cents": {
+          "$ref": "#/$defs/cents"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ratio_bp": {
+          "$ref": "#/$defs/basis_points"
+        },
+        "share_of_total_bp": {
+          "description": "Participação no consolidado do período, em basis points.",
+          "$ref": "#/$defs/basis_points"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "basis": {
+                "const": "amount_cents"
+              }
+            },
+            "required": [
+              "basis"
+            ]
+          },
+          "then": {
+            "required": [
+              "amount_cents"
+            ]
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "basis": {
+                "const": "count"
+              }
+            },
+            "required": [
+              "basis"
+            ]
+          },
+          "then": {
+            "required": [
+              "count"
+            ]
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "basis": {
+                "const": "ratio_bp"
+              }
+            },
+            "required": [
+              "basis"
+            ]
+          },
+          "then": {
+            "required": [
+              "ratio_bp"
+            ]
+          }
+        }
+      ]
+    },
+    "metric": {
+      "description": "Classe do dado explícita. Ausência NUNCA vira zero. A classe de um agregado é a mais fraca das entradas.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "data_class"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,127}$"
+        },
+        "data_class": {
+          "enum": [
+            "observed",
+            "calculated",
+            "inferred",
+            "forecast",
+            "gap"
+          ]
+        },
+        "unit": {
+          "enum": [
+            "cents",
+            "count",
+            "basis_points",
+            "days"
+          ]
+        },
+        "value": {
+          "type": "integer"
+        },
+        "formula": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "confidence_bp": {
+          "$ref": "#/$defs/basis_points"
+        },
+        "range_low": {
+          "type": "integer"
+        },
+        "range_high": {
+          "type": "integer"
+        },
+        "gap_reason": {
+          "enum": [
+            "DATA_NOT_AVAILABLE",
+            "DATA_CONFLICT",
+            "LOW_CONFIDENCE",
+            "EMPTY_DENOMINATOR",
+            "INSUFFICIENT_COVERAGE",
+            "BUSINESS_RULE_PENDING"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "data_class": {
+                "const": "observed"
+              }
+            },
+            "required": [
+              "data_class"
+            ]
+          },
+          "then": {
+            "required": [
+              "value"
+            ]
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "data_class": {
+                "const": "calculated"
+              }
+            },
+            "required": [
+              "data_class"
+            ]
+          },
+          "then": {
+            "required": [
+              "formula",
+              "value"
+            ]
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "data_class": {
+                "const": "inferred"
+              }
+            },
+            "required": [
+              "data_class"
+            ]
+          },
+          "then": {
+            "required": [
+              "confidence_bp",
+              "value"
+            ]
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "data_class": {
+                "const": "forecast"
+              }
+            },
+            "required": [
+              "data_class"
+            ]
+          },
+          "then": {
+            "required": [
+              "confidence_bp",
+              "range_low",
+              "range_high"
+            ]
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "data_class": {
+                "const": "gap"
+              }
+            },
+            "required": [
+              "data_class"
+            ]
+          },
+          "then": {
+            "required": [
+              "gap_reason"
+            ],
+            "allOf": [
+              {
+                "not": {
+                  "required": [
+                    "value"
+                  ]
+                }
+              },
+              {
+                "not": {
+                  "required": [
+                    "range_low"
+                  ]
+                }
+              },
+              {
+                "not": {
+                  "required": [
+                    "range_high"
+                  ]
+                }
+              },
+              {
+                "not": {
+                  "required": [
+                    "formula"
+                  ]
+                }
+              },
+              {
+                "not": {
+                  "required": [
+                    "confidence_bp"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "contributing_case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "subject_ref",
+        "contribution"
+      ],
+      "properties": {
+        "subject_ref": {
+          "$ref": "#/$defs/subject_ref"
+        },
+        "contribution": {
+          "description": "Ao menos uma grandeza. Um caso 'contribuinte' sem contribuição declarada é ruído com aparência de evidência.",
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "amount_cents": {
+              "$ref": "#/$defs/cents"
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "share_of_event_bp": {
+              "$ref": "#/$defs/basis_points"
+            }
+          }
+        },
+        "unit": {
+          "description": "Unidade/escola já normalizada para o nome canônico aprovado pelo CEO (D13).",
+          "type": "string",
+          "pattern": "^[A-ZÀ-Ý][A-Za-zÀ-ÿ ]{1,63}$"
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        }
+      }
+    }
+  }
+}

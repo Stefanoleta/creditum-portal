@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // POC do Centro de Inteligência — subprojeto isolado, toolchain própria.
+    // Ver intelligence/docs/ADR-001-boundary-with-existing-app.md
+    "intelligence/**",
   ]),
 ]);
 

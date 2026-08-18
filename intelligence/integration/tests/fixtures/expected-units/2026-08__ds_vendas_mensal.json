@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0.0",
+  "period": "2026-08",
+  "dataset_id": "ds_vendas_mensal",
+  "expected_units": [
+    {
+      "unit_id": "mogi"
+    },
+    {
+      "unit_id": "santos"
+    },
+    {
+      "unit_id": "sao_jose_do_rio_preto"
+    }
+  ],
+  "provenance": {
+    "source_system": "harness_fixture",
+    "source_version": "1.0.0",
+    "content_hash": "bce90186f354d882df3518cdbb121e8731b2dbce42161b72997e26d06fad00b6"
+  }
+}

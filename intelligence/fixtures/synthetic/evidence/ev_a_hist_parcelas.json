@@ -1,0 +1,12 @@
+{
+  "evidence_id": "ev_a_hist_parcelas",
+  "snapshot_id": "snap_2026_08_pipeline",
+  "kind": "computed",
+  "locator": {
+    "dataset_id": "sintetico-vendas-agosto-pipeline",
+    "sheet": "Indicações",
+    "column": "Total de parcelas"
+  },
+  "observed_at": "2026-08-16T09:00:00.000Z",
+  "formula": "COUNT(contratos WHERE total_de_parcelas > 19) / COUNT(contratos WHERE total_de_parcelas > 0)"
+}

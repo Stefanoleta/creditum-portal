@@ -1,0 +1,11 @@
+{
+  "evidence_id": "ev_d_caso_material",
+  "snapshot_id": "snap_2026_08_sales",
+  "kind": "row",
+  "locator": {
+    "dataset_id": "sintetico-vendas-agosto-financeiro",
+    "sheet": "Vendas",
+    "row_key": "8b0d13579f2a4c6e8b0d13579f2a4c6e8b0d13579f2a4c6e8b0d13579f2a4c6e"
+  },
+  "observed_at": "2026-08-16T09:00:00.000Z"
+}

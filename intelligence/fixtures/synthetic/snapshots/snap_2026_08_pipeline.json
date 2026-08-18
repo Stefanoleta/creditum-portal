@@ -1,0 +1,48 @@
+{
+  "snapshot_id": "snap_2026_08_pipeline",
+  "schema_version": "1.0.0",
+  "source_system": "google_sheets",
+  "dataset_id": "sintetico-vendas-agosto-pipeline",
+  "period_start": "2026-08-01",
+  "period_end": "2026-08-31",
+  "observed_at": "2026-08-16T09:00:00.000Z",
+  "ingested_at": "2026-08-16T09:02:11.000Z",
+  "content_hash": "3f1a9c7e2b4d6058a1c3e5f70921d4b6c8e0a2f4d6b8091c3e5a7f9b1d3f5072",
+  "record_count": 132,
+  "rows_skipped": 55,
+  "coverage": {
+    "expected_units": 20,
+    "reporting_units": 19,
+    "ratio_bp": 9500,
+    "missing_units": ["Grau Santo Amaro"]
+  },
+  "quality_status": "degraded",
+  "conflicts": [],
+  "missing_fields": ["curso"],
+  "evidence_refs": ["ev_a_hist_parcelas", "ev_b_pipeline_vendas", "ev_c_hist_vencimento"],
+  "payload": {
+    "period_label": "agosto/2026",
+    "leads_received": 132,
+    "leads_eligible": 110,
+    "sales_count": 8,
+    "gross_conversion_bp": 606,
+    "eligible_conversion_bp": 727,
+    "installments_histogram": {
+      "ate_12": 3,
+      "de_13_a_19": 2,
+      "de_20_a_24": 4,
+      "acima_de_24": 3
+    },
+    "first_due_date_histogram": {
+      "2026-08": 1,
+      "2026-09": 9,
+      "2026-10": 2
+    },
+    "unit_breakdown": {
+      "Mogi das Cruzes": 4,
+      "São José do Rio Preto": 3,
+      "Grau Sumaré": 3,
+      "Grau Santos": 2
+    }
+  }
+}

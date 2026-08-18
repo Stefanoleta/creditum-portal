@@ -1,0 +1,2847 @@
+diff --git a/intelligence/detectors/src/expected-units-file-provider.ts b/intelligence/detectors/src/expected-units-file-provider.ts
+new file mode 100644
+index 0000000..0e96790
+--- /dev/null
++++ b/intelligence/detectors/src/expected-units-file-provider.ts
+@@ -0,0 +1,129 @@
++/**
++ * Provider de `expected_units` sobre artefato governado versionado.
++ *
++ * Existe para provar o contrato com dado que dá para revisar num diff, antes de
++ * qualquer decisão sobre storage. Trocar por Supabase, Drive ou outra fonte é
++ * trocar esta classe — a lógica de cobertura não sabe de onde o dado veio.
++ *
++ * ─── O diretório de produção está VAZIO, e isso é o estado correto ────────────
++ *
++ * `governance/expected-units/` não contém membership nenhuma. Não temos os dados
++ * reais, e inventá-los seria pior que não tê-los: uma cobertura calculada sobre
++ * denominador fabricado é um número executivo falso que ninguém tem como
++ * questionar.
++ *
++ * Enquanto o diretório estiver vazio, produção responde `DATA_NOT_AVAILABLE` para
++ * todo período e dataset. É fail-closed, e é visível.
++ */
++
++import { existsSync, readFileSync } from "node:fs"
++import { join } from "node:path"
++import { GatewayError } from "../../gateway/src/errors"
++import { validateExpectedUnits } from "./expected-units"
++import type {
++  ExpectedUnitsLookup,
++  ExpectedUnitsProvider,
++  ExpectedUnitsQuery,
++} from "./expected-units"
++import { GOVERNED_UNIT_CATALOG } from "./unit-catalog"
++import type { GovernedUnitCatalog } from "./unit-catalog"
++
++const PERIODO = /^\d{4}-(0[1-9]|1[0-2])$/
++const IDENTIFICADOR = /^[a-z0-9][a-z0-9_.:-]{2,127}$/
++
++/**
++ * Nome de arquivo derivado de `period` e `dataset_id`.
++ *
++ * Separador `__` porque `dataset_id` admite `-`, `.` e `:` — um separador de um
++ * caractere criaria ambiguidade entre `2026-08` e um dataset que comece com
++ * dígito. E os dois componentes são validados antes de virarem caminho: um
++ * `dataset_id` com `/` ou `..` seria travessia de diretório.
++ */
++function nomeDoArquivo(q: ExpectedUnitsQuery): string {
++  if (!PERIODO.test(q.period)) {
++    throw new GatewayError("SCHEMA_INVALID", "Consulta de expected_units inválida", [
++      `period: AAAA-MM obrigatório, recebido ${JSON.stringify(q.period)}`,
++    ])
++  }
++  if (!IDENTIFICADOR.test(q.dataset_id)) {
++    throw new GatewayError("SCHEMA_INVALID", "Consulta de expected_units inválida", [
++      `dataset_id: identificador governado obrigatório, recebido ${JSON.stringify(q.dataset_id)}`,
++    ])
++  }
++  return `${q.period}__${q.dataset_id}.json`
++}
++
++export class FileExpectedUnitsProvider implements ExpectedUnitsProvider {
++  readonly #raiz: string
++  readonly #catalogo: GovernedUnitCatalog
++
++  constructor(raiz: string, catalogo: GovernedUnitCatalog = GOVERNED_UNIT_CATALOG) {
++    this.#raiz = raiz
++    this.#catalogo = catalogo
++  }
++
++  getExpectedUnits(query: ExpectedUnitsQuery): ExpectedUnitsLookup {
++    const caminho = join(this.#raiz, nomeDoArquivo(query))
++
++    // Arquivo ausente é ausência de DADO. Não é lista vazia, e não é erro de
++    // programa: é a resposta governada para "não existe membership para isto".
++    if (!existsSync(caminho)) {
++      return Object.freeze({
++        status: "DATA_NOT_AVAILABLE" as const,
++        period: query.period,
++        dataset_id: query.dataset_id,
++        detail: "nenhum dataset governado de expected_units para este período e dataset",
++      })
++    }
++
++    const bytes = readFileSync(caminho, "utf8")
++
++    let bruto: unknown
++    try {
++      bruto = JSON.parse(bytes)
++    } catch {
++      // Arquivo corrompido NÃO vira ausência: ausência é uma afirmação sobre o
++      // negócio, corrupção é um defeito. Tratá-los igual esconderia o defeito.
++      throw new GatewayError("SCHEMA_INVALID", "Dataset de expected_units ilegível", [
++        `${caminho}: JSON inválido`,
++      ])
++    }
++
++    // A verificação de `content_hash` contra o material da membership vive no
++    // validador, onde o material canônico existe. Aqui só resta a coerência entre
++    // o que o arquivo declara e o que foi consultado.
++    const membership = validateExpectedUnits(bruto, this.#catalogo)
++
++    // Coerência entre a consulta e o que o arquivo declara. Um arquivo nomeado
++    // para agosto declarando setembro atenderia a consulta errada em silêncio.
++    if (membership.period !== query.period || membership.dataset_id !== query.dataset_id) {
++      throw new GatewayError("SCHEMA_INVALID", "Dataset de expected_units incoerente", [
++        `${caminho}: declara ${membership.period}/${membership.dataset_id}, ` +
++          `consultado ${query.period}/${query.dataset_id}`,
++      ])
++    }
++
++    return Object.freeze({ status: "available" as const, membership })
++  }
++}
++
++/**
++ * O diretório governado de produção.
++ *
++ * Relativo a este módulo para não depender do diretório de trabalho do processo.
++ */
++export const PRODUCTION_EXPECTED_UNITS_DIR = new URL(
++  "../../governance/expected-units/",
++  import.meta.url,
++).pathname
++
++/**
++ * O provider de PRODUÇÃO. Hoje responde `DATA_NOT_AVAILABLE` para tudo.
++ *
++ * Não é um stub: é o provider real apontando para o diretório governado real, que
++ * está vazio porque os dados não existem. Quando existirem, eles entram lá e este
++ * objeto passa a servi-los sem nenhuma mudança de código.
++ */
++export const PRODUCTION_EXPECTED_UNITS_PROVIDER = new FileExpectedUnitsProvider(
++  PRODUCTION_EXPECTED_UNITS_DIR,
++)
+diff --git a/intelligence/detectors/src/expected-units.ts b/intelligence/detectors/src/expected-units.ts
+new file mode 100644
+index 0000000..342a5e2
+--- /dev/null
++++ b/intelligence/detectors/src/expected-units.ts
+@@ -0,0 +1,427 @@
++/**
++ * `expected_units` — o denominador governado da cobertura.
++ *
++ * ─── Por que isto é DADO, e não configuração ──────────────────────────────────
++ *
++ * A Política Creditum v1 decide **como** a cobertura é avaliada: a partir de que
++ * fração ausente a qualidade cai para `degraded`, e a partir de qual vira
++ * `insufficient`. Ela não sabe, nem pode saber, **quais** unidades eram esperadas
++ * num dataset específico num período específico — isso muda todo mês, por fonte,
++ * e é fato operacional.
++ *
++ * Duas autoridades distintas, dois artefatos distintos:
++ *
++ *   `creditum-policy.v1.json`   limiares e semântica
++ *   `expected-units/*.json`     membership operacional
++ *
++ * Enfiar membership na política faria o arquivo de decisões de negócio mudar
++ * mensalmente, e o hash da política deixaria de significar "as decisões da
++ * Creditum" para significar "as decisões mais o mês corrente".
++ *
++ * ─── O que NÃO é expected_units ───────────────────────────────────────────────
++ *
++ * **Catálogo ativo não é expected_units.** 44 unidades ativas com 37 esperadas num
++ * relatório significa cobertura sobre 37. Usar o tamanho do catálogo como
++ * denominador produz degradação permanente e falsa — a unidade que não vende
++ * naquele dataset viraria "ausente" para sempre.
++ *
++ * **Unidades observadas não são expected_units.** `expected = observed` faz a
++ * cobertura ser sempre 100% e transforma a métrica em tautologia: ela deixaria de
++ * poder detectar o que ela existe para detectar.
++ *
++ * Há teste de fonte para as duas proibições.
++ *
++ * ─── Ausência não é zero ──────────────────────────────────────────────────────
++ *
++ * Sem dado governado para `period + dataset_id`, a resposta é
++ * `DATA_NOT_AVAILABLE` — nunca lista vazia. Lista vazia afirmaria "nenhuma
++ * unidade era esperada", que é uma afirmação sobre o negócio; ausência de arquivo
++ * é uma afirmação sobre o sistema. Confundir as duas produziria cobertura `ok`
++ * sobre denominador inexistente.
++ */
++
++import { createHash } from "node:crypto"
++import { GatewayError } from "../../gateway/src/errors"
++import { deepFreeze } from "../../gateway/src/immutability"
++import { structuralId } from "./structural-id"
++import type { GovernedUnitCatalog } from "./unit-catalog"
++import type { UnitId } from "./canonical-units"
++
++export const EXPECTED_UNITS_SCHEMA_VERSION = "1.0.0"
++
++/**
++ * Período de operação: `AAAA-MM`, estritamente.
++ *
++ * Fechado de propósito. `"agosto"`, `"08/2026"`, um timestamp ou um `Date` do JS
++ * exigiriam normalização, e normalização de data é onde nascem os fusos errados.
++ * O período aqui é uma etiqueta civil, não um instante.
++ */
++const PERIODO = /^\d{4}-(0[1-9]|1[0-2])$/
++
++/** Mesma forma que o D13 valida. Repetida aqui como guarda de fronteira. */
++const UNIT_ID_FORM = /^[a-z][a-z0-9_]{1,63}$/
++
++const IDENTIFICADOR = /^[a-z0-9][a-z0-9_.:-]{2,127}$/
++const SHA256_HEX = /^[a-f0-9]{64}$/
++const SEMVER = /^\d+\.\d+\.\d+$/
++
++// ─── Contratos ────────────────────────────────────────────────────────────────
++
++/**
++ * Procedência do dataset de membership.
++ *
++ * Existe para auditoria: sem ela, uma cobertura `degraded` não teria como
++ * responder "esperado segundo quem, e segundo qual versão".
++ *
++ * `content_hash` cobre o MATERIAL DA MEMBERSHIP — período, dataset e a lista
++ * ordenada de unidades — não os bytes do arquivo.
++ *
++ * A distinção não é detalhe: um hash dos bytes do arquivo incluiria o próprio
++ * campo `content_hash`, e um hash que contém a si mesmo não tem ponto fixo. Além
++ * disso, o que precisa ser imutável é a decisão, não a formatação: reindentar o
++ * JSON ou reordenar a lista não muda a membership e não pode invalidar o
++ * artefato. Trocar uma unidade muda, e invalida.
++ *
++ * SHA-256 padrão. Não é identidade de unidade — `unit_id` é governado pelo D13 e
++ * nunca derivado de hash.
++ */
++export interface ExpectedUnitsProvenance {
++  readonly source_system: string
++  /** Versão governada DESTA membership. Membership diferente exige versão nova. */
++  readonly source_version: string
++  readonly content_hash: string
++}
++
++/** Uma entrada do dataset. Objeto, não string, para caber campo governado futuro. */
++export interface ExpectedUnitEntry {
++  readonly unit_id: UnitId
++}
++
++/** O artefato bruto, como sai do arquivo ou da fonte. Ainda não validado. */
++export interface ExpectedUnitsArtifact {
++  readonly schema_version: string
++  readonly period: string
++  readonly dataset_id: string
++  readonly expected_units: readonly ExpectedUnitEntry[]
++  readonly provenance: ExpectedUnitsProvenance
++}
++
++/**
++ * Membership validada e congelada.
++ *
++ * `unit_ids` sai em ordem determinística (code units), independente da ordem do
++ * arquivo: a cobertura não pode depender de como alguém digitou a lista.
++ */
++export interface GovernedExpectedUnits {
++  readonly period: string
++  readonly dataset_id: string
++  readonly unit_ids: readonly UnitId[]
++  readonly provenance: ExpectedUnitsProvenance
++  /**
++   * Identidade estrutural desta membership.
++   *
++   * Muda quando a lista muda. É o que torna uma substituição silenciosa visível:
++   * mesma `source_version` com `membership_id` diferente é troca sem procedência.
++   */
++  readonly membership_id: string
++}
++
++/**
++ * Resposta do provider. União discriminada — ausência tem ramo próprio.
++ *
++ * Nunca `[]` para significar "não encontrei". Ver a nota de topo do arquivo.
++ */
++export type ExpectedUnitsLookup =
++  | { readonly status: "available"; readonly membership: GovernedExpectedUnits }
++  | {
++      readonly status: "DATA_NOT_AVAILABLE"
++      readonly period: string
++      readonly dataset_id: string
++      readonly detail: string
++    }
++
++export interface ExpectedUnitsQuery {
++  readonly period: string
++  readonly dataset_id: string
++}
++
++/**
++ * A porta. Não conhece storage.
++ *
++ * Síncrona porque o único provider que existe hoje lê arquivo versionado, e uma
++ * `Promise` obrigaria todo consumidor a ser assíncrono por causa de um storage
++ * que ainda não foi decidido. Trocar por Supabase depois é trocar a
++ * implementação, não a lógica de cobertura.
++ */
++export interface ExpectedUnitsProvider {
++  getExpectedUnits(query: ExpectedUnitsQuery): ExpectedUnitsLookup
++}
++
++// ─── Validação ────────────────────────────────────────────────────────────────
++
++class Recusas {
++  readonly list: string[] = []
++  add(campo: string, motivo: string): void {
++    this.list.push(`${campo}: ${motivo}`)
++  }
++}
++
++function texto(v: unknown, campo: string, forma: RegExp, r: Recusas): string | null {
++  if (typeof v !== "string" || !forma.test(v)) {
++    r.add(campo, `formato inválido: ${JSON.stringify(v)}`)
++    return null
++  }
++  return v
++}
++
++/**
++ * Valida a membership contra o catálogo governado. Fecha fechado, e congela.
++ *
++ * O catálogo entra como parâmetro para que a validação seja testável contra um
++ * catálogo sintético sem tocar o governado — e para que a dependência seja
++ * visível em vez de importada por baixo.
++ */
++export function validateExpectedUnits(
++  raw: unknown,
++  catalog: GovernedUnitCatalog,
++): GovernedExpectedUnits {
++  const r = new Recusas()
++
++  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
++    throw new GatewayError("SCHEMA_INVALID", "Dataset de expected_units recusado", [
++      "$: precisa ser objeto",
++    ])
++  }
++  const a = raw as Record<string, unknown>
++
++  if (a["schema_version"] !== EXPECTED_UNITS_SCHEMA_VERSION) {
++    r.add(
++      "schema_version",
++      `não suportada; suportada: ${EXPECTED_UNITS_SCHEMA_VERSION}`,
++    )
++  }
++
++  const period = texto(a["period"], "period", PERIODO, r)
++  const dataset_id = texto(a["dataset_id"], "dataset_id", IDENTIFICADOR, r)
++
++  // ── Procedência ──
++  const prov = (a["provenance"] ?? {}) as Record<string, unknown>
++  const source_system = texto(prov["source_system"], "provenance.source_system", IDENTIFICADOR, r)
++  const source_version = texto(prov["source_version"], "provenance.source_version", SEMVER, r)
++  const content_hash = texto(prov["content_hash"], "provenance.content_hash", SHA256_HEX, r)
++
++  // ── Membership ──
++  const lista = a["expected_units"]
++  const ids: UnitId[] = []
++
++  if (!Array.isArray(lista)) {
++    r.add("expected_units", "lista obrigatória")
++  } else if (lista.length === 0) {
++    // Lista vazia NÃO é "nenhuma unidade esperada". A v1 não tem forma governada
++    // de declarar zero expectativa, e inferi-la de uma lista vazia produziria
++    // cobertura sobre denominador zero — `EMPTY_DENOMINATOR` disfarçado de `ok`.
++    r.add(
++      "expected_units",
++      "lista vazia não é forma governada de declarar zero expectativa — " +
++        "ausência de dado é DATA_NOT_AVAILABLE, não lista vazia",
++    )
++  } else {
++    const conhecidas = new Set(catalog.entries.map((e) => e.unit_id))
++    const vistos = new Set<string>()
++
++    for (const [i, bruto] of (lista as readonly unknown[]).entries()) {
++      const p = `expected_units[${i}]`
++      if (typeof bruto !== "object" || bruto === null || Array.isArray(bruto)) {
++        r.add(p, "entrada precisa ser objeto")
++        continue
++      }
++      const id = (bruto as Record<string, unknown>)["unit_id"]
++      if (typeof id !== "string" || !UNIT_ID_FORM.test(id)) {
++        r.add(`${p}.unit_id`, `forma inválida: ${JSON.stringify(id)}`)
++        continue
++      }
++      // Fora do catálogo governado é recusa: uma expectativa sobre unidade que
++      // não existe não tem como ser satisfeita nem auditada.
++      if (!conhecidas.has(id)) {
++        r.add(`${p}.unit_id`, `fora do catálogo governado: ${id}`)
++        continue
++      }
++      // Duplicata NUNCA é deduplicada em silêncio: ela infla o denominador, e
++      // deduplicar esconderia um erro de origem que alguém precisa corrigir.
++      if (vistos.has(id)) {
++        r.add(`${p}.unit_id`, `duplicado em period+dataset_id: ${id}`)
++        continue
++      }
++      vistos.add(id)
++      ids.push(id)
++    }
++  }
++
++  if (r.list.length > 0) {
++    throw new GatewayError("SCHEMA_INVALID", "Dataset de expected_units recusado", r.list)
++  }
++
++  // Ordem determinística por code units. A do arquivo não decide nada.
++  const ordenados = [...ids].sort((x, y) => (x < y ? -1 : x > y ? 1 : 0))
++
++  // A procedência tem de descrever ESTA membership. Um `content_hash` que não bate
++  // significa que a lista mudou sem a procedência acompanhar — a substituição
++  // silenciosa que §20 proíbe. Só é verificável depois da validação, porque antes
++  // dela a lista pode conter entrada inválida.
++  const hashEsperado = expectedUnitsContentHash(
++    period as string,
++    dataset_id as string,
++    ordenados,
++  )
++  if (content_hash !== hashEsperado) {
++    throw new GatewayError("SCHEMA_INVALID", "Procedência não corresponde à membership", [
++      `provenance.content_hash: declarado ${content_hash}, membership é ${hashEsperado}`,
++    ])
++  }
++
++  const membership_id = structuralId(
++    "creditum:expected_units:v1",
++    {
++      schema_version: EXPECTED_UNITS_SCHEMA_VERSION,
++      period,
++      dataset_id,
++      unit_ids: ordenados,
++    },
++    "exp",
++  )
++
++  return deepFreeze({
++    period: period as string,
++    dataset_id: dataset_id as string,
++    unit_ids: ordenados,
++    provenance: {
++      source_system: source_system as string,
++      source_version: source_version as string,
++      content_hash,
++    },
++    membership_id,
++  })
++}
++
++/**
++ * SHA-256 do material da membership. Primitive padrão, resultado determinístico.
++ *
++ * O material é canônico: período, dataset e a lista JÁ ORDENADA. Duas listas com
++ * as mesmas unidades em ordens diferentes têm o mesmo hash, porque descrevem a
++ * mesma membership — e é a membership que a procedência precisa fixar.
++ */
++export function expectedUnitsContentHash(
++  period: string,
++  dataset_id: string,
++  unit_ids: readonly UnitId[],
++): string {
++  const ordenados = [...unit_ids].sort((x, y) => (x < y ? -1 : x > y ? 1 : 0))
++  const material = JSON.stringify({
++    schema_version: EXPECTED_UNITS_SCHEMA_VERSION,
++    period,
++    dataset_id,
++    unit_ids: ordenados,
++  })
++  return createHash("sha256").update(material, "utf8").digest("hex")
++}
++
++// ─── Cobertura ────────────────────────────────────────────────────────────────
++
++/**
++ * O que a cobertura mede, com cada número separado do outro.
++ *
++ * `unexpected_observed_unit_ids` existe e NÃO entra no denominador. Uma unidade
++ * que reportou sem ser esperada é um fato de governança — talvez a expectativa
++ * esteja desatualizada, talvez o dado esteja errado — e decidir isso não é papel
++ * de um cálculo. Somá-la ao denominador diluiria a ausência das que faltaram.
++ */
++export interface CoverageAssessment {
++  readonly expected_count: number
++  readonly observed_expected_count: number
++  readonly missing_unit_ids: readonly UnitId[]
++  readonly missing_count: number
++  /** Fração AUSENTE, em basis points inteiros. `floor` da divisão exata. */
++  readonly missing_share_bp: number
++  /** Fração PRESENTE. Complemento exato do acima — é o que os detectores leem. */
++  readonly ratio_bp: number
++  readonly unexpected_observed_unit_ids: readonly UnitId[]
++}
++
++/**
++ * Compara membership governada com o que foi observado.
++ *
++ * Aritmética inteira. `missing_share_bp` é o piso da divisão exata e `ratio_bp` é
++ * o complemento — as duas somam 10000 sempre, sem arredondamento independente que
++ * pudesse discordar de si mesmo no limite.
++ *
++ * `observed` recebe apenas `unit_id` já canonicalizado pelo D13. Texto cru de
++ * fonte não entra: `"Grau Mogi"` e `mogi` não são comparáveis, e comparar
++ * ingenuamente contaria a mesma unidade como ausente.
++ */
++export function assessCoverage(
++  membership: GovernedExpectedUnits,
++  observed: readonly UnitId[],
++): CoverageAssessment {
++  const esperadas = new Set(membership.unit_ids)
++  const observadas = new Set(observed)
++
++  const presentes = membership.unit_ids.filter((id) => observadas.has(id))
++  const faltantes = membership.unit_ids.filter((id) => !observadas.has(id))
++  const inesperadas = [...observadas]
++    .filter((id) => !esperadas.has(id))
++    .sort((x, y) => (x < y ? -1 : x > y ? 1 : 0))
++
++  const expected_count = membership.unit_ids.length
++  const missing_count = faltantes.length
++
++  // Denominador zero é impossível: a validação recusa membership vazia.
++  const missing_share_bp = Math.floor((missing_count * 10000) / expected_count)
++
++  return deepFreeze({
++    expected_count,
++    observed_expected_count: presentes.length,
++    missing_unit_ids: faltantes,
++    missing_count,
++    missing_share_bp,
++    ratio_bp: 10000 - missing_share_bp,
++    unexpected_observed_unit_ids: inesperadas,
++  })
++}
++
++/** A forma que os detectores já consomem. Projeção, sem número novo. */
++export function toUnitCoverage(a: CoverageAssessment): {
++  readonly expected_units: number
++  readonly reporting_units: number
++  readonly ratio_bp: number
++} {
++  return deepFreeze({
++    expected_units: a.expected_count,
++    reporting_units: a.observed_expected_count,
++    ratio_bp: a.ratio_bp,
++  })
++}
++
++export type CoverageQuality = "ok" | "degraded" | "insufficient"
++
++/**
++ * A qualidade da cobertura, segundo a política já aprovada.
++ *
++ *   ausente = 0                        → ok
++ *   ausente >= 1 e share < limiar      → degraded
++ *   share >= limiar                    → insufficient
++ *
++ * O limiar vem da política governada (`missing_share_insufficient_at_bp`), não
++ * daqui. Esta função não decide onde fica a fronteira; decide como aplicá-la.
++ *
++ * `ok` aqui significa "a cobertura não degrada" — não "o resultado é ok". A
++ * precedência do lattice `ok < degraded < insufficient < conflicted` continua
++ * sendo do chamador, e `conflicted` continua prevalecendo.
++ */
++export function coverageQuality(
++  a: CoverageAssessment,
++  missing_share_insufficient_at_bp: number,
++): CoverageQuality {
++  if (a.missing_share_bp >= missing_share_insufficient_at_bp) return "insufficient"
++  if (a.missing_count >= 1) return "degraded"
++  return "ok"
++}
+diff --git a/intelligence/detectors/tests/expected-units.test.ts b/intelligence/detectors/tests/expected-units.test.ts
+new file mode 100644
+index 0000000..f5a26af
+--- /dev/null
++++ b/intelligence/detectors/tests/expected-units.test.ts
+@@ -0,0 +1,687 @@
++/**
++ * `expected_units` — o denominador governado da cobertura.
++ *
++ * Os limiares de qualidade vêm da Política Creditum v1: ausente >= 10% é
++ * `insufficient`, qualquer ausência abaixo disso é `degraded`. Os limiares NÃO são
++ * repetidos aqui — vêm de `CREDITUM_POLICY_V1`.
++ *
++ * As memberships são FIXTURES de teste, em `tests/fixtures/expected-units/`. A
++ * fonte de produção (`governance/expected-units/`) está vazia porque os dados
++ * reais não existem, e há teste que afirma isso.
++ *
++ * As duas regressões que esta suíte existe para impedir:
++ *
++ *   `expected = catálogo ativo`   degradação permanente e falsa
++ *   `expected = observado`        cobertura sempre 100%, métrica tautológica
++ */
++
++import { readFileSync, writeFileSync, mkdtempSync } from "node:fs"
++import { tmpdir } from "node:os"
++import { join } from "node:path"
++import { describe, expect, it } from "vitest"
++import {
++  EXPECTED_UNITS_SCHEMA_VERSION,
++  assessCoverage,
++  coverageQuality,
++  expectedUnitsContentHash,
++  toUnitCoverage,
++  validateExpectedUnits,
++} from "../src/expected-units"
++import type { GovernedExpectedUnits } from "../src/expected-units"
++import {
++  FileExpectedUnitsProvider,
++  PRODUCTION_EXPECTED_UNITS_PROVIDER,
++} from "../src/expected-units-file-provider"
++import { CREDITUM_POLICY_V1 } from "../src/production-policy"
++import { GOVERNED_UNIT_CATALOG } from "../src/unit-catalog"
++import { GatewayError } from "../../gateway/src/errors"
++
++const LIMIAR = CREDITUM_POLICY_V1.coverage_missing_share_insufficient_at_bp
++
++const FIXTURES = new URL("./fixtures/expected-units/", import.meta.url).pathname
++const PROVIDER = new FileExpectedUnitsProvider(FIXTURES, GOVERNED_UNIT_CATALOG)
++
++const ATIVAS = GOVERNED_UNIT_CATALOG.entries
++  .filter((e) => e.status === "active")
++  .map((e) => e.unit_id)
++const INATIVAS = GOVERNED_UNIT_CATALOG.entries
++  .filter((e) => e.status === "inactive")
++  .map((e) => e.unit_id)
++
++/** Carrega uma fixture, exigindo que ela exista — teste quebrado não é DATA_NOT_AVAILABLE. */
++function membership(period: string, dataset_id: string): GovernedExpectedUnits {
++  const r = PROVIDER.getExpectedUnits({ period, dataset_id })
++  if (r.status !== "available") throw new Error(`fixture ausente: ${period}/${dataset_id}`)
++  return r.membership
++}
++
++/**
++ * Artefato bruto válido, para mutar um campo por vez.
++ *
++ * O `content_hash` é calculado sobre os valores EFETIVOS — inclusive os do
++ * `over`. A primeira versão deste helper hashava o período padrão e o override
++ * mudava o período depois, produzindo um artefato inconsistente que o validador
++ * corretamente recusava por outro motivo, mascarando o teste.
++ */
++function artefato(ids: readonly string[], over: Record<string, unknown> = {}): unknown {
++  const period = typeof over["period"] === "string" ? over["period"] : "2026-08"
++  const dataset_id = typeof over["dataset_id"] === "string" ? over["dataset_id"] : "ds_sintetico"
++  return {
++    schema_version: EXPECTED_UNITS_SCHEMA_VERSION,
++    period,
++    dataset_id,
++    expected_units: ids.map((unit_id) => ({ unit_id })),
++    provenance: {
++      source_system: "fixture_teste",
++      source_version: "1.0.0",
++      content_hash: expectedUnitsContentHash(period, dataset_id, ids),
++    },
++    ...over,
++  }
++}
++
++const qualidade = (m: GovernedExpectedUnits, observadas: readonly string[]): string =>
++  coverageQuality(assessCoverage(m, observadas), LIMIAR)
++
++// ═════════════════════════════════════════════════════════════════════════════
++// §21 A–E — as fronteiras de qualidade, com aritmética inteira
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("§21 A/B/C — 20 esperadas", () => {
++  const m = membership("2026-08", "ds_vinte")
++
++  it("a fixture tem 20 unidades", () => {
++    expect(m.unit_ids).toHaveLength(20)
++  })
++
++  it("A — 20 observadas: ok", () => {
++    const a = assessCoverage(m, m.unit_ids)
++    expect(a.missing_count).toBe(0)
++    expect(a.missing_share_bp).toBe(0)
++    expect(a.ratio_bp).toBe(10000)
++    expect(coverageQuality(a, LIMIAR)).toBe("ok")
++  })
++
++  it("B — 1 ausente de 20 = 500 bp: degraded", () => {
++    const a = assessCoverage(m, m.unit_ids.slice(1))
++    expect(a.missing_count).toBe(1)
++    expect(a.missing_share_bp).toBe(500)
++    expect(coverageQuality(a, LIMIAR)).toBe("degraded")
++  })
++
++  it("C — 2 ausentes de 20 = 1000 bp: insufficient, fronteira inclusiva", () => {
++    const a = assessCoverage(m, m.unit_ids.slice(2))
++    expect(a.missing_count).toBe(2)
++    expect(a.missing_share_bp).toBe(1000)
++    expect(coverageQuality(a, LIMIAR)).toBe("insufficient")
++  })
++
++  it("as unidades ausentes são NOMEADAS, não só contadas", () => {
++    const a = assessCoverage(m, m.unit_ids.slice(2))
++    expect(a.missing_unit_ids).toEqual([m.unit_ids[0], m.unit_ids[1]])
++  })
++})
++
++describe("§21 D/E — a fronteira depende do denominador, não da contagem", () => {
++  it("D — 1 ausente de 10 = 1000 bp: insufficient", () => {
++    const m = membership("2026-08", "ds_dez")
++    expect(m.unit_ids).toHaveLength(10)
++    const a = assessCoverage(m, m.unit_ids.slice(1))
++    expect(a.missing_share_bp).toBe(1000)
++    expect(coverageQuality(a, LIMIAR)).toBe("insufficient")
++  })
++
++  it("E — 1 ausente de 11 = 909 bp: degraded", () => {
++    const m = membership("2026-08", "ds_onze")
++    expect(m.unit_ids).toHaveLength(11)
++    const a = assessCoverage(m, m.unit_ids.slice(1))
++    // 1/11 = 909,09… bp. Piso da divisão exata, sem float.
++    expect(a.missing_share_bp).toBe(909)
++    expect(coverageQuality(a, LIMIAR)).toBe("degraded")
++  })
++
++  it("a MESMA contagem de ausentes dá vereditos opostos conforme o denominador", () => {
++    const dez = membership("2026-08", "ds_dez")
++    const onze = membership("2026-08", "ds_onze")
++    expect(qualidade(dez, dez.unit_ids.slice(1))).toBe("insufficient")
++    expect(qualidade(onze, onze.unit_ids.slice(1))).toBe("degraded")
++  })
++
++  it("ausente e presente somam exatamente 10000 bp", () => {
++    for (const ds of ["ds_dez", "ds_onze", "ds_vinte"]) {
++      const m = membership("2026-08", ds)
++      for (let k = 0; k <= m.unit_ids.length; k++) {
++        const a = assessCoverage(m, m.unit_ids.slice(k))
++        expect(a.missing_share_bp + a.ratio_bp, `${ds}/${k}`).toBe(10000)
++      }
++    }
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// §21 F/G — catálogo e expectativa são dimensões SEPARADAS
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("§21 F — unidade ATIVA fora da lista não entra no denominador", () => {
++  const m = membership("2026-08", "ds_vinte")
++
++  it("o catálogo tem mais ativas do que a membership espera", () => {
++    expect(ATIVAS.length).toBeGreaterThan(m.unit_ids.length)
++  })
++
++  it("o denominador é a MEMBERSHIP, não o catálogo ativo", () => {
++    const a = assessCoverage(m, m.unit_ids)
++    expect(a.expected_count).toBe(m.unit_ids.length)
++    expect(a.expected_count).not.toBe(ATIVAS.length)
++  })
++
++  it("cobertura completa da membership é `ok`, mesmo com ativas de fora ausentes", () => {
++    // Esta é a regressão crítica: se o denominador fosse o catálogo ativo, isto
++    // seria `insufficient` para sempre — 20 de 44 é 5455 bp de ausência.
++    expect(qualidade(m, m.unit_ids)).toBe("ok")
++  })
++
++  it("uma ativa fora da lista não aparece como ausente", () => {
++    const foraDaLista = ATIVAS.find((id) => !m.unit_ids.includes(id))
++    expect(foraDaLista).toBeDefined()
++    const a = assessCoverage(m, m.unit_ids)
++    expect(a.missing_unit_ids).not.toContain(foraDaLista)
++  })
++})
++
++describe("§21 G — unidade INATIVA explicitamente esperada ENTRA no denominador", () => {
++  const m = membership("2026-08", "ds_com_inativa")
++  const inativa = INATIVAS[0] as string
++
++  it("a fixture declara uma unidade inativa", () => {
++    expect(m.unit_ids).toContain(inativa)
++    expect(GOVERNED_UNIT_CATALOG.entries.find((e) => e.unit_id === inativa)?.status).toBe(
++      "inactive",
++    )
++  })
++
++  it("ela conta no denominador — status de catálogo não sobrescreve o dado governado", () => {
++    const a = assessCoverage(m, m.unit_ids)
++    expect(a.expected_count).toBe(m.unit_ids.length)
++    expect(coverageQuality(a, LIMIAR)).toBe("ok")
++  })
++
++  it("se ela não reportou, é AUSENTE — não filtrada por ser inativa", () => {
++    const semInativa = m.unit_ids.filter((id) => id !== inativa)
++    const a = assessCoverage(m, semInativa)
++    expect(a.missing_unit_ids).toEqual([inativa])
++    expect(a.missing_count).toBe(1)
++    // 1 de 3 = 3333 bp: bem acima do limiar.
++    expect(coverageQuality(a, LIMIAR)).toBe("insufficient")
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// §21 H — observadas extras
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("§21 H — unidade observada e NÃO esperada não muda o denominador", () => {
++  const m = membership("2026-08", "ds_vinte")
++  const extra = ATIVAS.find((id) => !m.unit_ids.includes(id)) as string
++
++  it("o denominador não cresce com a extra", () => {
++    const a = assessCoverage(m, [...m.unit_ids, extra])
++    expect(a.expected_count).toBe(m.unit_ids.length)
++  })
++
++  it("a extra não é contada como ausente", () => {
++    const a = assessCoverage(m, [...m.unit_ids, extra])
++    expect(a.missing_count).toBe(0)
++    expect(coverageQuality(a, LIMIAR)).toBe("ok")
++  })
++
++  it("a extra é PRESERVADA separadamente, como fato de governança", () => {
++    const a = assessCoverage(m, [...m.unit_ids, extra])
++    expect(a.unexpected_observed_unit_ids).toEqual([extra])
++  })
++
++  it("a extra não dilui a ausência de quem faltou", () => {
++    // 2 ausentes de 20 continua 1000 bp com uma extra presente. Se o denominador
++    // somasse a extra, 2 de 21 daria 952 bp e o veredito viraria `degraded`.
++    const a = assessCoverage(m, [...m.unit_ids.slice(2), extra])
++    expect(a.missing_share_bp).toBe(1000)
++    expect(coverageQuality(a, LIMIAR)).toBe("insufficient")
++  })
++
++  it("nenhum juízo automático sobre a extra: é fato, não severidade", () => {
++    const a = assessCoverage(m, [...m.unit_ids, extra])
++    expect(JSON.stringify(a)).not.toContain("severity")
++    expect(JSON.stringify(a)).not.toContain("material")
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// §21 I/J — validação fecha fechado
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("§21 I — UnitId desconhecido falha fechado", () => {
++  it("id fora do catálogo governado é recusa", () => {
++    expect(() => validateExpectedUnits(artefato(["nao_existe_no_catalogo"]), GOVERNED_UNIT_CATALOG))
++      .toThrow(GatewayError)
++  })
++
++  it("a recusa nomeia o id e o campo", () => {
++    try {
++      validateExpectedUnits(artefato([ATIVAS[0] as string, "fantasma"]), GOVERNED_UNIT_CATALOG)
++    } catch (e) {
++      const d = ((e as GatewayError).details ?? []).join(" ")
++      expect(d).toContain("fantasma")
++      expect(d).toContain("fora do catálogo governado")
++      return
++    }
++    throw new Error("esperava recusa")
++  })
++
++  it("forma inválida de unit_id é recusa antes do catálogo", () => {
++    for (const ruim of ["Mogi", "mogi-das-cruzes", "1mogi", "", "a", "x".repeat(65)]) {
++      expect(() => validateExpectedUnits(artefato([ruim]), GOVERNED_UNIT_CATALOG), ruim).toThrow(
++        GatewayError,
++      )
++    }
++  })
++
++  it("entrada que não é objeto é recusa", () => {
++    const bruto = artefato([ATIVAS[0] as string]) as Record<string, unknown>
++    bruto["expected_units"] = ["mogi"]
++    expect(() => validateExpectedUnits(bruto, GOVERNED_UNIT_CATALOG)).toThrow(GatewayError)
++  })
++})
++
++describe("§21 J — UnitId duplicado falha fechado, nunca é deduplicado", () => {
++  const dup = [ATIVAS[0] as string, ATIVAS[1] as string, ATIVAS[0] as string]
++
++  it("duplicata é recusa", () => {
++    expect(() => validateExpectedUnits(artefato(dup), GOVERNED_UNIT_CATALOG)).toThrow(GatewayError)
++  })
++
++  it("a recusa diz que é duplicata em period+dataset_id", () => {
++    try {
++      validateExpectedUnits(artefato(dup), GOVERNED_UNIT_CATALOG)
++    } catch (e) {
++      expect(((e as GatewayError).details ?? []).join(" ")).toContain(
++        "duplicado em period+dataset_id",
++      )
++      return
++    }
++    throw new Error("esperava recusa")
++  })
++
++  it("NÃO existe caminho que aceite e deduplique", () => {
++    // Se deduplicasse, o denominador viraria 2 e o erro de origem desapareceria.
++    let saiu = "nada"
++    try {
++      validateExpectedUnits(artefato(dup), GOVERNED_UNIT_CATALOG)
++    } catch {
++      saiu = "recusou"
++    }
++    expect(saiu).toBe("recusou")
++  })
++})
++
++describe("período, dataset e schema fecham fechado", () => {
++  it("period fora de AAAA-MM é recusa", () => {
++    for (const ruim of [
++      "agosto",
++      "08/2026",
++      "2026-8",
++      "2026-13",
++      "2026-00",
++      "2026-08-01",
++      "2026",
++      1_754_000_000,
++      null,
++    ]) {
++      expect(
++        () =>
++          validateExpectedUnits(
++            artefato([ATIVAS[0] as string], { period: ruim }),
++            GOVERNED_UNIT_CATALOG,
++          ),
++        JSON.stringify(ruim),
++      ).toThrow(GatewayError)
++    }
++  })
++
++  it("dataset_id ausente ou malformado é recusa — não existe membership global", () => {
++    for (const ruim of [undefined, "", "DS Vendas", "ds/vendas", "a"]) {
++      expect(
++        () =>
++          validateExpectedUnits(
++            artefato([ATIVAS[0] as string], { dataset_id: ruim }),
++            GOVERNED_UNIT_CATALOG,
++          ),
++        JSON.stringify(ruim),
++      ).toThrow(GatewayError)
++    }
++  })
++
++  it("schema_version não suportada é recusa", () => {
++    expect(() =>
++      validateExpectedUnits(
++        artefato([ATIVAS[0] as string], { schema_version: "2.0.0" }),
++        GOVERNED_UNIT_CATALOG,
++      ),
++    ).toThrow(GatewayError)
++  })
++
++  it("§7 — lista VAZIA é recusa, não `nenhuma unidade esperada`", () => {
++    try {
++      validateExpectedUnits(artefato([]), GOVERNED_UNIT_CATALOG)
++    } catch (e) {
++      const d = ((e as GatewayError).details ?? []).join(" ")
++      expect(d).toContain("lista vazia não é forma governada")
++      expect(d).toContain("DATA_NOT_AVAILABLE")
++      return
++    }
++    throw new Error("esperava recusa")
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// §19/§20 — procedência e versão
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("§19 — procedência suficiente para auditoria", () => {
++  const m = membership("2026-08", "ds_vinte")
++
++  it("carrega fonte, versão e hash do conteúdo", () => {
++    expect(m.provenance.source_system).toBe("fixture_teste")
++    expect(m.provenance.source_version).toMatch(/^\d+\.\d+\.\d+$/)
++    expect(m.provenance.content_hash).toMatch(/^[a-f0-9]{64}$/)
++  })
++
++  it("procedência incompleta é recusa", () => {
++    for (const campo of ["source_system", "source_version", "content_hash"]) {
++      const bruto = artefato([ATIVAS[0] as string]) as Record<string, unknown>
++      const prov = { ...(bruto["provenance"] as Record<string, unknown>) }
++      delete prov[campo]
++      bruto["provenance"] = prov
++      expect(() => validateExpectedUnits(bruto, GOVERNED_UNIT_CATALOG), campo).toThrow(GatewayError)
++    }
++  })
++
++  it("content_hash divergente da membership é recusa", () => {
++    const bruto = artefato([ATIVAS[0] as string, ATIVAS[1] as string]) as Record<string, unknown>
++    // Troca uma unidade sem atualizar a procedência: substituição silenciosa.
++    bruto["expected_units"] = [{ unit_id: ATIVAS[0] }, { unit_id: ATIVAS[2] }]
++    try {
++      validateExpectedUnits(bruto, GOVERNED_UNIT_CATALOG)
++    } catch (e) {
++      expect(((e as GatewayError).details ?? []).join(" ")).toContain("content_hash")
++      return
++    }
++    throw new Error("esperava recusa")
++  })
++
++  it("o hash NÃO é identidade de unidade", () => {
++    // `unit_id` é governado pelo D13. Nenhum id no resultado parece hash.
++    for (const id of m.unit_ids) {
++      expect(id).not.toMatch(/^[a-f0-9]{64}$/)
++      expect(id).toMatch(/^[a-z][a-z0-9_]{1,63}$/)
++    }
++  })
++})
++
++describe("§20 — reingestão determinística e versão governada", () => {
++  it("a mesma membership lida duas vezes dá o mesmo resultado", () => {
++    const a = membership("2026-08", "ds_vinte")
++    const b = membership("2026-08", "ds_vinte")
++    expect(b).toEqual(a)
++    expect(b.membership_id).toBe(a.membership_id)
++  })
++
++  it("§21 N — a ordem no arquivo não altera a saída", () => {
++    // A fixture `ds_ordem` lista as unidades em ordem invertida.
++    const m = membership("2026-08", "ds_ordem")
++    expect(m.unit_ids).toEqual([...m.unit_ids].sort((x, y) => (x < y ? -1 : 1)))
++  })
++
++  it("mesma membership em ordem diferente tem o MESMO membership_id", () => {
++    const invertida = validateExpectedUnits(
++      artefato([...ATIVAS.slice(0, 5)].reverse()),
++      GOVERNED_UNIT_CATALOG,
++    )
++    const direta = validateExpectedUnits(artefato(ATIVAS.slice(0, 5)), GOVERNED_UNIT_CATALOG)
++    expect(invertida.membership_id).toBe(direta.membership_id)
++    expect(invertida.unit_ids).toEqual(direta.unit_ids)
++  })
++
++  it("membership diferente tem membership_id diferente", () => {
++    const a = validateExpectedUnits(artefato(ATIVAS.slice(0, 5)), GOVERNED_UNIT_CATALOG)
++    const b = validateExpectedUnits(artefato(ATIVAS.slice(0, 6)), GOVERNED_UNIT_CATALOG)
++    expect(b.membership_id).not.toBe(a.membership_id)
++  })
++
++  it("período ou dataset diferentes dão identidade diferente", () => {
++    const base = validateExpectedUnits(artefato(ATIVAS.slice(0, 5)), GOVERNED_UNIT_CATALOG)
++    const outroPeriodo = validateExpectedUnits(
++      artefato(ATIVAS.slice(0, 5), { period: "2026-09" }),
++      GOVERNED_UNIT_CATALOG,
++    )
++    expect(outroPeriodo.membership_id).not.toBe(base.membership_id)
++  })
++
++  it("a identidade é estrutural: não é gramática de delimitador", () => {
++    const m = membership("2026-08", "ds_vinte")
++    expect(m.membership_id).toMatch(/^exp_[a-f0-9]{16}$/)
++    expect(m.membership_id).not.toContain("ds_vinte")
++    expect(m.membership_id).not.toContain("2026-08")
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// §21 K/L/M — ausência de dado, e as duas proibições
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("§21 K — sem dado governado é DATA_NOT_AVAILABLE", () => {
++  it("período sem membership devolve DATA_NOT_AVAILABLE", () => {
++    const r = PROVIDER.getExpectedUnits({ period: "2027-01", dataset_id: "ds_vinte" })
++    expect(r.status).toBe("DATA_NOT_AVAILABLE")
++  })
++
++  it("dataset sem membership devolve DATA_NOT_AVAILABLE", () => {
++    const r = PROVIDER.getExpectedUnits({ period: "2026-08", dataset_id: "ds_inexistente" })
++    expect(r.status).toBe("DATA_NOT_AVAILABLE")
++  })
++
++  it("NUNCA devolve lista vazia para significar ausência", () => {
++    const r = PROVIDER.getExpectedUnits({ period: "2027-01", dataset_id: "ds_vinte" })
++    expect(r).not.toHaveProperty("membership")
++    expect(JSON.stringify(r)).not.toContain("unit_ids")
++  })
++
++  it("a ausência nomeia o que foi pedido, para auditoria", () => {
++    const r = PROVIDER.getExpectedUnits({ period: "2027-01", dataset_id: "ds_x" })
++    if (r.status !== "DATA_NOT_AVAILABLE") throw new Error("esperava ausência")
++    expect(r.period).toBe("2027-01")
++    expect(r.dataset_id).toBe("ds_x")
++    expect(r.detail.length).toBeGreaterThan(0)
++  })
++
++  it("o provider de PRODUÇÃO responde DATA_NOT_AVAILABLE — os dados não existem", () => {
++    for (const period of ["2026-08", "2026-09", "2026-07"]) {
++      for (const dataset_id of ["ds_vendas_mensal", "ds_financeiro_mensal", "ds_crm"]) {
++        const r = PRODUCTION_EXPECTED_UNITS_PROVIDER.getExpectedUnits({ period, dataset_id })
++        expect(r.status, `${period}/${dataset_id}`).toBe("DATA_NOT_AVAILABLE")
++      }
++    }
++  })
++
++  it("arquivo CORROMPIDO é erro, não ausência", () => {
++    // Ausência é afirmação sobre o negócio; corrupção é defeito. Tratá-los igual
++    // esconderia o defeito atrás de um DATA_NOT_AVAILABLE plausível.
++    const dir = mkdtempSync(join(tmpdir(), "exp-corr-"))
++    writeFileSync(join(dir, "2026-08__ds_x.json"), "{ nao é json")
++    const p = new FileExpectedUnitsProvider(dir, GOVERNED_UNIT_CATALOG)
++    expect(() => p.getExpectedUnits({ period: "2026-08", dataset_id: "ds_x" })).toThrow(
++      GatewayError,
++    )
++  })
++
++  it("consulta malformada é recusa, não ausência", () => {
++    for (const q of [
++      { period: "agosto", dataset_id: "ds_x" },
++      { period: "2026-08", dataset_id: "../etc/passwd" },
++      { period: "2026-08", dataset_id: "ds/x" },
++    ]) {
++      expect(() => PROVIDER.getExpectedUnits(q), JSON.stringify(q)).toThrow(GatewayError)
++    }
++  })
++})
++
++describe("§17/§21 L — NENHUM fallback para o catálogo ativo", () => {
++  const semComentarios = (caminho: string): string =>
++    readFileSync(new URL(caminho, import.meta.url), "utf8")
++      .replace(/\/\*[\s\S]*?\*\//g, "")
++      .replace(/\/\/.*$/gm, "")
++
++  const FONTES = ["../src/expected-units.ts", "../src/expected-units-file-provider.ts"] as const
++
++  it("nenhum fonte filtra o catálogo por status para montar membership", () => {
++    for (const f of FONTES) {
++      const src = semComentarios(f)
++      expect(src, f).not.toMatch(/status\s*===\s*"active"/)
++      expect(src, f).not.toMatch(/\.filter\([^)]*active/)
++      expect(src, f).not.toMatch(/active\s*[=!]==\s*true/)
++    }
++  })
++
++  it("o catálogo é usado só para VALIDAR ids, nunca para produzi-los", () => {
++    const src = semComentarios("../src/expected-units.ts")
++    // A única leitura do catálogo é o conjunto de ids conhecidos, para checagem.
++    expect(src).toMatch(/new Set\(catalog\.entries\.map\(\(e\) => e\.unit_id\)\)/)
++  })
++
++  it("provider sem dados NÃO devolve as ativas", () => {
++    const r = PRODUCTION_EXPECTED_UNITS_PROVIDER.getExpectedUnits({
++      period: "2026-08",
++      dataset_id: "ds_vendas_mensal",
++    })
++    expect(r.status).toBe("DATA_NOT_AVAILABLE")
++    // Nenhuma das 44 ativas aparece na resposta.
++    const texto = JSON.stringify(r)
++    for (const id of ATIVAS.slice(0, 5)) expect(texto).not.toContain(id)
++  })
++})
++
++describe("§18/§21 M — NENHUM fallback para as unidades observadas", () => {
++  it("cobertura sobre observadas != membership continua detectando ausência", () => {
++    const m = membership("2026-08", "ds_vinte")
++    const observadas = m.unit_ids.slice(3)
++    const a = assessCoverage(m, observadas)
++    // Se `expected = observed`, isto seria sempre 0 e a métrica não mediria nada.
++    expect(a.missing_count).toBe(3)
++    expect(a.expected_count).toBe(20)
++    expect(a.expected_count).not.toBe(observadas.length)
++  })
++
++  it("`assessCoverage` nunca deriva o denominador do observado", () => {
++    const m = membership("2026-08", "ds_vinte")
++    // Observado vazio: o denominador continua 20, e tudo está ausente.
++    const a = assessCoverage(m, [])
++    expect(a.expected_count).toBe(20)
++    expect(a.missing_count).toBe(20)
++    expect(a.missing_share_bp).toBe(10000)
++    expect(coverageQuality(a, LIMIAR)).toBe("insufficient")
++  })
++
++  it("observado com unidades totalmente alheias não vira cobertura completa", () => {
++    const m = membership("2026-08", "ds_vinte")
++    const alheias = ATIVAS.filter((id) => !m.unit_ids.includes(id)).slice(0, 20)
++    const a = assessCoverage(m, alheias)
++    expect(a.missing_count).toBe(20)
++    expect(a.unexpected_observed_unit_ids).toHaveLength(alheias.length)
++    expect(coverageQuality(a, LIMIAR)).toBe("insufficient")
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// §21 O — imutabilidade
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("§21 O — imutabilidade profunda", () => {
++  it("a membership devolvida está congelada", () => {
++    const m = membership("2026-08", "ds_vinte")
++    expect(Object.isFrozen(m)).toBe(true)
++    expect(Object.isFrozen(m.unit_ids)).toBe(true)
++    expect(Object.isFrozen(m.provenance)).toBe(true)
++  })
++
++  it("o chamador não consegue mutar a lista", () => {
++    const m = membership("2026-08", "ds_vinte")
++    expect(() => {
++      ;(m.unit_ids as string[]).push("mogi")
++    }).toThrow(TypeError)
++    expect(() => {
++      ;(m.unit_ids as string[])[0] = "outro"
++    }).toThrow(TypeError)
++  })
++
++  it("o chamador não consegue mutar a procedência", () => {
++    const m = membership("2026-08", "ds_vinte")
++    expect(() => {
++      ;(m.provenance as { source_version: string }).source_version = "9.9.9"
++    }).toThrow(TypeError)
++  })
++
++  it("a avaliação de cobertura também está congelada", () => {
++    const a = assessCoverage(membership("2026-08", "ds_vinte"), [])
++    expect(Object.isFrozen(a)).toBe(true)
++    expect(Object.isFrozen(a.missing_unit_ids)).toBe(true)
++    expect(() => {
++      ;(a.missing_unit_ids as string[]).pop()
++    }).toThrow(TypeError)
++  })
++
++  it("mutar a entrada do chamador depois não altera a membership", () => {
++    const ids = [ATIVAS[0] as string, ATIVAS[1] as string]
++    const m = validateExpectedUnits(artefato(ids), GOVERNED_UNIT_CATALOG)
++    ids.push(ATIVAS[2] as string)
++    expect(m.unit_ids).toHaveLength(2)
++  })
++
++  it("a projeção para UnitCoverage também é congelada", () => {
++    const uc = toUnitCoverage(assessCoverage(membership("2026-08", "ds_vinte"), []))
++    expect(Object.isFrozen(uc)).toBe(true)
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// §10 — a forma que os detectores já consomem
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("§10 — projeção para UnitCoverage, sem número novo", () => {
++  const m = membership("2026-08", "ds_vinte")
++
++  it("expected_units e reporting_units vêm da avaliação", () => {
++    const a = assessCoverage(m, m.unit_ids.slice(2))
++    const uc = toUnitCoverage(a)
++    expect(uc.expected_units).toBe(a.expected_count)
++    expect(uc.reporting_units).toBe(a.observed_expected_count)
++    expect(uc.ratio_bp).toBe(a.ratio_bp)
++  })
++
++  it("o ratio_bp casa com o limiar que os detectores SHIP já usam", () => {
++    // `emit_event_below_bp` da política é 9001: cobertura de 9000 bp (10% ausente)
++    // já é insuficiente, e o `<` do detector exige o +1.
++    const insuficiente = toUnitCoverage(assessCoverage(m, m.unit_ids.slice(2)))
++    const degradado = toUnitCoverage(assessCoverage(m, m.unit_ids.slice(1)))
++    expect(insuficiente.ratio_bp).toBe(9000)
++    expect(degradado.ratio_bp).toBe(9500)
++  })
++
++  it("o limiar vem da política, não deste módulo", () => {
++    expect(LIMIAR).toBe(CREDITUM_POLICY_V1.coverage_missing_share_insufficient_at_bp)
++    const src = readFileSync(new URL("../src/expected-units.ts", import.meta.url), "utf8")
++      .replace(/\/\*[\s\S]*?\*\//g, "")
++      .replace(/\/\/.*$/gm, "")
++    // Nenhum 1000 escrito como limiar: ele entra por parâmetro.
++    expect(src).not.toMatch(/missing_share_insufficient_at_bp\s*=\s*\d/)
++    expect(src).toMatch(/missing_share_insufficient_at_bp: number/)
++  })
++})
+diff --git a/intelligence/detectors/tests/fixtures/expected-units/2026-08__ds_com_inativa.json b/intelligence/detectors/tests/fixtures/expected-units/2026-08__ds_com_inativa.json
+new file mode 100644
+index 0000000..4b11b08
+--- /dev/null
++++ b/intelligence/detectors/tests/fixtures/expected-units/2026-08__ds_com_inativa.json
+@@ -0,0 +1,21 @@
++{
++  "schema_version": "1.0.0",
++  "period": "2026-08",
++  "dataset_id": "ds_com_inativa",
++  "expected_units": [
++    {
++      "unit_id": "alecrim"
++    },
++    {
++      "unit_id": "bangu"
++    },
++    {
++      "unit_id": "duque_de_caxias"
++    }
++  ],
++  "provenance": {
++    "source_system": "fixture_teste",
++    "source_version": "1.0.0",
++    "content_hash": "15001eca9305affef8132ed0e4ccdfc6222b18363123ecdc603e83734949ca5e"
++  }
++}
+diff --git a/intelligence/detectors/tests/fixtures/expected-units/2026-08__ds_dez.json b/intelligence/detectors/tests/fixtures/expected-units/2026-08__ds_dez.json
+new file mode 100644
+index 0000000..82d2806
+--- /dev/null
++++ b/intelligence/detectors/tests/fixtures/expected-units/2026-08__ds_dez.json
+@@ -0,0 +1,42 @@
++{
++  "schema_version": "1.0.0",
++  "period": "2026-08",
++  "dataset_id": "ds_dez",
++  "expected_units": [
++    {
++      "unit_id": "alecrim"
++    },
++    {
++      "unit_id": "bangu"
++    },
++    {
++      "unit_id": "belford_roxo"
++    },
++    {
++      "unit_id": "bezerra"
++    },
++    {
++      "unit_id": "bonsucesso"
++    },
++    {
++      "unit_id": "camaragibe"
++    },
++    {
++      "unit_id": "cariacica"
++    },
++    {
++      "unit_id": "carpina"
++    },
++    {
++      "unit_id": "curitiba"
++    },
++    {
++      "unit_id": "diadema"
++    }
++  ],
++  "provenance": {
++    "source_system": "fixture_teste",
++    "source_version": "1.0.0",
++    "content_hash": "fcdcd6101043b3ec16c9cc523e78458fe58bda57fa8e17530a6b9ce61aab3b38"
++  }
++}
+diff --git a/intelligence/detectors/tests/fixtures/expected-units/2026-08__ds_onze.json b/intelligence/detectors/tests/fixtures/expected-units/2026-08__ds_onze.json
+new file mode 100644
+index 0000000..4a64867
+--- /dev/null
++++ b/intelligence/detectors/tests/fixtures/expected-units/2026-08__ds_onze.json
+@@ -0,0 +1,45 @@
++{
++  "schema_version": "1.0.0",
++  "period": "2026-08",
++  "dataset_id": "ds_onze",
++  "expected_units": [
++    {
++      "unit_id": "alecrim"
++    },
++    {
++      "unit_id": "bangu"
++    },
++    {
++      "unit_id": "belford_roxo"
++    },
++    {
++      "unit_id": "bezerra"
++    },
++    {
++      "unit_id": "bonsucesso"
++    },
++    {
++      "unit_id": "camaragibe"
++    },
++    {
++      "unit_id": "cariacica"
++    },
++    {
++      "unit_id": "carpina"
++    },
++    {
++      "unit_id": "curitiba"
++    },
++    {
++      "unit_id": "diadema"
++    },
++    {
++      "unit_id": "divinopolis"
++    }
++  ],
++  "provenance": {
++    "source_system": "fixture_teste",
++    "source_version": "1.0.0",
++    "content_hash": "8514d0ba201ed1f00d9c0435a414b72d051bde7d9f0b3b54ad94913b3c7daad5"
++  }
++}
+diff --git a/intelligence/detectors/tests/fixtures/expected-units/2026-08__ds_ordem.json b/intelligence/detectors/tests/fixtures/expected-units/2026-08__ds_ordem.json
+new file mode 100644
+index 0000000..003774e
+--- /dev/null
++++ b/intelligence/detectors/tests/fixtures/expected-units/2026-08__ds_ordem.json
+@@ -0,0 +1,27 @@
++{
++  "schema_version": "1.0.0",
++  "period": "2026-08",
++  "dataset_id": "ds_ordem",
++  "expected_units": [
++    {
++      "unit_id": "bonsucesso"
++    },
++    {
++      "unit_id": "bezerra"
++    },
++    {
++      "unit_id": "belford_roxo"
++    },
++    {
++      "unit_id": "bangu"
++    },
++    {
++      "unit_id": "alecrim"
++    }
++  ],
++  "provenance": {
++    "source_system": "fixture_teste",
++    "source_version": "1.0.0",
++    "content_hash": "6f906d1504166a296a1363a88c037fe3005632b39d62225d636ff9183ddfaf84"
++  }
++}
+diff --git a/intelligence/detectors/tests/fixtures/expected-units/2026-08__ds_vinte.json b/intelligence/detectors/tests/fixtures/expected-units/2026-08__ds_vinte.json
+new file mode 100644
+index 0000000..0c215e6
+--- /dev/null
++++ b/intelligence/detectors/tests/fixtures/expected-units/2026-08__ds_vinte.json
+@@ -0,0 +1,72 @@
++{
++  "schema_version": "1.0.0",
++  "period": "2026-08",
++  "dataset_id": "ds_vinte",
++  "expected_units": [
++    {
++      "unit_id": "alecrim"
++    },
++    {
++      "unit_id": "bangu"
++    },
++    {
++      "unit_id": "belford_roxo"
++    },
++    {
++      "unit_id": "bezerra"
++    },
++    {
++      "unit_id": "bonsucesso"
++    },
++    {
++      "unit_id": "camaragibe"
++    },
++    {
++      "unit_id": "cariacica"
++    },
++    {
++      "unit_id": "carpina"
++    },
++    {
++      "unit_id": "curitiba"
++    },
++    {
++      "unit_id": "diadema"
++    },
++    {
++      "unit_id": "divinopolis"
++    },
++    {
++      "unit_id": "fortaleza_centro"
++    },
++    {
++      "unit_id": "joao_pessoa"
++    },
++    {
++      "unit_id": "joinville"
++    },
++    {
++      "unit_id": "limeira"
++    },
++    {
++      "unit_id": "limoeiro"
++    },
++    {
++      "unit_id": "madureira"
++    },
++    {
++      "unit_id": "manaus"
++    },
++    {
++      "unit_id": "maraba"
++    },
++    {
++      "unit_id": "maracanau"
++    }
++  ],
++  "provenance": {
++    "source_system": "fixture_teste",
++    "source_version": "1.0.0",
++    "content_hash": "8238eca526861f4b1912ba80dd8ff421ee0f62783cb14648ceff6981826fa15d"
++  }
++}
+diff --git a/intelligence/detectors/tests/fixtures/expected-units/2026-09__ds_ordem.json b/intelligence/detectors/tests/fixtures/expected-units/2026-09__ds_ordem.json
+new file mode 100644
+index 0000000..7ec43d1
+--- /dev/null
++++ b/intelligence/detectors/tests/fixtures/expected-units/2026-09__ds_ordem.json
+@@ -0,0 +1,27 @@
++{
++  "schema_version": "1.0.0",
++  "period": "2026-09",
++  "dataset_id": "ds_ordem",
++  "expected_units": [
++    {
++      "unit_id": "alecrim"
++    },
++    {
++      "unit_id": "bangu"
++    },
++    {
++      "unit_id": "belford_roxo"
++    },
++    {
++      "unit_id": "bezerra"
++    },
++    {
++      "unit_id": "bonsucesso"
++    }
++  ],
++  "provenance": {
++    "source_system": "fixture_teste",
++    "source_version": "2.0.0",
++    "content_hash": "8ae72a0a0f5f9439620c97d835541bf26db7bd13f324bc92b48c57daf1388771"
++  }
++}
+diff --git a/intelligence/docs/FASE_2_8_EXPECTED_UNITS_GOVERNANCE.md b/intelligence/docs/FASE_2_8_EXPECTED_UNITS_GOVERNANCE.md
+new file mode 100644
+index 0000000..1f3ce76
+--- /dev/null
++++ b/intelligence/docs/FASE_2_8_EXPECTED_UNITS_GOVERNANCE.md
+@@ -0,0 +1,226 @@
++# Fase 2.8 — `expected_units` governado
++
++Fecha o modelo do **denominador** da cobertura. A política já sabia como avaliar
++cobertura; faltava de onde vem a lista de unidades esperadas.
++
++A Política Creditum v1 **não mudou**. SHA-256 continua
++`db7a880b1d9ab357b2c2d46ddedf712699cfd351488e24482b1cd03832167a73`.
++
++## 1. Estado
++
++| | estado |
++| --- | --- |
++| Política Creditum v1 | **COMPLETA / SHIP** |
++| Modelo de `expected_units` | **`period` + `dataset_id` + `unit_id`** |
++| Dados reais de `expected_units` | **AINDA NÃO DISPONÍVEIS** |
++| Catálogo ativo | **NÃO é denominador** |
++| Unidades observadas | **NÃO são denominador** |
++
++## 2. Duas autoridades, dois artefatos
++
++`expected_units` é **dado**, não configuração.
++
++| artefato | decide |
++| --- | --- |
++| `governance/policy/creditum-policy.v1.json` | limiares e semântica de cobertura |
++| `governance/expected-units/{period}__{dataset_id}.json` | membership operacional |
++
++Enfiar membership na política faria o arquivo de decisões de negócio mudar todo
++mês, e o hash da política deixaria de significar "as decisões da Creditum" para
++significar "as decisões mais o mês corrente".
++
++## 3. O schema
++
++```json
++{
++  "schema_version": "1.0.0",
++  "period": "2026-08",
++  "dataset_id": "ds_vendas_mensal",
++  "expected_units": [{ "unit_id": "mogi" }, { "unit_id": "santos" }],
++  "provenance": {
++    "source_system": "nome_governado",
++    "source_version": "1.0.0",
++    "content_hash": "<sha256 do material da membership>"
++  }
++}
++```
++
++`period` é `AAAA-MM` estrito. `"agosto"`, `"08/2026"`, `2026-8`, `2026-13`, um
++timestamp — todos recusados. Normalização de data é onde nascem os fusos errados, e
++o período aqui é etiqueta civil, não instante.
++
++`dataset_id` é **obrigatório**. Não existe membership global: Leonardo e Lucas
++podem ter expectativas diferentes no mesmo mês, e um denominador compartilhado
++misturaria universos.
++
++`unit_id` usa a `UnitId` governada do D13. Nome cru de fonte não entra — `"Grau
++Mogi"` e `mogi` não são comparáveis, e comparar ingenuamente contaria a mesma
++unidade como ausente.
++
++## 4. Regras fail-closed
++
++| condição | resultado |
++| --- | --- |
++| `unit_id` fora do catálogo governado | recusa |
++| `unit_id` duplicado em `period + dataset_id` | recusa — **nunca deduplicado** |
++| `expected_units` vazio | recusa |
++| `period` / `dataset_id` / `schema_version` inválidos | recusa |
++| procedência incompleta | recusa |
++| `content_hash` divergente da membership | recusa |
++| arquivo do provider ausente | `DATA_NOT_AVAILABLE` |
++| JSON corrompido | recusa — **corrupção é defeito, não ausência** |
++
++Duplicata não é deduplicada porque deduplicar esconderia um erro de origem que
++alguém precisa corrigir — e infla o denominador silenciosamente.
++
++Lista vazia é recusada porque **ausência de dado não é "zero unidades
++esperadas"**. Uma é afirmação sobre o sistema, a outra sobre o negócio. A v1 não
++tem forma governada de declarar zero expectativa, e inferi-la de uma lista vazia
++produziria `EMPTY_DENOMINATOR` disfarçado de `ok`.
++
++## 5. `content_hash` cobre a membership, não os bytes
++
++Primeira tentativa: hash do arquivo inteiro. Não funciona — o arquivo contém o
++campo `content_hash`, e um hash que contém a si mesmo não tem ponto fixo.
++
++O hash cobre o **material canônico**: `schema_version`, `period`, `dataset_id` e a
++lista **ordenada**. Consequências desejadas: reindentar o JSON ou reordenar a lista
++não invalida o artefato, porque não mudam a membership; trocar uma unidade
++invalida, porque muda.
++
++## 6. Provider
++
++```ts
++interface ExpectedUnitsProvider {
++  getExpectedUnits(q: { period: string; dataset_id: string }): ExpectedUnitsLookup
++}
++
++type ExpectedUnitsLookup =
++  | { status: "available"; membership: GovernedExpectedUnits }
++  | { status: "DATA_NOT_AVAILABLE"; period; dataset_id; detail }
++```
++
++União discriminada: ausência tem ramo próprio e **nunca** é `[]`.
++
++Síncrona porque o único provider que existe lê arquivo versionado. Uma `Promise`
++obrigaria todo consumidor a ser assíncrono por causa de um storage que ainda não
++foi decidido — trocar por Supabase depois é trocar a implementação, não a lógica
++de cobertura.
++
++`FileExpectedUnitsProvider` valida `period` e `dataset_id` **antes** de montar
++caminho: um `dataset_id` com `/` ou `..` seria travessia de diretório.
++
++### O diretório de produção está vazio, e isso é o estado correto
++
++`governance/expected-units/` contém só o README do formato.
++`PRODUCTION_EXPECTED_UNITS_PROVIDER` aponta para ele e responde
++`DATA_NOT_AVAILABLE` para todo período e dataset. Não é stub: é o provider real
++sobre a fonte real, que está vazia porque os dados não existem.
++
++As fixtures de teste vivem em `detectors/tests/fixtures/` e
++`integration/tests/fixtures/`. São TEST_ONLY.
++
++## 7. Cobertura
++
++```
++expected_count             tamanho da membership
++observed_expected_count    esperadas que reportaram
++missing_unit_ids           esperadas que não reportaram, NOMEADAS
++missing_count              quantas
++missing_share_bp           piso da divisão exata, em bp inteiros
++ratio_bp                   complemento exato: as duas somam 10000 sempre
++unexpected_observed_unit_ids   observadas sem serem esperadas
++```
++
++Aritmética inteira. `missing_share_bp` e `ratio_bp` são complementos exatos, sem
++arredondamento independente que pudesse discordar de si mesmo no limite.
++
++A qualidade segue a política já aprovada, com o limiar vindo dela por parâmetro:
++
++```
++ausente = 0                      → ok
++ausente >= 1 e share < limiar    → degraded
++share >= limiar                  → insufficient
++```
++
++`conflicted` continua prevalecendo no lattice; a precedência é do chamador.
++
++### Observadas extras não entram no denominador
++
++Uma unidade que reportou sem ser esperada é fato de governança — talvez a
++expectativa esteja desatualizada, talvez o dado esteja errado — e decidir isso não
++é papel de um cálculo. Ela é preservada em `unexpected_observed_unit_ids`, sem
++juízo de severidade ou materialidade.
++
++Somá-la ao denominador diluiria a ausência de quem faltou: 2 ausentes de 20 é 1000
++bp e `insufficient`; contando uma extra, 2 de 21 daria 952 bp e viraria `degraded`.
++Há teste para exatamente isso.
++
++## 8. As duas dimensões que não se sobrepõem
++
++**Ativa fora da lista não entra no denominador.** 20 esperadas com 44 ativas: se o
++denominador fossem as ativas, 20 de 44 daria 5455 bp de ausência e todo período
++pareceria catastrófico para sempre.
++
++**Inativa explicitamente esperada ENTRA no denominador.** Status de catálogo e
++expectativa do período são dimensões separadas. Se o dado governado declara que a
++unidade era esperada, ela conta — e se não reportou, é ausente. O código não
++sobrescreve o dado governado usando `active = false`.
++
++## 9. Reingestão e versão
++
++`membership_id` é identidade estrutural sobre `period`, `dataset_id` e a lista
++ordenada. Mesma membership em ordem diferente tem o mesmo id; membership diferente
++tem id diferente. É o que torna uma substituição silenciosa detectável, junto com
++o `content_hash`.
++
++Membership diferente exige `source_version` nova. Trocar a lista sem atualizar a
++procedência é recusa.
++
++## 10. Testes
++
++| suíte | testes |
++| --- | --- |
++| `expected-units` (nova) | **64** |
++| `production-config-e2e` | 40 → **48** |
++| A / B / C / D / low-ticket / production-policy | 173 / 91 / 200 / 157 / 84 / 160 — inalterados |
++
++Cobrem §21 A–O: as cinco fronteiras de qualidade, ativa-não-esperada,
++inativa-esperada, extras observadas, id desconhecido, duplicata,
++`DATA_NOT_AVAILABLE`, ausência de fallback para catálogo e para observado,
++determinismo de ordem e imutabilidade profunda.
++
++**Mutação — quatro mutantes, todos mortos:**
++
++| Mutante | Resultado |
++| --- | --- |
++| `expected` = todas as ativas do catálogo | suíte não carrega: `content_hash` recusa; e 14 testes de denominador |
++| dado ausente vira `[]` | 6 testes |
++| `expected` = observado | 14 testes |
++| inativa esperada filtrada fora | suíte não carrega: `content_hash` recusa |
++
++Dois mutantes morrem no `content_hash` antes de chegar à asserção, porque alterar
++a membership derivada quebra a procedência. É defesa a mais, não a menos — e os
++testes de denominador matam a variante que não toca o hash.
++
++## 11. Storage futuro
++
++Não decidido. A interface permite trocar o provider sem alterar a lógica de
++cobertura, e é isso que a fase entrega. Supabase, arquivo governado ou outra fonte
++é decisão para quando existir fonte real.
++
++## 12. Blockers depois da 2.8
++
++1. **Dados reais de `expected_units`** — o modelo, o schema, o validador, o
++   provider e a cobertura existem. Falta a membership operacional, que é dado de
++   negócio e ninguém pode inventar.
++2. **Leonardo → Supabase** — tabela/view/schema/`as_of` reais.
++3. **Lucas → arquivo mensal** — contrato de arquivo, storage, provider.
++4. **Briefing determinístico** — engenharia, dependente da decisão de read-model.
++5. **Hermes read-model** — não iniciado, por decisão.
++
++## 13. Verificação
++
++`npm run verify`: schemas ✓, lint ✓, typecheck ✓, **1705 testes / 29 arquivos**.
++Portal `tsc --noEmit` limpo, portal 182, motor CEO 182. Fases 2.6c e 2.7
++preservadas; A/B/C/D sem regressão.
+diff --git a/intelligence/governance/expected-units/README.md b/intelligence/governance/expected-units/README.md
+new file mode 100644
+index 0000000..acd027c
+--- /dev/null
++++ b/intelligence/governance/expected-units/README.md
+@@ -0,0 +1,82 @@
++# `expected_units` — dados governados de membership
++
++Este diretório é a fonte de produção do **denominador** da cobertura.
++
++Ele está **vazio de dados**, e isso é o estado correto: as memberships reais não
++existem ainda. Enquanto estiver vazio, `PRODUCTION_EXPECTED_UNITS_PROVIDER`
++responde `DATA_NOT_AVAILABLE` para todo período e dataset, e a cobertura de
++produção falha fechado.
++
++Não preencher com aproximação. Um denominador fabricado produz um número
++executivo falso que ninguém tem como questionar.
++
++## Formato
++
++Um arquivo por `period` + `dataset_id`:
++
++```
++{period}__{dataset_id}.json
++```
++
++Por exemplo: `2026-08__ds_vendas_mensal.json`.
++
++```json
++{
++  "schema_version": "1.0.0",
++  "period": "2026-08",
++  "dataset_id": "ds_vendas_mensal",
++  "expected_units": [
++    { "unit_id": "mogi" },
++    { "unit_id": "santos" }
++  ],
++  "provenance": {
++    "source_system": "nome_governado_da_fonte",
++    "source_version": "1.0.0",
++    "content_hash": "<sha256 do próprio arquivo, hex minúsculo>"
++  }
++}
++```
++
++## Regras que o validador aplica
++
++| condição | resultado |
++| --- | --- |
++| `period` fora de `AAAA-MM` | recusa |
++| `dataset_id` ausente ou fora da forma de identificador | recusa |
++| `unit_id` fora do catálogo governado D13 | recusa |
++| `unit_id` duplicado no mesmo `period + dataset_id` | recusa — nunca deduplicado |
++| `expected_units` vazio | recusa — ausência é `DATA_NOT_AVAILABLE`, não lista vazia |
++| `content_hash` divergente do conteúdo | recusa |
++| `period`/`dataset_id` do arquivo divergentes da consulta | recusa |
++| arquivo ausente | `DATA_NOT_AVAILABLE` |
++| JSON corrompido | recusa — corrupção é defeito, não ausência |
++
++Unidade com `status: inactive` no catálogo **pode** constar aqui. Status de
++catálogo e expectativa do período são dimensões separadas: se o dado governado
++declara que a unidade era esperada, ela entra no denominador — e se não reportou,
++conta como ausente.
++
++## Como calcular o `content_hash`
++
++```bash
++python3 - <<'PY'
++import hashlib, json, pathlib, sys
++p = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else "arquivo.json")
++d = json.loads(p.read_text())
++d["provenance"]["content_hash"] = "0" * 64
++# Grave, então recalcule sobre os bytes finais e substitua.
++PY
++```
++
++O hash é do arquivo inteiro como ele fica em disco, incluindo o campo
++`content_hash` já preenchido — grave o arquivo, calcule `shasum -a 256`, e escreva
++o valor. O validador recalcula e compara.
++
++**Nota:** o hash serve à procedência. `unit_id` é governado pelo D13 e nunca
++derivado de hash.
++
++## Trocar de membership é mudança governada
++
++Membership diferente exige `source_version` nova. O `membership_id` — identidade
++estrutural sobre `period`, `dataset_id` e a lista ordenada — muda junto, e é o que
++torna uma substituição silenciosa detectável.
+diff --git a/intelligence/integration/tests/fixtures/expected-units/2026-08__ds_vendas_mensal.json b/intelligence/integration/tests/fixtures/expected-units/2026-08__ds_vendas_mensal.json
+new file mode 100644
+index 0000000..8457f72
+--- /dev/null
++++ b/intelligence/integration/tests/fixtures/expected-units/2026-08__ds_vendas_mensal.json
+@@ -0,0 +1,21 @@
++{
++  "schema_version": "1.0.0",
++  "period": "2026-08",
++  "dataset_id": "ds_vendas_mensal",
++  "expected_units": [
++    {
++      "unit_id": "mogi"
++    },
++    {
++      "unit_id": "santos"
++    },
++    {
++      "unit_id": "sao_jose_do_rio_preto"
++    }
++  ],
++  "provenance": {
++    "source_system": "harness_fixture",
++    "source_version": "1.0.0",
++    "content_hash": "bce90186f354d882df3518cdbb121e8731b2dbce42161b72997e26d06fad00b6"
++  }
++}
+diff --git a/intelligence/integration/tests/fixtures/expected-units/2026-09__ds_vendas_mensal.json b/intelligence/integration/tests/fixtures/expected-units/2026-09__ds_vendas_mensal.json
+new file mode 100644
+index 0000000..277b200
+--- /dev/null
++++ b/intelligence/integration/tests/fixtures/expected-units/2026-09__ds_vendas_mensal.json
+@@ -0,0 +1,24 @@
++{
++  "schema_version": "1.0.0",
++  "period": "2026-09",
++  "dataset_id": "ds_vendas_mensal",
++  "expected_units": [
++    {
++      "unit_id": "mogi"
++    },
++    {
++      "unit_id": "santos"
++    },
++    {
++      "unit_id": "sao_jose_do_rio_preto"
++    },
++    {
++      "unit_id": "alecrim"
++    }
++  ],
++  "provenance": {
++    "source_system": "harness_fixture",
++    "source_version": "1.0.0",
++    "content_hash": "c202227ee5ac1d5f7b9f56ab582d0779b43838fbd48b4d835a122e657aa320e8"
++  }
++}
+diff --git a/intelligence/integration/tests/production-config-e2e.test.ts b/intelligence/integration/tests/production-config-e2e.test.ts
+new file mode 100644
+index 0000000..5c33679
+--- /dev/null
++++ b/intelligence/integration/tests/production-config-e2e.test.ts
+@@ -0,0 +1,933 @@
++/**
++ * Harness de PRODUÇÃO — artefato governado → configuração → quatro detectores.
++ *
++ * A diferença em relação a `end-to-end.test.ts` é a única que importa aqui:
++ * **nenhum limiar sintético**. A configuração vem de
++ * `buildProductionDetectorConfig()`, que projeta
++ * `governance/policy/creditum-policy.v1.json`. O catálogo é o governado (D13
++ * completo), não um subconjunto de teste.
++ *
++ * Este arquivo NÃO importa `TEST_CONFIG`, e há um teste que prova isso lendo o
++ * próprio fonte. É a única forma de garantir que a prova não se contamine com o
++ * que ela deveria estar substituindo: um `import` esquecido passaria despercebido
++ * num arquivo deste tamanho.
++ *
++ * O que é sintético aqui é o DADO — quinze vendas em memória, sem rede nem
++ * disco. Dado de fixture e política de negócio são coisas diferentes: a política
++ * é governada, os números de venda são inventados para exercitar os limiares dela.
++ *
++ * A cadeia provada:
++ *
++ *   artefato de política → ProductionDetectorConfig
++ *   lote bruto → D13 governado → snapshot/evidência → store
++ *   → Detector A → Detector B → Detector C → Detector D → low-ticket
++ *
++ * Cada detector consome só os campos que são dele. Nenhum lê a configuração de
++ * outro, e há teste para isso.
++ */
++
++import { readFileSync } from "node:fs"
++import { fileURLToPath } from "node:url"
++import { describe, expect, it } from "vitest"
++import {
++  CREDITUM_POLICY_V1,
++  buildFirstDueExecutionConfig,
++  buildProductionDetectorConfig,
++  productionFirstDueContext,
++  productionNextNDays,
++  productionFirstDueWindows,
++} from "../../detectors/src/production-policy"
++import { GatewayError } from "../../gateway/src/errors"
++import { InMemoryStore } from "../../gateway/src/store"
++import { toEvidence, toSnapshot } from "../../gateway/src/factory"
++import type { Evidence, Snapshot } from "../../gateway/src/types"
++import { buildUnitIndex } from "../../detectors/src/canonical-units"
++import type { CanonicalUnitResult } from "../../detectors/src/canonical-units"
++import type { DetectorConfig } from "../../detectors/src/config"
++import { ENGINE_UNIT_NORMALIZER } from "../../detectors/src/unit-normalizer"
++import { COUNTERFACTUAL_PROVENANCE_VERSION } from "../../detectors/src/counterfactual-provenance"
++import type { ComputedEvidenceProvenance } from "../../detectors/src/counterfactual-provenance"
++import { detectInstallmentConcentration } from "../../detectors/src/installment-concentration"
++import { detectCrossSourceConflicts } from "../../detectors/src/cross-source-conflict"
++import {
++  detectFirstDueDateConcentration,
++  firstDueComputationId,
++} from "../../detectors/src/first-due-date-concentration"
++import {
++  counterfactualComputationId,
++  detectMaterialSingleCase,
++} from "../../detectors/src/material-single-case"
++import { detectLowTicketContracts } from "../../detectors/src/low-ticket"
++import { isOk } from "../../detectors/src/engine"
++import {
++  GOVERNED_UNIT_CATALOG,
++  canonicalizeWithGroups,
++  toUnitCatalog,
++} from "../../detectors/src/unit-catalog"
++import {
++  assessCoverage,
++  coverageQuality,
++  toUnitCoverage,
++} from "../../detectors/src/expected-units"
++import {
++  FileExpectedUnitsProvider,
++  PRODUCTION_EXPECTED_UNITS_PROVIDER,
++} from "../../detectors/src/expected-units-file-provider"
++import { rawEvidence, rawSnapshot } from "../../gateway/tests/helpers"
++import type { RawBatch, RawRow } from "../src/ports"
++
++// ═════════════════════════════════════════════════════════════════════════════
++// A configuração de produção — projetada, não escrita
++// ═════════════════════════════════════════════════════════════════════════════
++
++const PROD = buildProductionDetectorConfig()
++
++// ═════════════════════════════════════════════════════════════════════════════
++// D13 governado
++// ═════════════════════════════════════════════════════════════════════════════
++
++const INDICE = buildUnitIndex(toUnitCatalog(GOVERNED_UNIT_CATALOG), ENGINE_UNIT_NORMALIZER)
++
++const canonicalizar = (bruto: unknown): CanonicalUnitResult =>
++  canonicalizeWithGroups(
++    bruto,
++    INDICE,
++    ENGINE_UNIT_NORMALIZER,
++    // O limiar de similaridade também vem da política projetada.
++    { similarityThresholdBp: PROD.similarity_threshold_bp },
++    GOVERNED_UNIT_CATALOG.groups,
++  )
++
++// ═════════════════════════════════════════════════════════════════════════════
++// Lote bruto em memória
++// ═════════════════════════════════════════════════════════════════════════════
++
++const PERIODO = { start: "2026-08-01", end: "2026-08-31" } as const
++const OBSERVED_AT = "2026-08-31T23:00:00.000Z"
++const COLLECTED_AT = "2026-09-01T02:00:00.000Z"
++/** O relógio é ENTRADA. Nenhum detector chama `Date.now()`. */
++const DETECTED_AT = "2026-09-01T09:00:00.000Z"
++
++const DATASET = { source_system: "google_sheets", dataset_id: "ds_vendas_mensal" } as const
++const SNAPSHOT_ID = "snap_prod_2026_08"
++
++interface LinhaVenda {
++  readonly row: string
++  readonly unidade: unknown
++  readonly parcelas: number | null
++  readonly valor: number | null
++  readonly primeiro_vencimento: unknown
++}
++
++/**
++ * Quinze vendas — dimensionadas para os limiares APROVADOS, não para limiares
++ * sintéticos.
++ *
++ * A população mínima de produção é 10 contratos, então as sete linhas do harness
++ * sintético não sustentariam nenhuma afirmação aqui: com 7 o Detector A recusaria
++ * por amostra pequena, o que é o comportamento certo e não prova nada sobre a
++ * política. Quinze passa da amostra e ainda deixa margem para as fronteiras.
++ *
++ * Grafias como a planilha escreve: `Grau Mogi`, `Rio Preto`, data em `dd/MM/yyyy`
++ * e em ISO no mesmo lote, e um rótulo de agrupamento que o D13 não resolve.
++ */
++const VENDAS: readonly LinhaVenda[] = [
++  // Seis acima do limiar de 19 parcelas.
++  { row: "r1", unidade: "Grau Mogi", parcelas: 24, valor: 6_000_000, primeiro_vencimento: "04/09/2026" },
++  { row: "r2", unidade: "Mogi", parcelas: 24, valor: 1_500_000, primeiro_vencimento: "2026-09-04" },
++  { row: "r3", unidade: "Rio Preto", parcelas: 24, valor: 1_500_000, primeiro_vencimento: "04/09/2026" },
++  { row: "r4", unidade: "Santos", parcelas: 24, valor: 1_500_000, primeiro_vencimento: "2026-09-04" },
++  { row: "r5", unidade: "Santos", parcelas: 30, valor: 1_500_000, primeiro_vencimento: "04/09/2026" },
++  { row: "r6", unidade: "Grau Mogi", parcelas: 20, valor: 1_500_000, primeiro_vencimento: "2026-09-04" },
++  // Nove dentro do limiar. `r7` é o low-ticket: R$ 1.000, abaixo do piso.
++  { row: "r7", unidade: "Santos", parcelas: 12, valor: 100_000, primeiro_vencimento: "2026-09-20" },
++  { row: "r8", unidade: "Mogi", parcelas: 12, valor: 200_000, primeiro_vencimento: "20/09/2026" },
++  { row: "r9", unidade: "Santos", parcelas: 19, valor: 200_000, primeiro_vencimento: "2026-09-21" },
++  { row: "r10", unidade: "Rio Preto", parcelas: 12, valor: 200_000, primeiro_vencimento: "2026-09-22" },
++  { row: "r11", unidade: "Mogi", parcelas: 6, valor: 200_000, primeiro_vencimento: "2026-09-23" },
++  { row: "r12", unidade: "Santos", parcelas: 6, valor: 200_000, primeiro_vencimento: "2026-09-24" },
++  { row: "r13", unidade: "Rio Preto", parcelas: 12, valor: 200_000, primeiro_vencimento: "2026-09-25" },
++  { row: "r14", unidade: "Carpina e Limoeiro", parcelas: 12, valor: 200_000, primeiro_vencimento: "2026-09-26" },
++  { row: "r15", unidade: "Mogi", parcelas: 12, valor: 200_000, primeiro_vencimento: "2026-09-27" },
++]
++
++const ACIMA_DO_LIMIAR = 6
++const NO_ALVO_MESMO_DIA = 6
++
++const subjectRef = (row: string): string =>
++  `subj_${row.replace(/\D/g, "").padStart(16, "0").slice(0, 16)}`
++
++/** O contrato exige `^[a-f0-9]{64}$` — `r1` não é hex. Derivação determinística. */
++const hexRowKey = (row: string): string => row.replace(/\D/g, "").padStart(64, "0")
++
++function loteFalso(): RawBatch {
++  const rows: RawRow[] = VENDAS.map((l) => ({
++    row_key: l.row,
++    values: {
++      unidade: l.unidade,
++      parcelas: l.parcelas,
++      valor: l.valor,
++      primeiro_vencimento: l.primeiro_vencimento,
++    },
++  }))
++  return {
++    dataset: DATASET,
++    rows,
++    observed_at: OBSERVED_AT,
++    collected_at: COLLECTED_AT,
++    period_start: PERIODO.start,
++    period_end: PERIODO.end,
++    content_hash: "d".repeat(64),
++    rows_skipped: 0,
++  }
++}
++
++// ═════════════════════════════════════════════════════════════════════════════
++// Plano de ESCRITA
++// ═════════════════════════════════════════════════════════════════════════════
++
++interface Cadeia {
++  readonly snapshot: Snapshot
++  readonly evidence: readonly Evidence[]
++  readonly store: InMemoryStore
++  readonly canonicas: ReadonlyMap<string, CanonicalUnitResult>
++}
++
++function montarCadeia(): Cadeia {
++  const lote = loteFalso()
++
++  const snapshot = toSnapshot(
++    rawSnapshot({
++      snapshot_id: SNAPSHOT_ID,
++      source_system: lote.dataset.source_system,
++      dataset_id: lote.dataset.dataset_id,
++      period_start: lote.period_start,
++      period_end: lote.period_end,
++      observed_at: lote.observed_at,
++      ingested_at: lote.collected_at,
++      content_hash: lote.content_hash,
++      record_count: lote.rows.length,
++      rows_skipped: lote.rows_skipped,
++    }),
++    { now: new Date(DETECTED_AT) },
++  )
++
++  const evidencias = lote.rows.map((row) =>
++    toEvidence(
++      rawEvidence({
++        evidence_id: `ev_row_${row.row_key}`,
++        snapshot_id: SNAPSHOT_ID,
++        kind: "row",
++        locator: {
++          dataset_id: DATASET.dataset_id,
++          sheet: "Vendas",
++          row_key: hexRowKey(row.row_key),
++        },
++        observed_at: OBSERVED_AT,
++      }),
++      { now: new Date(DETECTED_AT) },
++    ),
++  )
++
++  // O store valida schema, semântica e integridade referencial no construtor —
++  // não há caminho que insira depois. `now` é ENTRADA: com o relógio real o
++  // fixture passaria hoje e falharia amanhã.
++  const store = new InMemoryStore(
++    { snapshots: [snapshot as unknown], evidence: evidencias as unknown[], events: [] },
++    { now: new Date(DETECTED_AT) },
++  )
++
++  return {
++    snapshot,
++    evidence: evidencias,
++    store,
++    canonicas: new Map(VENDAS.map((l) => [l.row, canonicalizar(l.unidade)])),
++  }
++}
++
++function evidenciaComputada(id: string, formula: string): Evidence {
++  return toEvidence(
++    rawEvidence({
++      evidence_id: id,
++      snapshot_id: SNAPSHOT_ID,
++      kind: "computed",
++      locator: { dataset_id: DATASET.dataset_id, sheet: "Vendas", column: "Valor" },
++      formula,
++      observed_at: OBSERVED_AT,
++    }),
++    { now: new Date(DETECTED_AT) },
++  )
++}
++
++const ancorar = (evidence_ref: string, computation_id: string): ComputedEvidenceProvenance => ({
++  evidence_ref,
++  computation_id,
++  provenance_version: COUNTERFACTUAL_PROVENANCE_VERSION,
++})
++
++const CADEIA = montarCadeia()
++
++const unidadeDe = (row: string): CanonicalUnitResult =>
++  CADEIA.canonicas.get(row) ?? { status: "unknown", raw_fingerprint: "0".repeat(16) }
++
++// ═════════════════════════════════════════════════════════════════════════════
++// §16 — a prova de que não há queda para TEST_CONFIG
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("§16 — a configuração é a de produção, e não existe fallback", () => {
++  /**
++   * Só as linhas de `import`, nunca o arquivo inteiro.
++   *
++   * A primeira versão deste teste procurava o nome no fonte todo e falhava
++   * contra a própria asserção e contra os comentários que explicam a regra. Um
++   * teste que se auto-detecta não distingue "importou" de "mencionou".
++   */
++  const IMPORTS = readFileSync(fileURLToPath(import.meta.url), "utf8")
++    .split("\n")
++    .filter((l) => /^\s*(import|export)\b/.test(l) || /^\s*\}\s*from\s/.test(l))
++    .join("\n")
++
++  it("este arquivo não importa configuração de teste", () => {
++    expect(IMPORTS).not.toMatch(/tests\/test-config/)
++    expect(IMPORTS).not.toMatch(/TEST_CONFIG|TEST_NORMALIZER|testCatalog/)
++  })
++
++  it("nem importa nada de dentro de `tests/` de outro pacote", () => {
++    // `gateway/tests/helpers` é a exceção conhecida: constrói objetos brutos
++    // para as factories, não carrega política nenhuma.
++    const suspeitos = IMPORTS.split("\n").filter(
++      (l) => l.includes("/tests/") && !l.includes("gateway/tests/helpers"),
++    )
++    expect(suspeitos).toEqual([])
++  })
++
++  it("a configuração usada é a projeção do artefato governado", () => {
++    expect(PROD).toEqual(buildProductionDetectorConfig())
++    expect(PROD.config_version).toBe(CREDITUM_POLICY_V1.policy_version)
++    // `0.0.0` é o marcador de sintético do projeto. Produção não é sintética.
++    expect(PROD.config_version).not.toBe("0.0.0")
++  })
++
++  it("nenhuma banda `info` atravessa: a escala aprovada começa em `low`", () => {
++    for (const escala of [
++      PROD.installmentConcentration.severity_scale,
++      PROD.firstDueConcentration.severity_scale,
++      PROD.materialSingleCase.severity_scale,
++      PROD.crossSourceConflict.severity_by_relative_bp,
++    ]) {
++      expect(escala.map((b) => b.severity)).not.toContain("info")
++    }
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// Detector A
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("Detector A sob a política de produção", () => {
++  const AGG = "ev_agg_parcelas"
++
++  const r = detectInstallmentConcentration(
++    {
++      detected_at: DETECTED_AT,
++      period_start: PERIODO.start,
++      period_end: PERIODO.end,
++      contracts: VENDAS.map((l) => ({
++        subject_ref: subjectRef(l.row),
++        unit: unidadeDe(l.row),
++        installment_count: l.parcelas,
++        amount_cents: l.valor,
++        evidence_refs: [`ev_row_${l.row}`],
++        snapshot_id: SNAPSHOT_ID,
++      })),
++      snapshots: [CADEIA.snapshot],
++      evidence: [
++        ...CADEIA.evidence,
++        evidenciaComputada(AGG, "count(elegiveis where installments > 19) / count(elegiveis)"),
++      ],
++      aggregate_evidence_ref: AGG,
++    },
++    PROD,
++  )
++
++  it("a amostra de 15 passa da população mínima aprovada de 10", () => {
++    expect(PROD.installmentConcentration.minimum_sample_size).toBe(10)
++    expect(r.summary.population.eligible_contracts).toBe(VENDAS.length)
++  })
++
++  it("o limiar aprovado de 19 governa: 19 parcelas fica fora, 20 entra", () => {
++    expect(PROD.installmentConcentration.installment_threshold).toBe(19)
++    expect(r.summary.population.contracts_above_threshold).toBe(ACIMA_DO_LIMIAR)
++  })
++
++  it("é material — e por dimensões aprovadas, nomeadas", () => {
++    expect(r.event).not.toBeNull()
++    // 6 contratos >= 5 casos relevantes; participação 4000 bp >= 1000 bp.
++    expect(PROD.installmentConcentration.material_count_above).toBe(5)
++    expect(PROD.installmentConcentration.material_share_count_bp).toBe(1000)
++  })
++
++  it("publica exatamente 5 contribuintes — a regra top_n aprovada", () => {
++    expect(r.event?.contributing_cases).toHaveLength(5)
++    const valores = r.event?.contributing_cases?.map((c) => c.contribution.amount_cents)
++    expect(valores).toEqual([6_000_000, 1_500_000, 1_500_000, 1_500_000, 1_500_000])
++  })
++
++  it("a severidade sai da escala aprovada, pela maior participação", () => {
++    expect(PROD.installmentConcentration.severity_strategy).toBe("max_available_participation")
++    expect(["low", "medium", "high", "critical"]).toContain(r.event?.severity)
++  })
++
++  it("não vaza texto cru de unidade nem consome campo de outro detector", () => {
++    const json = JSON.stringify(r)
++    expect(json).not.toContain("Grau Mogi")
++    expect(json).not.toContain("Carpina e Limoeiro")
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// Detector B
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("Detector B sob a política de produção", () => {
++  const outroSnapshot = toSnapshot(
++    rawSnapshot({
++      snapshot_id: "snap_prod_financeiro",
++      source_system: "omie",
++      dataset_id: "ds_financeiro_mensal",
++      period_start: PERIODO.start,
++      period_end: PERIODO.end,
++      observed_at: OBSERVED_AT,
++      ingested_at: COLLECTED_AT,
++    }),
++    { now: new Date(DETECTED_AT) },
++  )
++
++  const evOutro = toEvidence(
++    rawEvidence({
++      evidence_id: "ev_agg_omie",
++      snapshot_id: "snap_prod_financeiro",
++      kind: "aggregate",
++      locator: { dataset_id: "ds_financeiro_mensal", sheet: "Financeiro" },
++      observed_at: OBSERVED_AT,
++    }),
++    { now: new Date(DETECTED_AT) },
++  )
++
++  const evVendas = evidenciaComputada("ev_agg_contagem", "count(vendas do periodo)")
++
++  const disputa = (
++    field: string,
++    kind: "count" | "date",
++    a: unknown,
++    b: unknown,
++  ): ReturnType<typeof detectCrossSourceConflicts> =>
++    detectCrossSourceConflicts(
++      {
++        detected_at: DETECTED_AT,
++        period_start: PERIODO.start,
++        period_end: PERIODO.end,
++        disputes: [
++          {
++            field,
++            kind,
++            versions: [
++              {
++                source_system: DATASET.source_system,
++                snapshot_id: SNAPSHOT_ID,
++                evidence_ref: "ev_agg_contagem",
++                value: { status: "present", raw: a },
++              },
++              {
++                source_system: "omie",
++                snapshot_id: "snap_prod_financeiro",
++                evidence_ref: "ev_agg_omie",
++                value: { status: "present", raw: b },
++              },
++            ],
++          },
++        ],
++        snapshots: [CADEIA.snapshot, outroSnapshot],
++        evidence: [...CADEIA.evidence, evVendas, evOutro],
++      },
++      PROD,
++    )
++
++  it("15 vs 10 vendas: conflito material pela contagem aprovada de 5", () => {
++    const r = disputa("sales_count", "count", 15, 10)
++    expect(PROD.crossSourceConflict.material_absolute_count).toBe(5)
++    expect(r.events).toHaveLength(1)
++  })
++
++  it("15 vs 14: divergência existe e NÃO é material por contagem", () => {
++    const r = disputa("sales_count", "count", 15, 14)
++    // 1 < 5 na dimensão absoluta. A relativa é 1/15 = 667 bp < 1000 bp.
++    expect(r.events).toHaveLength(0)
++    expect(r.non_material).toHaveLength(1)
++  })
++
++  it("data divergente é conflito estrutural: tolerância zero, severidade medium", () => {
++    const r = disputa("sale_date", "date", "2026-08-04", "2026-08-05")
++    expect(CREDITUM_POLICY_V1.structural_tolerance_bp).toBe(0)
++    expect(r.events).toHaveLength(1)
++    expect(r.events[0]?.severity).toBe("medium")
++  })
++
++  it("o limiar de bp aprovado está na configuração e é distinto da tolerância", () => {
++    expect(PROD.crossSourceConflict.material_absolute_basis_points).toBe(1000)
++    expect(CREDITUM_POLICY_V1.numeric_tolerance_bp).toBe(200)
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// Detector C
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("Detector C sob a política de produção — AMBAS as janelas aprovadas", () => {
++  const AGG = "ev_agg_vencimento"
++  /**
++   * O `claim_set` é o conjunto de métricas que o Event publica, e ele MUDA com a
++   * janela: participação em valor entra quando é a base de severidade ou quando
++   * dispara materialidade, e nas duas execuções isso não é o mesmo. A provenance
++   * é conferida contra o alvo calculado, então cada execução ancora o seu.
++   */
++  const CLAIMS_MESMO_DIA = ["amount_cents", "contract_count", "share_amount_bp", "share_count_bp"]
++  const CLAIMS_SETE_DIAS = ["amount_cents", "contract_count", "share_count_bp"]
++
++  const contratos = VENDAS.map((l) => ({
++    subject_ref: subjectRef(l.row),
++    unit: unidadeDe(l.row),
++    first_due_date_raw: l.primeiro_vencimento,
++    amount_cents: l.valor,
++    evidence_refs: [`ev_row_${l.row}`],
++    snapshot_id: SNAPSHOT_ID,
++  }))
++
++  const rodar = (
++    cfg: DetectorConfig,
++    janela: { readonly mode: string; readonly days?: number },
++    alvo: { readonly inicio: string; readonly fim: string },
++    claims: readonly string[],
++    reference_date?: string,
++  ): ReturnType<typeof detectFirstDueDateConcentration> =>
++    detectFirstDueDateConcentration(
++      {
++        detected_at: DETECTED_AT,
++        period_start: PERIODO.start,
++        period_end: PERIODO.end,
++        contracts: contratos,
++        ...(reference_date === undefined ? {} : { reference_date }),
++        snapshots: [CADEIA.snapshot],
++        evidence: [...CADEIA.evidence, evidenciaComputada(AGG, "count(contratos no alvo)")],
++        aggregate_evidence_ref: AGG,
++        aggregate_provenance: [
++          ancorar(
++            AGG,
++            firstDueComputationId({
++              grouping_dimension: "first_due_date",
++              window_mode: janela.mode,
++              reference_date: reference_date ?? null,
++              target_start: alvo.inicio,
++              target_end: alvo.fim,
++              period_start: PERIODO.start,
++              period_end: PERIODO.end,
++              scope: [DATASET],
++              claim_set: [...claims],
++            }),
++          ),
++        ],
++      },
++      cfg,
++    )
++
++  // ── §1/§4: nada escolhe janela por conveniência ──
++
++  it("a configuração de produção NÃO traz janela nenhuma", () => {
++    expect(PROD.firstDueConcentration.window).toBeUndefined()
++  })
++
++  it("o Detector C RECUSA rodar sem janela explícita", () => {
++    // Não cai para `same_day` por ser a que dispensa reference_date. Recusa.
++    expect(() =>
++      rodar(PROD, { mode: "same_day" }, { inicio: "2026-09-04", fim: "2026-09-04" }, CLAIMS_MESMO_DIA),
++    ).toThrow(GatewayError)
++  })
++
++  it("as duas janelas executivas aprovadas estão disponíveis", () => {
++    expect(productionFirstDueWindows()).toEqual([
++      { mode: "same_day" },
++      { mode: "next_n_days", days: 7 },
++    ])
++    expect(productionFirstDueContext()).toEqual(["calendar_month"])
++  })
++
++  // ── Execução A: same_day ──
++
++  describe("execução `same_day`", () => {
++    const CFG = buildFirstDueExecutionConfig(CREDITUM_POLICY_V1, { window: "same_day" })
++    const r = rodar(
++      CFG,
++      { mode: "same_day" },
++      { inicio: "2026-09-04", fim: "2026-09-04" },
++      CLAIMS_MESMO_DIA,
++    )
++
++    it("a janela da execução é same_day", () => {
++      expect(CFG.firstDueConcentration.window).toEqual({ mode: "same_day" })
++    })
++
++    it("as duas grafias de data caem no MESMO dia civil", () => {
++      // `04/09/2026` e `2026-09-04` são a mesma data.
++      expect(r.summary.target?.contract_count).toBe(NO_ALVO_MESMO_DIA)
++    })
++
++    it("é material pela contagem aprovada de 5, e emite Event", () => {
++      expect(CFG.firstDueConcentration.material_count).toBe(5)
++      expect(r.event).not.toBeNull()
++    })
++
++    it("não precisou de reference_date: o alvo é um dia só", () => {
++      expect(r.summary.target?.window).toEqual({ start: "2026-09-04", end: "2026-09-04" })
++    })
++  })
++
++  // ── Execução B: next_n_days = 7, com reference_date de EXECUÇÃO ──
++
++  describe("execução `next_n_days = 7`", () => {
++    const REFERENCIA = "2026-09-20"
++    const CFG = buildFirstDueExecutionConfig(CREDITUM_POLICY_V1, {
++      window: "next_n_days",
++      reference_date: REFERENCIA,
++    })
++    // 20/09 + 6 dias corridos = 26/09, referência inclusive.
++    const r = rodar(
++      CFG,
++      { mode: "next_n_days", days: 7 },
++      { inicio: REFERENCIA, fim: "2026-09-26" },
++      CLAIMS_SETE_DIAS,
++      REFERENCIA,
++    )
++
++    it("a janela da execução é next_n_days com os 7 dias da política", () => {
++      expect(CFG.firstDueConcentration.window).toEqual({ mode: "next_n_days", days: 7 })
++    })
++
++    it("os 7 dias vêm da POLÍTICA; a reference_date vem da EXECUÇÃO", () => {
++      const janela = CFG.firstDueConcentration.window
++      expect(janela?.mode === "next_n_days" && janela.days).toBe(7)
++      // A data não está em lugar nenhum da política nem da configuração: ela é
++      // parâmetro de execução, e só aparece no alvo calculado.
++      expect(JSON.stringify(CREDITUM_POLICY_V1)).not.toContain(REFERENCIA)
++      expect(JSON.stringify(CFG)).not.toContain(REFERENCIA)
++      expect(r.summary.target?.window.start).toBe(REFERENCIA)
++    })
++
++    it("a janela cobre 20/09 a 26/09 — sete dias corridos, referência inclusive", () => {
++      expect(r.summary.target?.window).toEqual({ start: REFERENCIA, end: "2026-09-26" })
++    })
++
++    it("os oito contratos da janela entram — nenhum do dia 27", () => {
++      // r7 e r8 em 20/09; r9..r13 de 21 a 25; r14 em 26. Oito ao todo.
++      // r15 vence em 27/09 e fica fora: a janela é 20..26, sete dias corridos.
++      expect(r.summary.target?.contract_count).toBe(8)
++    })
++
++    it("a mesma população dá alvo DIFERENTE do same_day: a janela decide", () => {
++      const mesmoDia = buildFirstDueExecutionConfig(CREDITUM_POLICY_V1, { window: "same_day" })
++      const outro = rodar(
++        mesmoDia,
++        { mode: "same_day" },
++        { inicio: "2026-09-04", fim: "2026-09-04" },
++        CLAIMS_MESMO_DIA,
++      )
++      expect(outro.summary.target?.window).not.toEqual(r.summary.target?.window)
++    })
++  })
++
++  // ── §6: recusas ──
++
++  it("o N da execução vem do artefato governado, não de constante", () => {
++    // A execução escolhe QUAL janela e a partir de quando. Quantos dias é decisão
++    // governada, lida do artefato — nenhum código pina 7 nem o fabrica.
++    const janela = productionFirstDueWindows().find((j) => j.mode === "next_n_days")
++    expect(janela?.mode === "next_n_days" && janela.days).toBe(
++      productionNextNDays(),
++    )
++    expect(productionFirstDueWindows().filter((j) => j.mode === "next_n_days")).toHaveLength(1)
++  })
++
++  it("next_n_days sem reference_date válida é recusado", () => {
++    expect(() =>
++      buildFirstDueExecutionConfig(CREDITUM_POLICY_V1, {
++        window: "next_n_days",
++        reference_date: "",
++      }),
++    ).toThrow(GatewayError)
++  })
++
++  it("calendar_month é contexto: não é janela executável", () => {
++    expect(productionFirstDueWindows().map((j) => j.mode)).not.toContain("calendar_month")
++    expect(productionFirstDueContext()).toContain("calendar_month")
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// Detector D
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("Detector D sob a política de produção", () => {
++  const AGG = "ev_agg_soma"
++
++  const casos = VENDAS.map((l) => ({
++    subject_ref: subjectRef(l.row),
++    unit: unidadeDe(l.row),
++    amount_cents: l.valor,
++    evidence_refs: [`ev_row_${l.row}`],
++    snapshot_id: SNAPSHOT_ID,
++  }))
++
++  const bindings = casos.map((c) => ({
++    evidence_ref: `ev_cf_${c.subject_ref}`,
++    subject_ref: c.subject_ref,
++    metric: "amount_sum_cents" as const,
++    aggregator: "sum" as const,
++    operation: "exclude_subject" as const,
++    period_start: PERIODO.start,
++    period_end: PERIODO.end,
++    scope: [DATASET],
++  }))
++
++  const r = detectMaterialSingleCase(
++    {
++      detected_at: DETECTED_AT,
++      period_start: PERIODO.start,
++      period_end: PERIODO.end,
++      metric: "amount_sum_cents",
++      cases: casos,
++      snapshots: [CADEIA.snapshot],
++      evidence: [
++        ...CADEIA.evidence,
++        evidenciaComputada(AGG, "sum(amount_cents of all eligible cases)"),
++        ...bindings.map((b) =>
++          evidenciaComputada(b.evidence_ref, "sum(amount_cents ... except the subject case)"),
++        ),
++      ],
++      aggregate_evidence_ref: AGG,
++      counterfactual_bindings: bindings,
++      counterfactual_provenance: bindings.map((b) =>
++        ancorar(b.evidence_ref, counterfactualComputationId(b)),
++      ),
++    },
++    PROD,
++  )
++
++  it("a população após remoção respeita o mínimo aprovado de 10", () => {
++    expect(PROD.materialSingleCase.min_population_after_removal).toBe(10)
++    expect(r.summary.candidates_evaluated).toBe(VENDAS.length)
++  })
++
++  it("o caso de R$ 60 mil é material pela materialidade financeira aprovada", () => {
++    expect(PROD.materialSingleCase.material_absolute_delta_cents).toBe(5_000_000)
++    const dominante = r.evaluated.find((i) => isOk(i.delta) && i.delta.value === 6_000_000)
++    expect(dominante?.outcome).toBe("material")
++  })
++
++  it("a severidade continua em share_of_total_bp, nunca no delta relativo", () => {
++    expect(PROD.materialSingleCase.severity_dimension).toBe("share_of_total_bp")
++    expect(CREDITUM_POLICY_V1.single_case_severity_basis).toBe("share_of_total_bp")
++  })
++
++  it("o limiar relativo aprovado é 1000 bp, avaliado em magnitude", () => {
++    expect(PROD.materialSingleCase.material_relative_delta_bp).toBe(1000)
++    expect(CREDITUM_POLICY_V1.single_case_relative_delta_uses_magnitude).toBe(true)
++  })
++
++  it("cada caso carrega a identidade da SUA computação", () => {
++    const ids = r.evaluated.map((i) => i.counterfactual_computation_id)
++    expect(new Set(ids).size).toBe(ids.length)
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// Low-ticket
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("low-ticket sob a política de produção", () => {
++  const r = detectLowTicketContracts({
++    detected_at: DETECTED_AT,
++    period_start: PERIODO.start,
++    period_end: PERIODO.end,
++    contracts: VENDAS.map((l) => ({
++      subject_ref: subjectRef(l.row),
++      unit: unidadeDe(l.row),
++      ticket_cents: l.valor,
++      evidence_refs: [`ev_row_${l.row}`],
++      snapshot_id: SNAPSHOT_ID,
++    })),
++    snapshots: [CADEIA.snapshot],
++    evidence: [...CADEIA.evidence],
++  })
++
++  it("o piso aprovado é R$ 1.499,99 e a comparação é estritamente menor", () => {
++    expect(CREDITUM_POLICY_V1.low_ticket_floor_cents).toBe(149_999)
++  })
++
++  it("exatamente um contrato do lote está abaixo do piso", () => {
++    expect(r.assessed.filter((a) => a.matched)).toHaveLength(1)
++    expect(r.assessed.find((a) => a.matched)?.subject_ref).toBe(subjectRef("r7"))
++  })
++
++  it("o Event sai com a severidade aprovada `medium`", () => {
++    expect(r.events).toHaveLength(1)
++    expect(r.events[0]?.severity).toBe("medium")
++    expect(CREDITUM_POLICY_V1.low_ticket_severity).toBe("medium")
++  })
++
++  it("o piso de R$ 50 mil não interfere: R$ 2.000 fica acima do piso de ticket", () => {
++    const doisMil = r.assessed.find((a) => a.subject_ref === subjectRef("r8"))
++    expect(doisMil?.matched).toBe(false)
++    expect(doisMil?.verdict).toBe("AT_OR_ABOVE_FLOOR")
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// §17 — configuração montável não é dado disponível
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("§17 — expected_units continua sem fonte governada", () => {
++  it("a configuração monta; os dados de cobertura não existem", () => {
++    expect(() => buildProductionDetectorConfig()).not.toThrow()
++    expect(CREDITUM_POLICY_V1.expected_units_values_source).toBe("UNRESOLVED")
++  })
++
++  it("o catálogo ATIVO não é expected_units", () => {
++    const ativas = GOVERNED_UNIT_CATALOG.entries.filter((e) => e.status === "active")
++    expect(ativas.length).toBeGreaterThan(0)
++    // Nenhum detector recebeu `unit_coverage` neste harness, porque não há
++    // fonte governada de quais unidades eram esperadas no período. Inventar a
++    // lista a partir do catálogo ativo é exatamente o que a política proíbe.
++    expect(CREDITUM_POLICY_V1.expected_units_model).toEqual(["period", "dataset_id", "unit_id"])
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// Fase 2.8 §23 — cobertura com `expected_units` governado
++//
++// Duas provas distintas:
++//
++//   A. com fixture governada de TESTE, a cobertura opera conforme a Política v1;
++//   B. com o provider de PRODUÇÃO, que não tem dados, é DATA_NOT_AVAILABLE.
++//
++// A fixture NÃO é produção. Ela vive em `integration/tests/fixtures/` e existe
++// para provar que o caminho funciona quando o dado existir.
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("§23 — cobertura governada sobre expected_units", () => {
++  const FIXTURES = new URL("./fixtures/expected-units/", import.meta.url).pathname
++  const FIXTURE_PROVIDER = new FileExpectedUnitsProvider(FIXTURES, GOVERNED_UNIT_CATALOG)
++  const LIMIAR = CREDITUM_POLICY_V1.coverage_missing_share_insufficient_at_bp
++
++  /** As unidades que o lote de 15 vendas resolve pelo D13. Só as canonicalizadas. */
++  const OBSERVADAS = [
++    ...new Set(
++      VENDAS.map((l) => unidadeDe(l.row))
++        .filter((u): u is Extract<CanonicalUnitResult, { status: "matched" }> => u.status === "matched")
++        .map((u) => u.unit_id),
++    ),
++  ].sort((a, b) => (a < b ? -1 : 1))
++
++  it("o lote resolve três unidades governadas; `Carpina e Limoeiro` NÃO resolve", () => {
++    expect(OBSERVADAS).toEqual(["mogi", "santos", "sao_jose_do_rio_preto"])
++    // O rótulo de agrupamento fica ambíguo e não entra como unidade observada.
++    expect(unidadeDe("r14").status).toBe("ambiguous")
++  })
++
++  it("A — cobertura completa: membership de 3, as 3 reportaram", () => {
++    const r = FIXTURE_PROVIDER.getExpectedUnits({
++      period: "2026-08",
++      dataset_id: DATASET.dataset_id,
++    })
++    if (r.status !== "available") throw new Error("fixture ausente")
++    const a = assessCoverage(r.membership, OBSERVADAS)
++    expect(a.expected_count).toBe(3)
++    expect(a.missing_count).toBe(0)
++    expect(coverageQuality(a, LIMIAR)).toBe("ok")
++  })
++
++  it("A — uma esperada que não reportou torna a cobertura insuficiente", () => {
++    // 2026-09 espera 4: as três do lote mais `alecrim`, que não reporta.
++    // 1 de 4 = 2500 bp, bem acima do limiar de 1000.
++    const r = FIXTURE_PROVIDER.getExpectedUnits({
++      period: "2026-09",
++      dataset_id: DATASET.dataset_id,
++    })
++    if (r.status !== "available") throw new Error("fixture ausente")
++    const a = assessCoverage(r.membership, OBSERVADAS)
++    expect(a.expected_count).toBe(4)
++    expect(a.missing_unit_ids).toEqual(["alecrim"])
++    expect(a.missing_share_bp).toBe(2500)
++    expect(coverageQuality(a, LIMIAR)).toBe("insufficient")
++  })
++
++  it("A — a cobertura atravessa até o Detector A pela forma que ele já consome", () => {
++    const r = FIXTURE_PROVIDER.getExpectedUnits({
++      period: "2026-09",
++      dataset_id: DATASET.dataset_id,
++    })
++    if (r.status !== "available") throw new Error("fixture ausente")
++    const uc = toUnitCoverage(assessCoverage(r.membership, OBSERVADAS))
++    // 7500 bp de presença, abaixo do `minimum_coverage_bp` projetado (9001).
++    expect(uc.ratio_bp).toBe(7500)
++    expect(uc.ratio_bp).toBeLessThan(PROD.installmentConcentration.minimum_coverage_bp)
++  })
++
++  it("o denominador é a MEMBERSHIP, não as 44 ativas do catálogo", () => {
++    const ativas = GOVERNED_UNIT_CATALOG.entries.filter((e) => e.status === "active")
++    const r = FIXTURE_PROVIDER.getExpectedUnits({
++      period: "2026-08",
++      dataset_id: DATASET.dataset_id,
++    })
++    if (r.status !== "available") throw new Error("fixture ausente")
++    const a = assessCoverage(r.membership, OBSERVADAS)
++    expect(a.expected_count).toBe(3)
++    expect(a.expected_count).not.toBe(ativas.length)
++    // Se o denominador fossem as ativas, 3 de 44 seria 9318 bp de ausência e
++    // TODO período pareceria catastrófico para sempre.
++    expect(coverageQuality(a, LIMIAR)).toBe("ok")
++  })
++
++  it("B — o provider de PRODUÇÃO não tem dados: DATA_NOT_AVAILABLE", () => {
++    for (const period of ["2026-08", "2026-09"]) {
++      const r = PRODUCTION_EXPECTED_UNITS_PROVIDER.getExpectedUnits({
++        period,
++        dataset_id: DATASET.dataset_id,
++      })
++      expect(r.status, period).toBe("DATA_NOT_AVAILABLE")
++    }
++  })
++
++  it("B — a fixture NÃO é o provider de produção", () => {
++    const fixture = FIXTURE_PROVIDER.getExpectedUnits({
++      period: "2026-08",
++      dataset_id: DATASET.dataset_id,
++    })
++    const producao = PRODUCTION_EXPECTED_UNITS_PROVIDER.getExpectedUnits({
++      period: "2026-08",
++      dataset_id: DATASET.dataset_id,
++    })
++    expect(fixture.status).toBe("available")
++    expect(producao.status).toBe("DATA_NOT_AVAILABLE")
++  })
++
++  it("§15 — sem membership, os detectores rodam SEM cobertura, não com denominador inventado", () => {
++    // `unit_coverage` é opcional nos detectores. Ausente significa "não avaliada",
++    // e é isso que produção faz hoje — nunca uma cobertura fabricada.
++    const producao = PRODUCTION_EXPECTED_UNITS_PROVIDER.getExpectedUnits({
++      period: "2026-08",
++      dataset_id: DATASET.dataset_id,
++    })
++    expect(producao.status).toBe("DATA_NOT_AVAILABLE")
++    expect(JSON.stringify(producao)).not.toContain("expected_count")
++    expect(JSON.stringify(producao)).not.toContain("ratio_bp")
++  })
++})

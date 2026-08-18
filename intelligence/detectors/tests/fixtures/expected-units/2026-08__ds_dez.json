@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0.0",
+  "period": "2026-08",
+  "dataset_id": "ds_dez",
+  "expected_units": [
+    {
+      "unit_id": "alecrim"
+    },
+    {
+      "unit_id": "bangu"
+    },
+    {
+      "unit_id": "belford_roxo"
+    },
+    {
+      "unit_id": "bezerra"
+    },
+    {
+      "unit_id": "bonsucesso"
+    },
+    {
+      "unit_id": "camaragibe"
+    },
+    {
+      "unit_id": "cariacica"
+    },
+    {
+      "unit_id": "carpina"
+    },
+    {
+      "unit_id": "curitiba"
+    },
+    {
+      "unit_id": "diadema"
+    }
+  ],
+  "provenance": {
+    "source_system": "fixture_teste",
+    "source_version": "1.0.0",
+    "content_hash": "fcdcd6101043b3ec16c9cc523e78458fe58bda57fa8e17530a6b9ce61aab3b38"
+  }
+}

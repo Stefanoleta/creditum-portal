@@ -1,0 +1,141 @@
+{
+  "schema_version": "1.0.0",
+  "policy_version": "1.0.0",
+  "approved_in": "FASE_2_7",
+  "description": "Politica Creditum v1. Fonte governada unica dos valores de producao. Nao existe DEFAULT_CONFIG em TypeScript; o runtime projeta este artefato ou falha fechado.",
+  "materiality": {
+    "relevant_participation_bp": 1000,
+    "financial_materiality_cents": 5000000,
+    "financial_materiality_status": "approved_initial_calibratable",
+    "relevant_case_count": 5,
+    "minimum_population_contracts": 10,
+    "semantics": "OR",
+    "semantics_note": "Uma ocorrencia e material quando QUALQUER dimensao aplicavel e calculavel satisfaz seu threshold. Dimensao nao aplicavel ao detector nao e fabricada."
+  },
+  "severity_bands": [
+    {
+      "at_least_bp": 0,
+      "severity": "low"
+    },
+    {
+      "at_least_bp": 1000,
+      "severity": "medium"
+    },
+    {
+      "at_least_bp": 2500,
+      "severity": "high"
+    },
+    {
+      "at_least_bp": 5000,
+      "severity": "critical"
+    }
+  ],
+  "low_ticket": {
+    "floor_cents": 149999,
+    "comparison": "strictly_less_than",
+    "severity": "medium",
+    "severity_note": "FIXA para a regra low-ticket v1. Nao deriva das bandas percentuais gerais, nem de R$50.000, 10%, 5 casos ou populacao 10."
+  },
+  "coverage": {
+    "missing_share_insufficient_at_bp": 1000,
+    "note": "missing=0 -> ok. missing>=1 com missing_share<1000bp -> degraded. missing_share>=1000bp -> insufficient. Precedencia do lattice ok<degraded<insufficient<conflicted e preservada."
+  },
+  "source_disagreement": {
+    "numeric_tolerance_bp": 200,
+    "structural_tolerance_bp": 0,
+    "structural_fields": [
+      "sale_date",
+      "first_due_date",
+      "unit_id",
+      "contract_id"
+    ]
+  },
+  "first_due_windows": {
+    "approved_event_windows": [
+      {
+        "mode": "same_day"
+      },
+      {
+        "mode": "next_n_days",
+        "days": 7
+      }
+    ],
+    "context": [
+      "calendar_month"
+    ],
+    "day_basis": "civil_calendar_days",
+    "day_basis_note": "Dias civis/corridos. Business days e feriados sao proibidos enquanto nao houver calendario governado.",
+    "note": "As janelas EXECUTIVAS aprovadas sao duas, e a lista e um CONJUNTO: a ordem nao carrega significado. Nenhuma delas e padrao. A execucao escolhe explicitamente qual janela avalia; next_n_days exige reference_date como parametro de EXECUCAO, nunca valor de politica.",
+    "context_note": "calendar_month e CONTEXTO de leitura, nao janela executiva. Nao gera Event proprio."
+  },
+  "single_case_aggregators": [
+    "amount_sum_cents",
+    "amount_mean_cents",
+    "case_count"
+  ],
+  "expected_units": {
+    "model": [
+      "period",
+      "dataset_id",
+      "unit_id"
+    ],
+    "values_source": "UNRESOLVED",
+    "note": "O MODELO esta aprovado. Os VALORES nao existem em fonte governada. Catalogo ativo NAO e expected_units. Sem os dados, a avaliacao de cobertura de producao falha fechado."
+  },
+  "detector_severity": {
+    "installment_concentration": {
+      "severity_strategy": "max_available_participation",
+      "candidates": [
+        "share_count_bp",
+        "share_amount_bp"
+      ],
+      "tie_break_dimension": "share_amount_bp",
+      "note": "Usa a MAIOR participacao governada valida. Empate resolve para valor: numericamente as duas sao iguais no empate, entao a escolha so define o rotulo publicado. Ordem de entrada nunca decide."
+    },
+    "first_due_concentration": {
+      "severity_strategy": "max_available_participation",
+      "candidates": [
+        "share_count_bp",
+        "share_amount_bp"
+      ],
+      "tie_break_dimension": "share_amount_bp",
+      "note": "Mesma estrategia do Detector A."
+    },
+    "material_single_case": {
+      "severity_strategy": "share_of_total_when_applicable",
+      "basis": "share_of_total_bp",
+      "note": "Somente quando share_of_total_bp tem semantica real de parte-do-todo. relative_delta_bp NAO e participacao: pode ser negativo e passar de 10000 bp. Sem base aplicavel, o fato sobrevive e o Event nao sai."
+    },
+    "cross_source_conflict": {
+      "structural_severity": "medium",
+      "note": "Regra QUALITATIVA fixa para campos estruturais de tolerancia zero (data civil, ID canonico, identidade de unidade). Nao e calculada da tolerancia de 2%. Nao vaza para conflito numerico, que mantem a base relativa existente."
+    }
+  },
+  "detector_config": {
+    "note": "Campos que os detectores exigem e que a politica decide. Separado de detector_severity porque severidade e uma pergunta distinta de materialidade e de apresentacao.",
+    "engine": {
+      "business_timezone": "America/Sao_Paulo",
+      "similarity_threshold_bp": 8000,
+      "note": "RELOCADOS, nao decididos aqui: valores identicos aos aprovados em fases anteriores (APPROVED_THRESHOLDS/BUSINESS_TIMEZONE). Passam a viver no artefato para que a projecao de producao nao injete valor de negocio via TypeScript."
+    },
+    "installment_concentration": {
+      "installment_threshold": 19,
+      "installment_comparison": "strictly_greater_than",
+      "installment_threshold_note": "RELOCADO: briefing do Bloco 1, \u00a714 Caso A. Valor inalterado.",
+      "contributing_case_rule": {
+        "strategy": "top_n",
+        "top_n": 5,
+        "note": "Parametro de EXPLICACAO/EVIDENCE do Event: quantos contribuintes o Event publica, segundo a ordenacao ja governada do Detector A. NAO e materiality.relevant_case_count. Os dois valem 5 na Politica v1 e permanecem campos independentes: um pode mudar sem o outro."
+      }
+    },
+    "cross_source_conflict": {
+      "material_absolute_basis_points": 1000,
+      "note": "1000 bp = 10 PONTOS PERCENTUAIS de diferenca absoluta, aplicavel somente quando a metrica comparada ja e governadamente expressa em basis points. NAO e a tolerancia de conflito: source_disagreement.numeric_tolerance_bp = 200 decide equal/conflict por divergencia RELATIVA. Nenhum dos dois substitui o outro."
+    },
+    "material_single_case": {
+      "material_relative_delta_bp": 1000,
+      "relative_delta_materiality_uses_magnitude": true,
+      "note": "Mudanca contrafactual relativa de 10% ou mais EM MAGNITUDE e material por esta dimensao. A avaliacao usa abs(relative_delta_bp); o valor ASSINADO original e preservado no resultado e na evidencia. A autorizacao de magnitude vale SO para esta dimensao de materialidade: severidade continua em share_of_total_bp."
+    }
+  }
+}

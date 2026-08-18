@@ -1,0 +1,74 @@
+{
+  "snapshot_id": "snap_2026_08_sales",
+  "schema_version": "1.0.0",
+  "source_system": "google_sheets",
+  "dataset_id": "sintetico-vendas-agosto-financeiro",
+  "period_start": "2026-08-01",
+  "period_end": "2026-08-31",
+  "observed_at": "2026-08-16T09:00:00.000Z",
+  "ingested_at": "2026-08-16T09:02:14.000Z",
+  "content_hash": "a7c9e1f3b5d70921c3e5a7f9b1d3f50724681ace0bd2f4681ace0bd2f4680135",
+  "record_count": 14,
+  "rows_skipped": 0,
+  "coverage": {
+    "expected_units": 20,
+    "reporting_units": 19,
+    "ratio_bp": 9500,
+    "missing_units": ["Grau Santo Amaro"]
+  },
+  "quality_status": "conflicted",
+  "conflicts": [
+    {
+      "conflict_id": "conf_vendas_pipeline_vs_financeiro",
+      "field": "sales_count",
+      "versions": [
+        {
+          "source_system": "google_sheets:pipeline",
+          "value_repr": "8"
+        },
+        {
+          "source_system": "google_sheets:financeiro",
+          "value_repr": "14",
+          "evidence_ref": "ev_b_financeiro_vendas"
+        }
+      ],
+      "resolved": false
+    },
+    {
+      "conflict_id": "conf_data_venda_divergente",
+      "field": "sale_date",
+      "versions": [
+        {
+          "source_system": "google_sheets:pipeline",
+          "value_repr": "2026-08-04"
+        },
+        {
+          "source_system": "google_sheets:financeiro",
+          "value_repr": "2026-08-05",
+          "evidence_ref": "ev_b_financeiro_vendas"
+        }
+      ],
+      "resolved": false
+    }
+  ],
+  "missing_fields": ["contract_value", "revenue_value"],
+  "evidence_refs": ["ev_b_financeiro_vendas", "ev_d_caso_material"],
+  "payload": {
+    "period_label": "agosto/2026",
+    "sales_count": 14,
+    "volume_contracted_cents": 8292057,
+    "average_ticket_cents": 592290,
+    "installments_histogram": {
+      "ate_12": 4,
+      "de_13_a_19": 3,
+      "de_20_a_24": 5,
+      "acima_de_24": 2
+    },
+    "unit_breakdown": {
+      "Mogi das Cruzes": 5,
+      "São José do Rio Preto": 4,
+      "Grau Sumaré": 3,
+      "Grau Santos": 2
+    }
+  }
+}

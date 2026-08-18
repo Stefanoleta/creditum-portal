@@ -56,7 +56,8 @@ export function canonicalSchoolKey(raw: unknown): string | null {
   if (tokens.length === 0) return null
 
   // Remove o prefixo institucional apenas se sobrar algo depois dele
-  if (tokens.length > 1 && UNIT_PREFIXES.includes(tokens[0])) {
+  const first = tokens[0]
+  if (tokens.length > 1 && first !== undefined && UNIT_PREFIXES.includes(first)) {
     tokens = tokens.slice(1)
   }
 
@@ -84,6 +85,21 @@ export function canonicalPersonKey(raw: unknown): string | null {
 
 // ─── Semelhança — para SUGERIR, nunca para fundir ─────────────────────────────
 
+/**
+ * Leitura de posição garantidamente dentro dos limites pelos laços abaixo.
+ *
+ * Existe para que o compilador prove o tipo sem asserção e sem valor padrão. Um
+ * `?? 0` aqui seria pior que a asserção: mascararia um índice fora da faixa
+ * produzindo uma distância silenciosamente errada, em vez de falhar.
+ */
+function atIndex(row: readonly number[], index: number): number {
+  const v = row[index]
+  if (v === undefined) {
+    throw new RangeError("índice fora da linha de programação dinâmica")
+  }
+  return v
+}
+
 /** Distância de Levenshtein, iterativa e sem alocar matriz completa. */
 function levenshtein(a: string, b: string): number {
   if (a === b) return 0
@@ -97,11 +113,15 @@ function levenshtein(a: string, b: string): number {
     curr[0] = i
     for (let j = 1; j <= b.length; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1
-      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost)
+      curr[j] = Math.min(
+        atIndex(curr, j - 1) + 1,
+        atIndex(prev, j) + 1,
+        atIndex(prev, j - 1) + cost,
+      )
     }
     prev = curr.slice()
   }
-  return prev[b.length]
+  return atIndex(prev, b.length)
 }
 
 /**

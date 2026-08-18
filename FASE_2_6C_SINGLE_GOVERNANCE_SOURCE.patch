@@ -1,0 +1,3851 @@
+diff --git a/intelligence/catalog/unidades.catalog.json b/intelligence/catalog/unidades.catalog.json
+new file mode 100644
+index 0000000..42bfc8d
+--- /dev/null
++++ b/intelligence/catalog/unidades.catalog.json
+@@ -0,0 +1,354 @@
++{
++  "catalog_version": "1.0.0",
++  "importer_version": "2.0.0",
++  "columns": [
++    "Unidade",
++    "Apelido",
++    "Ativo"
++  ],
++  "sources": [
++    {
++      "role": "workbook",
++      "file": "UNIDADES.xlsx",
++      "sha256": "fd8c7e001ea2b36da41bd071923df1fb50ef0a7fc69de2c5e19cebc6118a1409"
++    },
++    {
++      "role": "alias_overrides",
++      "file": "d13.alias-overrides.json",
++      "sha256": "b80a7d81e50aa94541f3ecd5ec8b1979f6a7eca53d06defcf7c2f72af4a67c4e",
++      "alias_count": 3
++    }
++  ],
++  "units": [
++    {
++      "unit_id": "alecrim",
++      "canonical_name": "Alecrim",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "bangu",
++      "canonical_name": "Bangu",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "belford_roxo",
++      "canonical_name": "Belford Roxo",
++      "aliases": [
++        "BelfordRoxo"
++      ],
++      "status": "active"
++    },
++    {
++      "unit_id": "bezerra",
++      "canonical_name": "Bezerra",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "bonsucesso",
++      "canonical_name": "Bonsucesso",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "camaragibe",
++      "canonical_name": "Camaragibe",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "cariacica",
++      "canonical_name": "Cariacica",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "carpina",
++      "canonical_name": "Carpina",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "curitiba",
++      "canonical_name": "Curitiba",
++      "aliases": [
++        "Curitiba/Centro"
++      ],
++      "status": "active"
++    },
++    {
++      "unit_id": "diadema",
++      "canonical_name": "Diadema",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "divinopolis",
++      "canonical_name": "Divinopólis",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "duque_de_caxias",
++      "canonical_name": "Duque de Caxias",
++      "aliases": [],
++      "status": "inactive"
++    },
++    {
++      "unit_id": "fortaleza_centro",
++      "canonical_name": "Fortaleza - Centro",
++      "aliases": [
++        "Centro FZA"
++      ],
++      "status": "active"
++    },
++    {
++      "unit_id": "guarulhos",
++      "canonical_name": "Guarulhos",
++      "aliases": [],
++      "status": "inactive"
++    },
++    {
++      "unit_id": "jd_angela",
++      "canonical_name": "Jd Angela",
++      "aliases": [],
++      "status": "inactive"
++    },
++    {
++      "unit_id": "joao_pessoa",
++      "canonical_name": "João Pessoa",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "joinville",
++      "canonical_name": "Joinville",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "limeira",
++      "canonical_name": "Limeira",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "limoeiro",
++      "canonical_name": "Limoeiro",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "madureira",
++      "canonical_name": "Madureira",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "manaus",
++      "canonical_name": "Manaus",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "maraba",
++      "canonical_name": "Marabá",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "maracanau",
++      "canonical_name": "Maracanaú",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "mogi",
++      "canonical_name": "Mogi",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "mossoro",
++      "canonical_name": "Mossoró",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "niteroi",
++      "canonical_name": "Niteroi",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "nova_iguacu",
++      "canonical_name": "Nova Iguaçu",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "osasco",
++      "canonical_name": "Osasco",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "parnamirim",
++      "canonical_name": "Parnamirim",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "petrolina",
++      "canonical_name": "Petrolina",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "prudente",
++      "canonical_name": "Prudente",
++      "aliases": [
++        "Presidente P."
++      ],
++      "status": "active"
++    },
++    {
++      "unit_id": "rio_centro",
++      "canonical_name": "Rio Centro",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "santa_cruz",
++      "canonical_name": "Santa Cruz",
++      "aliases": [
++        "STA Cruz"
++      ],
++      "status": "active"
++    },
++    {
++      "unit_id": "santo_amaro",
++      "canonical_name": "Santo Amaro",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "santo_andre",
++      "canonical_name": "Santo André",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "santos",
++      "canonical_name": "Santos",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "sao_goncalo",
++      "canonical_name": "São Gonçalo",
++      "aliases": [],
++      "status": "inactive"
++    },
++    {
++      "unit_id": "sao_joao_de_meriti",
++      "canonical_name": "São João de Meriti",
++      "aliases": [
++        "S.J de Meriti"
++      ],
++      "status": "active"
++    },
++    {
++      "unit_id": "sao_jose_do_rio_preto",
++      "canonical_name": "Sâo José do Rio Preto",
++      "aliases": [
++        "Rio Preto"
++      ],
++      "status": "active"
++    },
++    {
++      "unit_id": "sao_luis",
++      "canonical_name": "São Luís",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "serra",
++      "canonical_name": "Serra",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "serra_talhada",
++      "canonical_name": "Serra Talhada",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "sumare",
++      "canonical_name": "Sumaré",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "taboao",
++      "canonical_name": "Taboão",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "teresina",
++      "canonical_name": "Teresina",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "venda_nova_bh",
++      "canonical_name": "Venda Nova (BH)",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "vila_maria",
++      "canonical_name": "Vila Maria",
++      "aliases": [],
++      "status": "inactive"
++    },
++    {
++      "unit_id": "vila_velha",
++      "canonical_name": "Vila Velha",
++      "aliases": [],
++      "status": "active"
++    },
++    {
++      "unit_id": "zona_norte_rn",
++      "canonical_name": "Zona Norte - RN",
++      "aliases": [
++        "Natal Zona Norte"
++      ],
++      "status": "active"
++    }
++  ],
++  "groups": [
++    {
++      "label": "Carpina e Limoeiro",
++      "members": [
++        "carpina",
++        "limoeiro"
++      ]
++    },
++    {
++      "label": "Limeira, Sumaré & JD Ângela",
++      "members": [
++        "jd_angela",
++        "limeira",
++        "sumare"
++      ]
++    }
++  ],
++  "warnings": [
++    "linha 32 (Prudente): Apelido igual ao canônico — redundante"
++  ]
++}
+diff --git a/intelligence/detectors/src/unit-catalog.ts b/intelligence/detectors/src/unit-catalog.ts
+new file mode 100644
+index 0000000..a0a9901
+--- /dev/null
++++ b/intelligence/detectors/src/unit-catalog.ts
+@@ -0,0 +1,352 @@
++/**
++ * Catálogo governado de unidades — DADO, nunca código.
++ *
++ * ─── A decisão que este arquivo materializa ────────────────────────────────────
++ *
++ * `UnitId` permanece `string` validada. O catálogo entra como dado.
++ *
++ * Isto **supersede** `FASE_2_1_SCHEMA_V2_PROPOSAL.md` §6 e
++ * `D13_CATALOG_VALIDATION.md` §8, que previam transformar `UnitId` numa união
++ * literal com todas as escolas. Com ~40 unidades e crescendo, a união literal
++ * faria a abertura de uma escola virar deploy de TypeScript — e o dia em que a
++ * operação abre uma unidade não pode ser o dia em que alguém compila o POC.
++ *
++ * Unidade nova é linha nova. Nunca recompilação.
++ *
++ * ─── Três coisas que este arquivo mantém separadas ────────────────────────────
++ *
++ *   UNIDADE          identidade canônica, com status ativo/inativo
++ *   ALIAS            forma que a fonte escreve e aponta para UMA unidade
++ *   AGRUPAMENTO      rótulo comercial que cobre VÁRIAS unidades
++ *
++ * O terceiro é o achado desta fase. `Carpina e Limoeiro` não é escola, não é
++ * apelido de escola e não é dúvida do algoritmo: é uma linha cuja identidade não
++ * é atômica. Tratá-lo como alias escolheria um membro; dividir o valor entre os
++ * membros inventaria aritmética que a fonte não forneceu.
++ */
++
++import { GatewayError } from "../../gateway/src/errors"
++import ARTEFATO from "../../catalog/unidades.catalog.json"
++import type { CanonicalUnitResult, UnitCatalog, UnitId, UnitIndex, UnitNormalizerPort } from "./canonical-units"
++import { canonicalizeUnit, unitFingerprint } from "./canonical-units"
++import type { CanonicalizeOptions } from "./canonical-units"
++
++/**
++ * Estado de uma unidade no catálogo.
++ *
++ * `inactive` NÃO é `unknown`. Uma unidade desativada continua tendo identidade
++ * canônica conhecida: se a fonte a reporta, o sistema sabe exatamente qual é. O
++ * que ela deixou de ser é *esperada* — e isso é cobertura, não canonicalização.
++ *
++ * Confundir os dois faria toda linha histórica de uma unidade fechada virar
++ * `unknown` retroativamente.
++ */
++export type UnitStatus = "active" | "inactive"
++
++/**
++ * Entrada do catálogo governado.
++ *
++ * `effective_from` / `effective_to` estão AUSENTES de propósito: `ceo.schools`
++ * hoje só tem `active` booleano, e adicionar vigência temporal é decisão de
++ * governança pendente (`FASE_2_6_CLOSURE_AND_INTEGRATION.md` §4.2). Sem eles, o
++ * status é o de HOJE — e um período anterior a uma desativação não é
++ * reconstituível. Limitação registrada, não escondida.
++ */
++export interface UnitCatalogEntry {
++  readonly unit_id: UnitId
++  /** Nome canônico aprovado. Nunca o texto da fonte. */
++  readonly canonical_name: string
++  /** Formas aprovadas que apontam para esta unidade. */
++  readonly aliases: readonly string[]
++  readonly status: UnitStatus
++}
++
++/**
++ * Rótulo comercial que cobre mais de uma unidade.
++ *
++ * `members` são `unit_id`s do próprio catálogo — validado na importação. Um
++ * agrupamento que aponta para uma unidade inexistente é recusado, não ignorado.
++ */
++export interface UnitGroupLabel {
++  /** O texto como a fonte escreve. */
++  readonly label: string
++  readonly members: readonly UnitId[]
++}
++
++export interface GovernedUnitCatalog {
++  readonly catalog_version: string
++  readonly entries: readonly UnitCatalogEntry[]
++  readonly groups: readonly UnitGroupLabel[]
++}
++
++// ─── Importação ───────────────────────────────────────────────────────────────
++
++/**
++ * Linha crua de uma planilha de unidades, já lida por quem sabe ler planilha.
++ *
++ * Deliberadamente NÃO é um leitor de `.xlsx`: este módulo não abre arquivo, não
++ * escolhe biblioteca e não adivinha nome de coluna. Quem extrai entrega linhas
++ * nesta forma, e a validação acontece aqui.
++ */
++export interface UnitCatalogRow {
++  readonly unit_id?: unknown
++  readonly canonical_name?: unknown
++  readonly aliases?: unknown
++  readonly status?: unknown
++  /** Membros, quando a linha é um agrupamento em vez de uma unidade. */
++  readonly group_members?: unknown
++}
++
++const UNIT_ID_FORM = /^[a-z][a-z0-9_]{1,63}$/
++
++/**
++ * Deriva um `unit_id` estável a partir do nome canônico.
++ *
++ * Existe para que quem preenche a planilha não precise inventar identificadores —
++ * e para que o mesmo nome canônico produza sempre o mesmo id. Não substitui um id
++ * explícito quando a planilha o fornecer.
++ */
++export function unitIdFromCanonicalName(nome: string): string {
++  return nome
++    .normalize("NFD")
++    .replace(/[̀-ͯ]/gu, "")
++    .toLowerCase()
++    .replace(/[^a-z0-9]+/gu, "_")
++    .replace(/^_+|_+$/gu, "")
++    .slice(0, 64)
++}
++
++const textos = (v: unknown): readonly string[] => {
++  if (v === null || v === undefined || v === "") return []
++  if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string" && x.trim() !== "")
++  if (typeof v === "string") {
++    // Uma célula com múltiplos aliases separados por `;` ou `|`. NUNCA por vírgula:
++    // vírgula aparece dentro de rótulo de agrupamento (`Limeira, Sumaré & ...`) e
++    // usá-la como separador partiria o rótulo ao meio.
++    return v
++      .split(/[;|]/u)
++      .map((x) => x.trim())
++      .filter((x) => x !== "")
++  }
++  return []
++}
++
++/**
++ * Valida e monta o catálogo governado. Falha fechada, com todos os problemas.
++ *
++ * Nada é inferido: linha sem nome canônico é recusada, status desconhecido é
++ * recusado, e agrupamento apontando para unidade inexistente é recusado.
++ */
++export function importUnitCatalog(
++  catalog_version: string,
++  rows: readonly UnitCatalogRow[],
++): GovernedUnitCatalog {
++  const problemas: string[] = []
++  const entries: UnitCatalogEntry[] = []
++  const gruposCrus: { label: string; members: readonly string[] }[] = []
++  const idsVistos = new Set<string>()
++  const aliasesVistos = new Map<string, UnitId>()
++
++  if (!/^\d+\.\d+\.\d+$/.test(catalog_version)) {
++    problemas.push("catalog_version: formato x.y.z obrigatório")
++  }
++
++  for (const [i, row] of rows.entries()) {
++    const onde = `rows[${i}]`
++
++    const membros = textos(row.group_members)
++    if (membros.length > 0) {
++      // É um AGRUPAMENTO, não uma unidade.
++      const label = typeof row.canonical_name === "string" ? row.canonical_name.trim() : ""
++      if (label === "") {
++        problemas.push(`${onde}: agrupamento sem rótulo`)
++        continue
++      }
++      gruposCrus.push({ label, members: membros })
++      continue
++    }
++
++    if (typeof row.canonical_name !== "string" || row.canonical_name.trim() === "") {
++      problemas.push(`${onde}: canonical_name obrigatório`)
++      continue
++    }
++    const canonical_name = row.canonical_name.trim()
++
++    const id =
++      typeof row.unit_id === "string" && row.unit_id.trim() !== ""
++        ? row.unit_id.trim()
++        : unitIdFromCanonicalName(canonical_name)
++
++    if (!UNIT_ID_FORM.test(id)) {
++      problemas.push(`${onde}: unit_id "${id}" fora do formato`)
++      continue
++    }
++    if (idsVistos.has(id)) {
++      problemas.push(`${onde}: unit_id "${id}" duplicado`)
++      continue
++    }
++
++    const status = row.status === undefined || row.status === null ? "active" : row.status
++    if (status !== "active" && status !== "inactive") {
++      // `JSON.stringify` e não `String`: um objeto viraria `[object Object]` e a
++      // mensagem de recusa esconderia o que a planilha realmente trouxe.
++      problemas.push(`${onde}: status ${JSON.stringify(status)} desconhecido`)
++      continue
++    }
++
++    const aliases = textos(row.aliases)
++    for (const a of aliases) {
++      const chave = a.toLowerCase()
++      const dono = aliasesVistos.get(chave)
++      if (dono !== undefined && dono !== id) {
++        // Um alias que aponta para duas unidades não é alias: é ambiguidade
++        // gravada no catálogo, e o catálogo é justamente o que deveria resolvê-la.
++        problemas.push(`${onde}: alias "${a}" já pertence a "${dono}"`)
++        continue
++      }
++      aliasesVistos.set(chave, id)
++    }
++
++    idsVistos.add(id)
++    entries.push({ unit_id: id, canonical_name, aliases, status })
++  }
++
++  const groups: UnitGroupLabel[] = []
++  for (const g of gruposCrus) {
++    const desconhecidos = g.members.filter((m) => !idsVistos.has(m))
++    if (desconhecidos.length > 0) {
++      problemas.push(
++        `agrupamento "${g.label}": membros inexistentes no catálogo: ${desconhecidos.join(", ")}`,
++      )
++      continue
++    }
++    if (g.members.length < 2) {
++      problemas.push(`agrupamento "${g.label}": precisa de ao menos duas unidades`)
++      continue
++    }
++    groups.push({ label: g.label, members: [...g.members] })
++  }
++
++  if (problemas.length > 0) {
++    throw new GatewayError("NOT_ALLOWED", "Catálogo governado de unidades recusado", problemas)
++  }
++
++  return { catalog_version, entries, groups }
++}
++
++/** Projeção para o formato que `buildUnitIndex` consome. */
++export function toUnitCatalog(governado: GovernedUnitCatalog): UnitCatalog {
++  return {
++    catalog_version: governado.catalog_version,
++    units: governado.entries.map((e) => ({
++      unit_id: e.unit_id,
++      display_name: e.canonical_name,
++      aliases: e.aliases,
++      // `inactive` continua no índice: identidade conhecida não deixa de ser
++      // conhecida porque a unidade fechou.
++      active: e.status === "active",
++    })),
++  }
++}
++
++// ─── Resolução com agrupamentos ───────────────────────────────────────────────
++
++/**
++ * Canonicaliza reconhecendo AGRUPAMENTOS antes de tudo.
++ *
++ * A ordem importa: `Carpina e Limoeiro` contém `Carpina`, e qualquer caminho de
++ * similaridade poderia se agarrar a um dos membros. O rótulo é conferido primeiro,
++ * por igualdade de chave comparável — não por similaridade.
++ *
++ * Resultado de agrupamento: `ambiguous` com `reason: "GROUP_LABEL"` e os
++ * `candidates` sendo exatamente os membros. NUNCA um membro escolhido, NUNCA um
++ * valor dividido entre eles.
++ */
++export function canonicalizeWithGroups(
++  raw: unknown,
++  index: UnitIndex,
++  port: UnitNormalizerPort,
++  options: CanonicalizeOptions,
++  groups: readonly UnitGroupLabel[],
++): CanonicalUnitResult {
++  const chave = port.comparableKey(raw)
++  if (chave !== null && chave !== "") {
++    for (const g of groups) {
++      const chaveDoGrupo = port.comparableKey(g.label)
++      if (chaveDoGrupo !== null && chaveDoGrupo === chave) {
++        return {
++          status: "ambiguous",
++          candidates: [...g.members].sort(),
++          raw_fingerprint: unitFingerprint(chave),
++          reason: "GROUP_LABEL",
++        }
++      }
++    }
++  }
++  return canonicalizeUnit(raw, index, port, options)
++}
++
++// ─── Catálogo completo, a partir de UNIDADES.xlsx ─────────────────────────────
++
++interface ArtefatoCatalogo {
++  readonly catalog_version: string
++  /** Proveniência das fontes. O runtime não decide nada com isto — só o carrega. */
++  readonly sources?: readonly {
++    readonly role: string
++    readonly file: string
++    readonly sha256: string
++  }[]
++  readonly units: readonly {
++    readonly unit_id: string
++    readonly canonical_name: string
++    readonly aliases: readonly string[]
++    readonly status: string
++  }[]
++  readonly groups: readonly { readonly label: string; readonly members: readonly string[] }[]
++}
++
++/**
++ * Projeta o artefato governado em catálogo de runtime. PROJEÇÃO, não enriquecimento.
++ *
++ * O artefato é DADO versionado (`catalog/unidades.catalog.json`), produzido pelo
++ * build step `tools/xlsx_to_catalog.py` a partir de DUAS fontes governadas: a
++ * planilha operacional e `governance/d13.alias-overrides.json`. Nada aqui abre
++ * planilha, e nenhuma dependência de Excel existe em runtime.
++ *
++ * Até a Fase 2.6c esta função acrescentava aliases de um `ALIASES_GOVERNADOS`
++ * escrito em TypeScript. Era uma segunda fonte de governança: regenerar a planilha
++ * não reproduzia o catálogo efetivo, e nenhuma decisão humana podia ser auditada ou
++ * removida pelo caminho governado. Os três aliases migraram para o arquivo de
++ * overrides e o build step passou a mesclá-los antes de publicar.
++ *
++ * A invariante que substituiu aquilo: os aliases efetivos em runtime são
++ * exatamente os aliases do artefato. Nenhum a mais, nenhum a menos, nenhum alvo
++ * diferente. Um teste afirma essa projeção diretamente.
++ */
++export function buildGovernedCatalog(artefato: ArtefatoCatalogo): GovernedUnitCatalog {
++  const rows: UnitCatalogRow[] = artefato.units.map((u) => ({
++    unit_id: u.unit_id,
++    canonical_name: u.canonical_name,
++    // CÓPIA do artefato, não enriquecimento. Nenhum alias nasce aqui.
++    aliases: [...u.aliases],
++    status: u.status,
++  }))
++
++  const grupos: UnitCatalogRow[] = artefato.groups.map((g) => ({
++    canonical_name: g.label,
++    group_members: [...g.members],
++  }))
++
++  return importUnitCatalog(artefato.catalog_version, [...rows, ...grupos])
++}
++
++/**
++ * O catálogo governado COMPLETO. Fonte única de verdade para D13.
++ *
++ * Substitui o seed parcial de 18 unidades da Fase 2.6b — ele existia porque
++ * `UNIDADES.xlsx` não estava disponível, e manter os dois seria manter duas fontes
++ * concorrentes.
++ */
++export const GOVERNED_UNIT_CATALOG: GovernedUnitCatalog = buildGovernedCatalog(
++  ARTEFATO,
++)
+diff --git a/intelligence/detectors/tests/catalog-import.test.ts b/intelligence/detectors/tests/catalog-import.test.ts
+new file mode 100644
+index 0000000..8165979
+--- /dev/null
++++ b/intelligence/detectors/tests/catalog-import.test.ts
+@@ -0,0 +1,883 @@
++/**
++ * Importador XLSX → catálogo governado: fail-closed ATÔMICO.
++ *
++ * O que o gate da Fase 2.6c encontrou: a versão anterior descartava linha inválida,
++ * emitia aviso e escrevia o JSON com sucesso. Uma célula `Ativo` em branco fazia uma
++ * unidade governada desaparecer do catálogo de runtime, onde virava `unknown` a cada
++ * ingestão — e o validador de runtime não recupera o que o build step jogou fora.
++ *
++ * Estes testes exercitam o script REAL, num diretório temporário, com planilhas
++ * sintéticas geradas por `tools/make_test_xlsx.py`. Não dependem do arquivo do
++ * WhatsApp, que o app apaga.
++ */
++
++import { execFileSync } from "node:child_process"
++import {
++  mkdtempSync,
++  readFileSync,
++  writeFileSync,
++  existsSync,
++  readdirSync,
++  chmodSync,
++  statSync,
++} from "node:fs"
++import { tmpdir } from "node:os"
++import { join } from "node:path"
++import { fileURLToPath } from "node:url"
++import { dirname, resolve } from "node:path"
++import { describe, expect, it } from "vitest"
++
++const AQUI = dirname(fileURLToPath(import.meta.url))
++const RAIZ = resolve(AQUI, "../..")
++const CONVERSOR = join(RAIZ, "tools/xlsx_to_catalog.py")
++const GERADOR = join(RAIZ, "tools/make_test_xlsx.py")
++
++type Linha = readonly (string | null)[]
++
++const CABECALHO: Linha = ["Unidade", "Apelido", "Ativo"]
++
++function planilha(linhas: readonly Linha[]): string {
++  const dir = mkdtempSync(join(tmpdir(), "cat-import-"))
++  const caminho = join(dir, "teste.xlsx")
++  execFileSync("python3", [GERADOR, caminho, JSON.stringify(linhas)], { encoding: "utf8" })
++  return caminho
++}
++
++interface Resultado {
++  readonly ok: boolean
++  readonly stderr: string
++  readonly destino: string
++  readonly dir: string
++}
++
++/**
++ * Overrides governados: a segunda fonte do build step. `null` na maioria dos casos
++ * porque eles testam a planilha; quem testa override passa o documento.
++ */
++type Overrides = Record<string, unknown>
++
++const SEM_OVERRIDES: Overrides = { schema_version: "1.0.0", aliases: [] }
++
++/** Grava o documento de overrides num temporário. Aceita texto cru para testar JSON inválido. */
++function arquivoDeOverrides(doc: Overrides | string): string {
++  const dir = mkdtempSync(join(tmpdir(), "cat-ovr-"))
++  const caminho = join(dir, "d13.alias-overrides.json")
++  writeFileSync(caminho, typeof doc === "string" ? doc : JSON.stringify(doc, null, 2))
++  return caminho
++}
++
++/** Roda o conversor real. Nunca lança — o veredito é o código de saída. */
++function converter(
++  xlsx: string,
++  destinoExistente?: string,
++  overrides: Overrides | string = SEM_OVERRIDES,
++): Resultado {
++  const dir = mkdtempSync(join(tmpdir(), "cat-out-"))
++  const destino = destinoExistente ?? join(dir, "unidades.catalog.json")
++  const ovr = arquivoDeOverrides(overrides)
++  try {
++    execFileSync("python3", [CONVERSOR, xlsx, ovr, destino], { encoding: "utf8", stdio: "pipe" })
++    return { ok: true, stderr: "", destino, dir }
++  } catch (e) {
++    const err = e as { stderr?: string }
++    return { ok: false, stderr: err.stderr ?? "", destino, dir }
++  }
++}
++
++const lerCatalogo = (
++  destino: string,
++): { units: { unit_id: string; canonical_name: string; aliases: string[]; status: string }[]; groups: { label: string; members: string[] }[]; warnings: string[] } =>
++  JSON.parse(readFileSync(destino, "utf8")) as never
++
++/** 48 linhas boas — o cenário do teste J. */
++const QUARENTA_E_OITO: readonly Linha[] = Array.from({ length: 48 }, (_, i) => [
++  `Unidade ${String(i + 1).padStart(2, "0")}`,
++  null,
++  i % 10 === 0 ? "Não" : "Sim",
++])
++
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("A — planilha válida gera catálogo completo", () => {
++  const r = converter(
++    planilha([
++      CABECALHO,
++      ["Santos", null, "Sim"],
++      ["Santo Amaro", null, "Sim"],
++      ["Vila Maria", null, "Não"],
++      ["Santa Cruz", "STA Cruz", "Sim"],
++      ["Carpina", "Carpina e Limoeiro", "Sim"],
++      ["Limoeiro", "Carpina e Limoeiro", "Sim"],
++    ]),
++  )
++
++  it("sai com sucesso", () => {
++    expect(r.ok).toBe(true)
++  })
++
++  it("todas as unidades entram — nenhuma descartada", () => {
++    const c = lerCatalogo(r.destino)
++    expect(c.units).toHaveLength(6)
++  })
++
++  it("ativo/inativo preservado", () => {
++    const c = lerCatalogo(r.destino)
++    expect(c.units.filter((u) => u.status === "active")).toHaveLength(5)
++    expect(c.units.filter((u) => u.status === "inactive")).toHaveLength(1)
++    expect(c.units.find((u) => u.unit_id === "vila_maria")?.status).toBe("inactive")
++  })
++
++  it("Unicode preservado no nome canônico", () => {
++    const c = converter(
++      planilha([CABECALHO, ["Maracanaú", null, "Sim"], ["Sumaré", null, "Sim"]]),
++    )
++    const cat = lerCatalogo(c.destino)
++    expect(cat.units.map((u) => u.canonical_name)).toEqual(["Maracanaú", "Sumaré"])
++  })
++
++  it("apelido em UMA unidade é alias", () => {
++    const c = lerCatalogo(r.destino)
++    expect(c.units.find((u) => u.unit_id === "santa_cruz")?.aliases).toEqual(["STA Cruz"])
++  })
++
++  it("apelido em DUAS unidades é agrupamento, não alias", () => {
++    const c = lerCatalogo(r.destino)
++    expect(c.groups).toEqual([{ label: "Carpina e Limoeiro", members: ["carpina", "limoeiro"] }])
++    expect(c.units.find((u) => u.unit_id === "carpina")?.aliases).toEqual([])
++    expect(c.units.find((u) => u.unit_id === "limoeiro")?.aliases).toEqual([])
++  })
++
++  it("linha completamente vazia no fim não é dado", () => {
++    const c = converter(planilha([CABECALHO, ["Santos", null, "Sim"], [null, null, null]]))
++    expect(c.ok).toBe(true)
++    expect(lerCatalogo(c.destino).units).toHaveLength(1)
++  })
++})
++
++describe("B/C/D — célula obrigatória ausente ou desconhecida é FATAL", () => {
++  const naoEscreveu = (r: Resultado): boolean =>
++    !r.ok && !existsSync(r.destino) && readdirSync(r.dir).length === 0
++
++  it("B — `Unidade` vazia: falha e nada é escrito", () => {
++    const r = converter(planilha([CABECALHO, ["Santos", null, "Sim"], [null, "Apelido Órfão", "Sim"]]))
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("`Unidade` vazia")
++    expect(naoEscreveu(r)).toBe(true)
++  })
++
++  it("C — `Ativo` vazia: falha — status não é presumido", () => {
++    const r = converter(planilha([CABECALHO, ["Santos", null, null]]))
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("`Ativo` vazia")
++    expect(naoEscreveu(r)).toBe(true)
++  })
++
++  it("D — `Ativo` fora do vocabulário: falha, sem converter para true/false", () => {
++    for (const ruim of ["S", "sim", "1", "Ativo", "TRUE", "Talvez"]) {
++      const r = converter(planilha([CABECALHO, ["Santos", null, ruim]]))
++      expect(r.ok, ruim).toBe(false)
++      expect(r.stderr, ruim).toContain("fora do vocabulário")
++    }
++  })
++
++  it("linha PARCIALMENTE preenchida é fatal, não ignorada", () => {
++    // Alguém escreveu algo e a conversão não sabe o quê. Ignorar perderia dado.
++    const r = converter(planilha([CABECALHO, ["Santos", null, "Sim"], [null, null, "Sim"]]))
++    expect(r.ok).toBe(false)
++  })
++
++  it("nome curto demais para gerar id válido é fatal", () => {
++    const r = converter(planilha([CABECALHO, ["X", null, "Sim"]]))
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("unit_id")
++  })
++})
++
++describe("E — cabeçalho ausente ou divergente é FATAL", () => {
++  it("sem cabeçalho", () => {
++    const r = converter(planilha([["Santos", null, "Sim"]]))
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("cabeçalho")
++  })
++
++  it("coluna renomeada — sem adivinhar nome alternativo", () => {
++    const r = converter(planilha([["Escola", "Apelido", "Ativo"], ["Santos", null, "Sim"]]))
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("Unidade")
++  })
++
++  it("coluna faltando", () => {
++    const r = converter(planilha([["Unidade", "Apelido"], ["Santos", null, "Sim"]]))
++    expect(r.ok).toBe(false)
++  })
++
++  it("colunas fora de posição", () => {
++    const r = converter(planilha([["Ativo", "Apelido", "Unidade"], ["Sim", null, "Santos"]]))
++    expect(r.ok).toBe(false)
++  })
++
++  it("planilha vazia", () => {
++    const r = converter(planilha([]))
++    expect(r.ok).toBe(false)
++  })
++
++  it("arquivo inexistente falha limpo, sem traceback", () => {
++    const r = converter(join(tmpdir(), "nao-existe-xyz.xlsx"))
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("não encontrada")
++    expect(r.stderr).not.toContain("Traceback")
++  })
++})
++
++describe("F/G/H/I — integridade global antes de escrever", () => {
++  it("F — alias conflitante entre duas unidades", () => {
++    // Não é agrupamento: são dois apelidos DIFERENTES que normalizam igual.
++    const r = converter(
++      planilha([
++        CABECALHO,
++        ["Unidade Alfa", "Compartilhado", "Sim"],
++        ["Unidade Beta", "compartilhado", "Sim"],
++      ]),
++    )
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("aponta para")
++  })
++
++  it("F — alias colidindo com o canônico de outra unidade", () => {
++    const r = converter(
++      planilha([CABECALHO, ["Santos", null, "Sim"], ["Santo Amaro", "Santos", "Sim"]]),
++    )
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("colide")
++  })
++
++  it("G — canônico duplicado", () => {
++    const r = converter(planilha([CABECALHO, ["Santos", null, "Sim"], ["Santos", null, "Sim"]]))
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toMatch(/duplicad/)
++  })
++
++  it("H — unit_id duplicado por normalização", () => {
++    // `Maracanaú` e `Maracanau` derivam o mesmo id.
++    const r = converter(
++      planilha([CABECALHO, ["Maracanaú", null, "Sim"], ["Maracanau", null, "Sim"]]),
++    )
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("duplicado")
++  })
++
++  it("G — status contraditório para a mesma unidade é pego como duplicidade", () => {
++    const r = converter(planilha([CABECALHO, ["Santos", null, "Sim"], ["Santos", null, "Não"]]))
++    expect(r.ok).toBe(false)
++  })
++
++  it("todos os problemas são reportados, não só o primeiro", () => {
++    const r = converter(
++      planilha([CABECALHO, [null, null, "Sim"], ["Santos", null, "?"], ["Outra", null, null]]),
++    )
++    expect(r.ok).toBe(false)
++    const linhas = r.stderr.split("\n").filter((l) => l.trim().startsWith("- "))
++    expect(linhas.length).toBeGreaterThanOrEqual(3)
++  })
++})
++
++describe("J — uma linha ruim entre 48 boas invalida TUDO", () => {
++  it("48 boas sozinhas convertem", () => {
++    const r = converter(planilha([CABECALHO, ...QUARENTA_E_OITO]))
++    expect(r.ok).toBe(true)
++    expect(lerCatalogo(r.destino).units).toHaveLength(48)
++  })
++
++  it("48 boas + 1 ruim: falha, e NÃO produz catálogo de 48", () => {
++    const r = converter(
++      planilha([CABECALHO, ...QUARENTA_E_OITO, ["Unidade Ruim", null, "Talvez"]]),
++    )
++    expect(r.ok).toBe(false)
++    expect(existsSync(r.destino)).toBe(false)
++  })
++
++  it("a linha ruim no MEIO também invalida tudo", () => {
++    const metade = Math.floor(QUARENTA_E_OITO.length / 2)
++    const r = converter(
++      planilha([
++        CABECALHO,
++        ...QUARENTA_E_OITO.slice(0, metade),
++        ["Unidade Ruim", null, null],
++        ...QUARENTA_E_OITO.slice(metade),
++      ]),
++    )
++    expect(r.ok).toBe(false)
++    expect(existsSync(r.destino)).toBe(false)
++  })
++})
++
++describe("K — artefato anterior permanece intacto numa conversão inválida", () => {
++  it("byte-identical após falha", () => {
++    const dir = mkdtempSync(join(tmpdir(), "cat-prev-"))
++    const destino = join(dir, "unidades.catalog.json")
++
++    // Artefato válido pré-existente.
++    const bom = converter(planilha([CABECALHO, ["Santos", null, "Sim"]]), destino)
++    expect(bom.ok).toBe(true)
++    const antes = readFileSync(destino)
++
++    // Conversão inválida sobre o MESMO destino.
++    const ruim = converter(planilha([CABECALHO, ["Outra", null, "Talvez"]]), destino)
++    expect(ruim.ok).toBe(false)
++
++    expect(readFileSync(destino).equals(antes)).toBe(true)
++  })
++
++  it("nenhum temporário fica para trás", () => {
++    const dir = mkdtempSync(join(tmpdir(), "cat-tmp-"))
++    const destino = join(dir, "unidades.catalog.json")
++    converter(planilha([CABECALHO, ["Santos", null, "Sim"]]), destino)
++    converter(planilha([CABECALHO, ["Outra", null, "?"]]), destino)
++    expect(readdirSync(dir).filter((f) => f.includes(".tmp"))).toEqual([])
++  })
++
++  it("um artefato corrompido não é 'consertado' por conversão inválida", () => {
++    const dir = mkdtempSync(join(tmpdir(), "cat-corr-"))
++    const destino = join(dir, "unidades.catalog.json")
++    writeFileSync(destino, "{ nao é json valido")
++    const r = converter(planilha([CABECALHO, ["Santos", null, "Talvez"]]), destino)
++    expect(r.ok).toBe(false)
++    // Continua corrompido — a conversão não tocou nele.
++    expect(readFileSync(destino, "utf8")).toBe("{ nao é json valido")
++  })
++})
++
++describe("L — saída determinística", () => {
++  const LINHAS_L: readonly Linha[] = [
++    CABECALHO,
++    ["Santos", null, "Sim"],
++    ["Maracanaú", "Maracanau ", "Sim"],
++    ["Carpina", "Carpina e Limoeiro", "Sim"],
++    ["Limoeiro", "Carpina e Limoeiro", "Sim"],
++    ["Vila Maria", null, "Não"],
++  ]
++
++  it("a MESMA fonte produz bytes idênticos", () => {
++    // A mesma fonte, não duas cópias logicamente iguais: o artefato registra o
++    // sha256 do arquivo, e um `.xlsx` é um zip — que embute timestamp. Dois
++    // arquivos com o mesmo conteúdo lógico têm bytes diferentes, e é correto que
++    // a proveniência os distinga.
++    const fonte = planilha(LINHAS_L)
++    const a = converter(fonte)
++    const b = converter(fonte)
++    expect(a.ok && b.ok).toBe(true)
++    expect(readFileSync(b.destino, "utf8")).toBe(readFileSync(a.destino, "utf8"))
++  })
++
++  it("fontes distintas de mesmo conteúdo dão o MESMO dado governado", () => {
++    // O que precisa ser determinístico é o dado, não o registro de proveniência.
++    const semProveniencia = (destino: string): string => {
++      const doc = JSON.parse(readFileSync(destino, "utf8")) as Record<string, unknown>
++      delete doc["sources"]
++      return JSON.stringify(doc)
++    }
++    const a = converter(planilha(LINHAS_L))
++    const b = converter(planilha(LINHAS_L))
++    expect(a.ok && b.ok).toBe(true)
++    expect(semProveniencia(b.destino)).toBe(semProveniencia(a.destino))
++  })
++
++  it("fonte diferente muda o hash registrado — a proveniência não mente", () => {
++    const a = converter(planilha(LINHAS_L))
++    const b = converter(planilha([...LINHAS_L, ["Sumaré", null, "Sim"]]))
++    const hashDe = (d: string): string =>
++      (JSON.parse(readFileSync(d, "utf8")) as { sources: { role: string; sha256: string }[] })
++        .sources.filter((f) => f.role === "workbook")[0]?.sha256 ?? ""
++    expect(hashDe(b.destino)).not.toBe(hashDe(a.destino))
++  })
++
++  it("a ordem dos agrupamentos é estável", () => {
++    const r = converter(
++      planilha([
++        CABECALHO,
++        ["Zeta", "Zeta e Alfa", "Sim"],
++        ["Alfa", "Zeta e Alfa", "Sim"],
++        ["Beta", "Beta e Gama", "Sim"],
++        ["Gama", "Beta e Gama", "Sim"],
++      ]),
++    )
++    expect(lerCatalogo(r.destino).groups.map((g) => g.label)).toEqual([
++      "Beta e Gama",
++      "Zeta e Alfa",
++    ])
++  })
++})
++
++describe("avisos existem só para condição NÃO LOSSY", () => {
++  it("apelido idêntico ao canônico gera AVISO e converte", () => {
++    // Descartar essa redundância não perde forma nenhuma.
++    const r = converter(planilha([CABECALHO, ["Prudente", "Prudente", "Sim"]]))
++    expect(r.ok).toBe(true)
++    const c = lerCatalogo(r.destino)
++    expect(c.warnings).toHaveLength(1)
++    expect(c.warnings[0]).toContain("redundante")
++    expect(c.units[0]?.aliases).toEqual([])
++  })
++
++  it("nenhuma condição LOSSY vira aviso", () => {
++    // Toda condição que descartaria linha, status ou alias é erro. Provado pelos
++    // blocos B/C/D/F/G/H acima; aqui a asserção é que o caminho de sucesso não
++    // acumula avisos sobre dado perdido.
++    const r = converter(planilha([CABECALHO, ["Santos", null, "Sim"]]))
++    expect(lerCatalogo(r.destino).warnings).toEqual([])
++  })
++})
++
++describe("o artefato governado em uso continua fiel ao arquivo real", () => {
++  it("49 unidades, 44 ativas, 5 inativas, 2 agrupamentos", () => {
++    const c = lerCatalogo(join(RAIZ, "catalog/unidades.catalog.json"))
++    expect(c.units).toHaveLength(49)
++    expect(c.units.filter((u) => u.status === "active")).toHaveLength(44)
++    expect(c.units.filter((u) => u.status === "inactive")).toHaveLength(5)
++    expect(c.groups).toHaveLength(2)
++  })
++
++  it("as grafias reais da planilha NÃO foram corrigidas editorialmente", () => {
++    const c = lerCatalogo(join(RAIZ, "catalog/unidades.catalog.json"))
++    const nomes = c.units.map((u) => u.canonical_name)
++    // A planilha é autoridade de display até decisão humana.
++    expect(nomes).toContain("Sâo José do Rio Preto")
++    expect(nomes).toContain("Divinopólis")
++    expect(nomes).toContain("Mogi")
++    expect(nomes).toContain("Jd Angela")
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// Modo do arquivo: `mkstemp` cria 0600 e `os.replace` leva o modo do temporário
++// junto para o destino. Sem cuidado explícito, regenerar o catálogo troca em
++// silêncio a permissão de um artefato versionado — e um catálogo 0600 some do
++// build de outro usuário com erro de I/O, não com erro de validação.
++//
++// Nenhum teste da suíte pegou isso quando aconteceu de verdade: quem pegou foi
++// o `ls` da verificação pós-escrita. Estes testes fecham essa lacuna.
++
++const modo = (caminho: string): number => statSync(caminho).mode & 0o777
++const oct = (m: number): string => "0" + m.toString(8).padStart(3, "0")
++
++const PLANILHA_BOA: readonly Linha[] = [CABECALHO, ["Santos", null, "Sim"]]
++
++describe("escrever_atomico preserva o modo do destino", () => {
++  it("A — destino 0644 continua 0644 depois do replace", () => {
++    const dir = mkdtempSync(join(tmpdir(), "cat-mode-a-"))
++    const destino = join(dir, "unidades.catalog.json")
++
++    expect(converter(planilha(PLANILHA_BOA), destino).ok).toBe(true)
++    chmodSync(destino, 0o644)
++
++    expect(converter(planilha(PLANILHA_BOA), destino).ok).toBe(true)
++    expect(oct(modo(destino))).toBe("0644")
++  })
++
++  it("B — o modo herdado é o do destino, não um 0644 fixo no código", () => {
++    // Se a função forçasse 0644, este caso passaria por acidente no A e falharia aqui.
++    for (const esperado of [0o640, 0o600, 0o664]) {
++      const dir = mkdtempSync(join(tmpdir(), "cat-mode-b-"))
++      const destino = join(dir, "unidades.catalog.json")
++
++      expect(converter(planilha(PLANILHA_BOA), destino).ok).toBe(true)
++      chmodSync(destino, esperado)
++
++      expect(converter(planilha(PLANILHA_BOA), destino).ok).toBe(true)
++      expect(oct(modo(destino)), oct(esperado)).toBe(oct(esperado))
++    }
++  })
++
++  it("C — destino novo respeita o padrão do processo, não o 0600 do mkstemp", () => {
++    const dir = mkdtempSync(join(tmpdir(), "cat-mode-c-"))
++
++    // Controle: um arquivo escrito pelos meios normais, no mesmo diretório e no
++    // mesmo processo. O modo dele É o padrão derivado do umask — comparar contra
++    // ele torna o teste indiferente ao umask do ambiente.
++    const controle = join(dir, "controle.json")
++    writeFileSync(controle, "{}")
++
++    const destino = join(dir, "unidades.catalog.json")
++    expect(converter(planilha(PLANILHA_BOA), destino).ok).toBe(true)
++
++    expect(oct(modo(destino))).toBe(oct(modo(controle)))
++  })
++
++  it("C — e o padrão não é 0600 num umask normal", () => {
++    // Guarda separada: se o ambiente tiver umask 0077 o controle acima também
++    // seria 0600 e o caso C passaria vazio. Aqui isso fica visível em vez de
++    // silencioso.
++    const dir = mkdtempSync(join(tmpdir(), "cat-mode-c2-"))
++    const controle = join(dir, "controle.json")
++    writeFileSync(controle, "{}")
++    if (oct(modo(controle)) === "0600") {
++      // umask restritivo: o caso C ainda vale, mas não distingue o defeito.
++      expect(oct(modo(controle))).toBe("0600")
++      return
++    }
++    const destino = join(dir, "unidades.catalog.json")
++    expect(converter(planilha(PLANILHA_BOA), destino).ok).toBe(true)
++    expect(oct(modo(destino))).not.toBe("0600")
++  })
++
++  it("D — conversão que falha não muda bytes NEM modo do artefato existente", () => {
++    const dir = mkdtempSync(join(tmpdir(), "cat-mode-d-"))
++    const destino = join(dir, "unidades.catalog.json")
++
++    expect(converter(planilha(PLANILHA_BOA), destino).ok).toBe(true)
++    chmodSync(destino, 0o640)
++    const bytesAntes = readFileSync(destino)
++    const modoAntes = modo(destino)
++
++    const ruim = converter(planilha([CABECALHO, ["Outra", null, "Talvez"]]), destino)
++    expect(ruim.ok).toBe(false)
++
++    expect(readFileSync(destino).equals(bytesAntes)).toBe(true)
++    expect(oct(modo(destino))).toBe(oct(modoAntes))
++    expect(readdirSync(dir).filter((f) => f.includes(".tmp"))).toEqual([])
++  })
++
++  it("o modo sobrevive a regenerações consecutivas", () => {
++    const dir = mkdtempSync(join(tmpdir(), "cat-mode-e-"))
++    const destino = join(dir, "unidades.catalog.json")
++    expect(converter(planilha(PLANILHA_BOA), destino).ok).toBe(true)
++    chmodSync(destino, 0o644)
++    for (let i = 0; i < 3; i += 1) {
++      expect(converter(planilha(PLANILHA_BOA), destino).ok).toBe(true)
++      expect(oct(modo(destino)), `regeneração ${i + 1}`).toBe("0644")
++    }
++  })
++})
++
++describe("o artefato governado em uso tem modo legível", () => {
++  it("não é 0600", () => {
++    // O defeito real chegou a acontecer neste arquivo. Se voltar, falha aqui.
++    const m = oct(modo(join(RAIZ, "catalog/unidades.catalog.json")))
++    expect(m).not.toBe("0600")
++    expect(m).toMatch(/^06[46][0-4]$/)
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// Overrides governados — a SEGUNDA fonte do build step.
++//
++// O gate final da 2.6c encontrou isto: três aliases (`BelfordRoxo`,
++// `Presidente P.`, `Rio Preto`) viviam num `ALIASES_GOVERNADOS` em TypeScript e
++// eram enxertados no catálogo DEPOIS do load. Consequência: regenerar a planilha
++// não reproduzia o catálogo efetivo, e nenhuma dessas decisões podia ser
++// auditada ou removida pelo caminho governado. Eram governança escondida em código.
++//
++// Agora são dado governado, hasheado, mesclado no build step e presente no
++// artefato. O runtime só projeta.
++
++const OVERRIDES_D13: Overrides = {
++  schema_version: "1.0.0",
++  aliases: [
++    { alias: "Presidente P.", target_unit_id: "prudente" },
++    { alias: "BelfordRoxo", target_unit_id: "belford_roxo" },
++  ],
++}
++
++const PLANILHA_D13: readonly Linha[] = [
++  CABECALHO,
++  ["Prudente", "Prudente", "Sim"],
++  ["Belford Roxo", null, "Sim"],
++  ["Santos", null, "Sim"],
++]
++
++const aliasesDe = (destino: string): Record<string, string[]> =>
++  Object.fromEntries(lerCatalogo(destino).units.map((u) => [u.unit_id, u.aliases]))
++
++describe("A/B — as duas fontes produzem um artefato com todos os aliases efetivos", () => {
++  const r = converter(planilha(PLANILHA_D13), undefined, OVERRIDES_D13)
++
++  it("A — conversão bem-sucedida com XLSX + overrides", () => {
++    expect(r.ok).toBe(true)
++  })
++
++  it("B — os aliases do override chegam ao artefato", () => {
++    const a = aliasesDe(r.destino)
++    expect(a["prudente"]).toEqual(["Presidente P."])
++    expect(a["belford_roxo"]).toEqual(["BelfordRoxo"])
++    expect(a["santos"]).toEqual([])
++  })
++
++  it("B — a contagem efetiva é derivada das duas fontes, não fixada", () => {
++    // 0 da planilha (o `Prudente` redundante é descartado como aviso) + 2 do override.
++    const semOverride = converter(planilha(PLANILHA_D13))
++    const daPlanilha = lerCatalogo(semOverride.destino).units.reduce(
++      (n, u) => n + u.aliases.length,
++      0,
++    )
++    const doOverride = (OVERRIDES_D13["aliases"] as unknown[]).length
++    const efetivo = lerCatalogo(r.destino).units.reduce((n, u) => n + u.aliases.length, 0)
++    expect(efetivo).toBe(daPlanilha + doOverride)
++  })
++
++  it("proveniência: as duas fontes ficam registradas com hash", () => {
++    const a = JSON.parse(readFileSync(r.destino, "utf8")) as {
++      sources: { role: string; file: string; sha256: string }[]
++      importer_version: string
++    }
++    expect(a.sources.map((f) => f.role)).toEqual(["workbook", "alias_overrides"])
++    for (const f of a.sources) expect(f.sha256).toMatch(/^[a-f0-9]{64}$/)
++    expect(a.importer_version).toMatch(/^\d+\.\d+\.\d+$/)
++  })
++
++  it("o hash registrado é o do arquivo de verdade, não um valor qualquer", () => {
++    const a = JSON.parse(readFileSync(r.destino, "utf8")) as {
++      sources: { role: string; sha256: string }[]
++    }
++    const doArtefato = a.sources.find((f) => f.role === "alias_overrides")?.sha256
++    // Um override diferente precisa produzir hash diferente.
++    const outro = converter(planilha(PLANILHA_D13), undefined, {
++      schema_version: "1.0.0",
++      aliases: [{ alias: "Presidente P.", target_unit_id: "prudente" }],
++    })
++    const doOutro = (
++      JSON.parse(readFileSync(outro.destino, "utf8")) as {
++        sources: { role: string; sha256: string }[]
++      }
++    ).sources.find((f) => f.role === "alias_overrides")?.sha256
++    expect(doOutro).not.toBe(doArtefato)
++  })
++})
++
++describe("E/F/G/H/I — override inválido é FATAL", () => {
++  const comOverride = (doc: Overrides | string): Resultado =>
++    converter(planilha(PLANILHA_D13), undefined, doc)
++
++  it("E — target_unit_id inexistente no catálogo da planilha", () => {
++    const r = comOverride({
++      schema_version: "1.0.0",
++      aliases: [{ alias: "Qualquer", target_unit_id: "unidade_fantasma" }],
++    })
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("não existe no catálogo")
++  })
++
++  it("F — o mesmo alias apontando para duas UnitIds", () => {
++    const r = comOverride({
++      schema_version: "1.0.0",
++      aliases: [
++        { alias: "Ambíguo", target_unit_id: "prudente" },
++        { alias: "Ambíguo", target_unit_id: "santos" },
++      ],
++    })
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("declarado em")
++  })
++
++  it("F — alias do override colidindo com alias da planilha de outra unidade", () => {
++    const r = converter(
++      planilha([CABECALHO, ["Santos", "Compartilhado", "Sim"], ["Prudente", null, "Sim"]]),
++      undefined,
++      {
++        schema_version: "1.0.0",
++        aliases: [{ alias: "Compartilhado", target_unit_id: "prudente" }],
++      },
++    )
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("aponta para")
++  })
++
++  it("G — alias colidindo com o canônico de outra unidade", () => {
++    const r = comOverride({
++      schema_version: "1.0.0",
++      aliases: [{ alias: "Santos", target_unit_id: "prudente" }],
++    })
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("colide")
++  })
++
++  it("H — rótulo de agrupamento usado como alias humano", () => {
++    // Decisão humana não transforma agrupamento comercial em unidade.
++    const r = converter(
++      planilha([
++        CABECALHO,
++        ["Carpina", "Carpina e Limoeiro", "Sim"],
++        ["Limoeiro", "Carpina e Limoeiro", "Sim"],
++      ]),
++      undefined,
++      {
++        schema_version: "1.0.0",
++        aliases: [{ alias: "Carpina e Limoeiro", target_unit_id: "carpina" }],
++      },
++    )
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("rótulo de agrupamento")
++  })
++
++  it("H — variação de grafia do rótulo também é recusada", () => {
++    const r = converter(
++      planilha([
++        CABECALHO,
++        ["Carpina", "Carpina e Limoeiro", "Sim"],
++        ["Limoeiro", "Carpina e Limoeiro", "Sim"],
++      ]),
++      undefined,
++      {
++        schema_version: "1.0.0",
++        aliases: [{ alias: "carpina  e  limoeiro", target_unit_id: "limoeiro" }],
++      },
++    )
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("rótulo de agrupamento")
++  })
++
++  it("H — rótulo de agrupamento como TARGET", () => {
++    const r = converter(
++      planilha([
++        CABECALHO,
++        ["Carpina", "Carpina e Limoeiro", "Sim"],
++        ["Limoeiro", "Carpina e Limoeiro", "Sim"],
++      ]),
++      undefined,
++      {
++        schema_version: "1.0.0",
++        aliases: [{ alias: "CL", target_unit_id: "carpina_e_limoeiro" }],
++      },
++    )
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("rótulo de agrupamento")
++  })
++
++  it("I — JSON malformado", () => {
++    const r = comOverride("{ isso não é json")
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("JSON inválido")
++  })
++
++  it("I — schema_version não suportada", () => {
++    const r = comOverride({ schema_version: "9.9.9", aliases: [] })
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("schema_version")
++  })
++
++  it("I — schema_version ausente", () => {
++    const r = comOverride({ aliases: [] })
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("schema_version")
++  })
++
++  it("I — `aliases` ausente ou de tipo errado", () => {
++    for (const doc of [
++      { schema_version: "1.0.0" },
++      { schema_version: "1.0.0", aliases: {} },
++      { schema_version: "1.0.0", aliases: "nenhum" },
++    ]) {
++      const r = comOverride(doc)
++      expect(r.ok, JSON.stringify(doc)).toBe(false)
++      expect(r.stderr).toContain("`aliases`")
++    }
++  })
++
++  it("I — entrada sem alias, sem target, ou com tipo errado", () => {
++    for (const entrada of [
++      {},
++      { alias: "X" },
++      { target_unit_id: "prudente" },
++      { alias: "", target_unit_id: "prudente" },
++      { alias: "   ", target_unit_id: "prudente" },
++      { alias: "X", target_unit_id: "" },
++      { alias: 42, target_unit_id: "prudente" },
++      { alias: "X", target_unit_id: null },
++      "não é objeto",
++    ]) {
++      const r = comOverride({ schema_version: "1.0.0", aliases: [entrada] })
++      expect(r.ok, JSON.stringify(entrada)).toBe(false)
++    }
++  })
++
++  it("raiz que não é objeto", () => {
++    expect(comOverride("[]").ok).toBe(false)
++    expect(comOverride('"texto"').ok).toBe(false)
++  })
++
++  it("arquivo de overrides inexistente falha limpo", () => {
++    const dir = mkdtempSync(join(tmpdir(), "cat-noovr-"))
++    const destino = join(dir, "unidades.catalog.json")
++    let stderr = ""
++    try {
++      execFileSync(
++        "python3",
++        [CONVERSOR, planilha(PLANILHA_D13), join(tmpdir(), "nao-existe-ovr.json"), destino],
++        { encoding: "utf8", stdio: "pipe" },
++      )
++    } catch (e) {
++      stderr = (e as { stderr?: string }).stderr ?? ""
++    }
++    expect(stderr).toContain("overrides não encontrada")
++    expect(stderr).not.toContain("Traceback")
++    expect(existsSync(destino)).toBe(false)
++  })
++
++  it("todos os problemas de override são reportados, não só o primeiro", () => {
++    const r = comOverride({
++      schema_version: "1.0.0",
++      aliases: [{ alias: "" }, { alias: "A" }, { alias: 1, target_unit_id: "x" }],
++    })
++    expect(r.ok).toBe(false)
++    const linhas = r.stderr.split("\n").filter((l) => l.trim().startsWith("- "))
++    expect(linhas.length).toBeGreaterThanOrEqual(3)
++  })
++})
++
++describe("J/K — override inválido não enfraquece a publicação atômica", () => {
++  it("J — o artefato anterior permanece byte-identical", () => {
++    const dir = mkdtempSync(join(tmpdir(), "cat-ovr-atom-"))
++    const destino = join(dir, "unidades.catalog.json")
++
++    expect(converter(planilha(PLANILHA_D13), destino, OVERRIDES_D13).ok).toBe(true)
++    const antes = readFileSync(destino)
++
++    const ruim = converter(planilha(PLANILHA_D13), destino, {
++      schema_version: "1.0.0",
++      aliases: [{ alias: "X", target_unit_id: "unidade_fantasma" }],
++    })
++    expect(ruim.ok).toBe(false)
++    expect(readFileSync(destino).equals(antes)).toBe(true)
++  })
++
++  it("K — e preserva o modo do arquivo", () => {
++    const dir = mkdtempSync(join(tmpdir(), "cat-ovr-mode-"))
++    const destino = join(dir, "unidades.catalog.json")
++
++    expect(converter(planilha(PLANILHA_D13), destino, OVERRIDES_D13).ok).toBe(true)
++    chmodSync(destino, 0o640)
++
++    const ruim = converter(planilha(PLANILHA_D13), destino, "{ json quebrado")
++    expect(ruim.ok).toBe(false)
++    expect(oct(modo(destino))).toBe("0640")
++    expect(readdirSync(dir).filter((f) => f.includes(".tmp"))).toEqual([])
++  })
++})
++
++describe("as duas fontes governadas reais", () => {
++  const RAIZ_GOV = join(RAIZ, "governance")
++
++  it("o arquivo de overrides existe e tem schema fechado", () => {
++    const doc = JSON.parse(
++      readFileSync(join(RAIZ_GOV, "d13.alias-overrides.json"), "utf8"),
++    ) as { schema_version: string; aliases: { alias: string; target_unit_id: string }[] }
++    expect(doc.schema_version).toBe("1.0.0")
++    expect(doc.aliases).toHaveLength(3)
++    expect(doc.aliases.map((a) => a.alias).sort()).toEqual([
++      "BelfordRoxo",
++      "Presidente P.",
++      "Rio Preto",
++    ])
++  })
++
++  it("o artefato em uso registra as duas fontes", () => {
++    const a = JSON.parse(readFileSync(join(RAIZ, "catalog/unidades.catalog.json"), "utf8")) as {
++      sources: { role: string; sha256: string }[]
++    }
++    expect(a.sources.map((f) => f.role)).toEqual(["workbook", "alias_overrides"])
++  })
++
++  it("o artefato em uso tem 8 aliases efetivos — 5 da planilha + 3 humanos", () => {
++    const c = lerCatalogo(join(RAIZ, "catalog/unidades.catalog.json"))
++    expect(c.units.reduce((n, u) => n + u.aliases.length, 0)).toBe(8)
++  })
++})
+diff --git a/intelligence/detectors/tests/unit-catalog.test.ts b/intelligence/detectors/tests/unit-catalog.test.ts
+new file mode 100644
+index 0000000..b3878ad
+--- /dev/null
++++ b/intelligence/detectors/tests/unit-catalog.test.ts
+@@ -0,0 +1,603 @@
++/**
++ * Catálogo governado + decisões D13 aprovadas na Fase 2.6b.
++ *
++ * As decisões testadas aqui NÃO são minhas: vieram por escrito na aprovação da
++ * fase. `UNIDADES.xlsx` não estava no workspace, então o seed é o subconjunto
++ * governado — as linhas ausentes não foram inventadas.
++ */
++
++import { readFileSync } from "node:fs"
++import { describe, expect, it } from "vitest"
++import {
++  GOVERNED_UNIT_CATALOG,
++  buildGovernedCatalog,
++  canonicalizeWithGroups,
++  importUnitCatalog,
++  toUnitCatalog,
++  unitIdFromCanonicalName,
++} from "../src/unit-catalog"
++import { buildUnitIndex } from "../src/canonical-units"
++import type { CanonicalUnitResult } from "../src/canonical-units"
++import { ENGINE_UNIT_NORMALIZER } from "../src/unit-normalizer"
++import { APPROVED_THRESHOLDS } from "../src/config"
++import { GatewayError } from "../../gateway/src/errors"
++
++const OPTS = { similarityThresholdBp: APPROVED_THRESHOLDS.similarity_threshold_bp }
++const INDICE = buildUnitIndex(toUnitCatalog(GOVERNED_UNIT_CATALOG), ENGINE_UNIT_NORMALIZER)
++
++const resolver = (bruto: unknown): CanonicalUnitResult =>
++  canonicalizeWithGroups(bruto, INDICE, ENGINE_UNIT_NORMALIZER, OPTS, GOVERNED_UNIT_CATALOG.groups)
++
++const idDe = (r: CanonicalUnitResult): string | null =>
++  r.status === "matched" ? r.unit_id : null
++
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("o catálogo é DADO, não união compilada", () => {
++  it("unidade nova é linha nova — sem recompilar", () => {
++    const c = importUnitCatalog("1.0.0", [
++      { canonical_name: "Unidade Recém Aberta", aliases: "", status: "active" },
++    ])
++    expect(c.entries.some((e) => e.canonical_name === "Unidade Recém Aberta")).toBe(true)
++  })
++
++  it("`unit_id` derivado é estável e no formato do contrato", () => {
++    expect(unitIdFromCanonicalName("São José do Rio Preto")).toBe("sao_jose_do_rio_preto")
++    expect(unitIdFromCanonicalName("Maracanaú")).toBe("maracanau")
++    expect(unitIdFromCanonicalName("Jardim Ângela")).toBe("jardim_angela")
++    // Determinístico: mesma entrada, mesmo id.
++    expect(unitIdFromCanonicalName("Marabá")).toBe(unitIdFromCanonicalName("Marabá"))
++  })
++
++  it("a versão do catálogo aprovado é 1.0.0 — política real, não sintética", () => {
++    expect(GOVERNED_UNIT_CATALOG.catalog_version).toBe("1.0.0")
++  })
++})
++
++describe("importação falha fechada", () => {
++  it("recusa versão fora de semver", () => {
++    expect(() => importUnitCatalog("v1", [{ canonical_name: "Santos" }])).toThrowError(
++      /catalog_version/,
++    )
++  })
++
++  it("recusa linha sem nome canônico", () => {
++    expect(() => importUnitCatalog("1.0.0", [{ aliases: "x" }])).toThrowError(/canonical_name/)
++  })
++
++  it("recusa status desconhecido", () => {
++    try {
++      importUnitCatalog("1.0.0", [{ canonical_name: "Unidade Teste", status: "talvez" }])
++      expect.unreachable("deveria ter recusado")
++    } catch (e) {
++      expect((e as GatewayError).details.join(" ")).toContain("status")
++    }
++  })
++
++  it("recusa nome canônico curto demais para gerar id válido", () => {
++    // `X` deriva o id `x`, e o formato do contrato exige ao menos dois
++    // caracteres. Falha explícita em vez de id inválido no catálogo.
++    try {
++      importUnitCatalog("1.0.0", [{ canonical_name: "X" }])
++      expect.unreachable("deveria ter recusado")
++    } catch (e) {
++      expect((e as GatewayError).details.join(" ")).toContain("unit_id")
++    }
++  })
++
++  it("recusa `unit_id` duplicado", () => {
++    expect(() =>
++      importUnitCatalog("1.0.0", [
++        { canonical_name: "Santos" },
++        { canonical_name: "Santos" },
++      ]),
++    ).toThrowError(/duplicado/)
++  })
++
++  it("recusa alias que aponta para DUAS unidades", () => {
++    // Um alias ambíguo gravado no catálogo é o oposto do que o catálogo serve.
++    expect(() =>
++      importUnitCatalog("1.0.0", [
++        { canonical_name: "Alfa", aliases: "compartilhado" },
++        { canonical_name: "Beta", aliases: "compartilhado" },
++      ]),
++    ).toThrowError(/já pertence a/)
++  })
++
++  it("recusa agrupamento com membro inexistente", () => {
++    expect(() =>
++      importUnitCatalog("1.0.0", [
++        { canonical_name: "Carpina" },
++        { canonical_name: "Carpina e Fantasma", group_members: "carpina;fantasma" },
++      ]),
++    ).toThrowError(/membros inexistentes/)
++  })
++
++  it("recusa agrupamento com um único membro", () => {
++    expect(() =>
++      importUnitCatalog("1.0.0", [
++        { canonical_name: "Carpina" },
++        { canonical_name: "Só Carpina", group_members: "carpina" },
++      ]),
++    ).toThrowError(/ao menos duas/)
++  })
++
++  it("aliases numa célula são separados por `;` ou `|`, nunca por vírgula", () => {
++    // Vírgula aparece DENTRO de rótulo de agrupamento (`Limeira, Sumaré & ...`).
++    const c = importUnitCatalog("1.0.0", [{ canonical_name: "Unidade Teste", aliases: "aa;bb|cc" }])
++    expect(c.entries[0]?.aliases).toEqual(["aa", "bb", "cc"])
++  })
++
++  it("todos os problemas de uma vez, não só o primeiro", () => {
++    try {
++      importUnitCatalog("errado", [{ aliases: "x" }, { canonical_name: "Y", status: "?" }])
++      expect.unreachable("deveria ter recusado")
++    } catch (e) {
++      expect((e as GatewayError).details.length).toBeGreaterThan(2)
++    }
++  })
++})
++
++describe("§21 — decisões D13 aprovadas", () => {
++  it("BelfordRoxo → Belford Roxo", () => {
++    expect(idDe(resolver("BelfordRoxo"))).toBe("belford_roxo")
++    expect(idDe(resolver("Belford Roxo"))).toBe("belford_roxo")
++  })
++
++  it("Maracanau → Maracanaú", () => {
++    expect(idDe(resolver("Maracanau"))).toBe("maracanau")
++    expect(idDe(resolver("Maracanaú"))).toBe("maracanau")
++  })
++
++  it("Jd Angela / Jardim Angela / Jardim Ângela são a MESMA identidade", () => {
++    const ids = ["Jd Angela", "Jardim Angela", "Jardim Ângela"].map((x) => idDe(resolver(x)))
++    expect(new Set(ids).size).toBe(1)
++    // O canônico vem da planilha, que grafa `Jd Angela`. A regra `jd → jardim` do
++    // motor faz as três formas casarem na mesma chave comparável.
++    expect(ids[0]).toBe("jd_angela")
++  })
++
++  it("e existe UMA unidade para as três grafias, não três", () => {
++    const angelas = GOVERNED_UNIT_CATALOG.entries.filter((e) =>
++      e.canonical_name.toLowerCase().includes("ngela"),
++    )
++    expect(angelas).toHaveLength(1)
++    expect(angelas[0]?.unit_id).toBe("jd_angela")
++  })
++
++  it("Presidente P. → Prudente", () => {
++    expect(idDe(resolver("Presidente P."))).toBe("prudente")
++  })
++
++  it("e é ALIAS governado, não escolha de similaridade em runtime", () => {
++    const entrada = GOVERNED_UNIT_CATALOG.entries.find((e) => e.unit_id === "prudente")
++    expect(entrada?.aliases).toContain("Presidente P.")
++  })
++
++  it("Grau Marabá → Marabá, sem criar unidade extra", () => {
++    expect(idDe(resolver("Grau Marabá"))).toBe("maraba")
++    expect(idDe(resolver("Grau Maraba"))).toBe("maraba")
++    expect(idDe(resolver("Marabá"))).toBe("maraba")
++    const marabas = GOVERNED_UNIT_CATALOG.entries.filter((e) => e.unit_id.startsWith("marab"))
++    expect(marabas).toHaveLength(1)
++  })
++
++  it("STA Cruz → Santa Cruz", () => {
++    expect(idDe(resolver("STA Cruz"))).toBe("santa_cruz")
++    expect(idDe(resolver("Santa Cruz"))).toBe("santa_cruz")
++  })
++
++  it("Rio Centro, Zona Norte - RN e Madureira são unidades DISTINTAS", () => {
++    const ids = [
++      resolver("Rio Centro"),
++      resolver("Zona Norte - RN"),
++      resolver("Madureira"),
++    ].map(idDe)
++    expect(ids).toEqual(["rio_centro", "zona_norte_rn", "madureira"])
++    expect(new Set(ids).size).toBe(3)
++  })
++
++  it("ACHADO: `Zona Norte` sozinho NÃO resolve — a planilha grafa `Zona Norte - RN`", () => {
++    // Registrado como pendência de qualidade, não corrigido por similaridade. Se
++    // as planilhas de venda escreverem `Zona Norte`, precisa de alias governado.
++    expect(idDe(resolver("Zona Norte"))).toBeNull()
++    // O apelido que a planilha DÁ para ela resolve.
++    expect(idDe(resolver("Natal Zona Norte"))).toBe("zona_norte_rn")
++  })
++
++  it("Carpina ≠ Limoeiro", () => {
++    expect(idDe(resolver("Carpina"))).toBe("carpina")
++    expect(idDe(resolver("Limoeiro"))).toBe("limoeiro")
++  })
++
++  it("Limeira ≠ Sumaré ≠ Jardim Ângela", () => {
++    const ids = [resolver("Limeira"), resolver("Sumaré"), resolver("Jardim Ângela")].map(idDe)
++    expect(new Set(ids).size).toBe(3)
++  })
++
++  it("os aliases D13 anteriores continuam valendo sobre o canônico da planilha", () => {
++    // A planilha grafa `Mogi`, não `Mogi das Cruzes`. O prefixo `Grau` é removido
++    // por regra do motor, então as duas formas da fonte casam.
++    expect(idDe(resolver("Mogi"))).toBe("mogi")
++    expect(idDe(resolver("Grau Mogi"))).toBe("mogi")
++    // `Rio Preto` é override governado sobre o canônico `Sâo José do Rio Preto`.
++    expect(idDe(resolver("Rio Preto"))).toBe("sao_jose_do_rio_preto")
++  })
++
++  it("Santos e Santo Amaro seguem separados — veto estrutural D12", () => {
++    expect(idDe(resolver("Santos"))).toBe("santos")
++    expect(idDe(resolver("Santo Amaro"))).toBe("santo_amaro")
++  })
++})
++
++describe("§5 — unidade INATIVA não é UNKNOWN", () => {
++  it("Jardim Ângela está inativa no catálogo", () => {
++    const e = GOVERNED_UNIT_CATALOG.entries.find((x) => x.unit_id === "jd_angela")
++    expect(e?.status).toBe("inactive")
++  })
++
++  it("mas a identidade É resolvida — a unidade fechou, o nome não deixou de existir", () => {
++    const r = resolver("Jd Angela")
++    expect(r.status).toBe("matched")
++    expect(idDe(r)).toBe("jd_angela")
++  })
++
++  it("o status inativo permanece visível no catálogo", () => {
++    const inativas = GOVERNED_UNIT_CATALOG.entries.filter((e) => e.status === "inactive")
++    // As cinco que a planilha marca `Ativo = Não`.
++    expect(inativas.map((e) => e.unit_id).sort()).toEqual([
++      "duque_de_caxias",
++      "guarulhos",
++      "jd_angela",
++      "sao_goncalo",
++      "vila_maria",
++    ])
++  })
++
++  it("a projeção para o índice preserva `active: false`", () => {
++    const proj = toUnitCatalog(GOVERNED_UNIT_CATALOG)
++    const angela = proj.units.find((u) => u.unit_id === "jd_angela")
++    expect(angela?.active).toBe(false)
++  })
++})
++
++describe("§4 — AGRUPAMENTO comercial não é unidade nem alias", () => {
++  it("`Carpina e Limoeiro` NÃO resolve para uma escola", () => {
++    const r = resolver("Carpina e Limoeiro")
++    expect(r.status).toBe("ambiguous")
++    expect(idDe(r)).toBeNull()
++  })
++
++  it("e não é nem Carpina nem Limoeiro", () => {
++    const r = resolver("Carpina e Limoeiro")
++    expect(r.status === "ambiguous" && r.candidates).toEqual(["carpina", "limoeiro"])
++    // Explicitamente: o rótulo não é igual a nenhum dos membros.
++    expect(r).not.toEqual(resolver("Carpina"))
++    expect(r).not.toEqual(resolver("Limoeiro"))
++  })
++
++  it("a razão distingue agrupamento de dúvida do algoritmo", () => {
++    const r = resolver("Carpina e Limoeiro")
++    expect(r.status === "ambiguous" && r.reason).toBe("GROUP_LABEL")
++  })
++
++  it("`Limeira, Sumaré & JD Ângela` cobre os três membros", () => {
++    const r = resolver("Limeira, Sumaré & JD Ângela")
++    expect(r.status).toBe("ambiguous")
++    expect(r.status === "ambiguous" && r.reason).toBe("GROUP_LABEL")
++    // TRÊS membros, não quatro: `Jd Angela` é uma unidade só.
++    expect(r.status === "ambiguous" && r.candidates).toEqual(["jd_angela", "limeira", "sumare"])
++  })
++
++  it("e não resolve para nenhum dos três individualmente", () => {
++    const grupo = resolver("Limeira, Sumaré & JD Ângela")
++    for (const membro of ["Limeira", "Sumaré", "Jardim Ângela"]) {
++      expect(idDe(grupo)).not.toBe(idDe(resolver(membro)))
++    }
++    expect(idDe(grupo)).toBeNull()
++  })
++
++  it("nenhum valor é dividido entre os membros — o rótulo não carrega aritmética", () => {
++    // O resultado não tem campo de valor nem de proporção: a identidade é
++    // não-atômica e o detector recebe isso, não uma divisão inventada.
++    const r = resolver("Carpina e Limoeiro")
++    expect(Object.keys(r).sort()).toEqual(["candidates", "raw_fingerprint", "reason", "status"])
++  })
++
++  it("o rótulo é conferido ANTES da similaridade", () => {
++    // `Carpina e Limoeiro` contém `Carpina`. Se a similaridade rodasse primeiro,
++    // ela poderia se agarrar a um membro.
++    expect(resolver("Carpina e Limoeiro").status).toBe("ambiguous")
++  })
++
++  it("nome cru do agrupamento não atravessa no resultado", () => {
++    const texto = JSON.stringify(resolver("Limeira, Sumaré & JD Ângela"))
++    expect(texto).not.toContain("Limeira,")
++    expect(texto).not.toContain("&")
++  })
++
++  it("os dois agrupamentos aprovados estão no catálogo, e só eles", () => {
++    expect(GOVERNED_UNIT_CATALOG.groups.map((g) => g.label).sort()).toEqual([
++      "Carpina e Limoeiro",
++      "Limeira, Sumaré & JD Ângela",
++    ])
++  })
++})
++
++describe("nome fora do catálogo continua unknown", () => {
++  it("não é promovido por similaridade", () => {
++    const r = resolver("Escola Que Nunca Existiu")
++    expect(r.status).toBe("unknown")
++  })
++
++  it("e o texto cru não atravessa", () => {
++    expect(JSON.stringify(resolver("Escola Que Nunca Existiu"))).not.toContain("Nunca")
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// §12 — catálogo COMPLETO, derivado de UNIDADES.xlsx
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("§12 — o catálogo completo bate com o arquivo", () => {
++  // ── B ──
++  it("B — 49 unidades: 44 ativas, 5 inativas", () => {
++    expect(GOVERNED_UNIT_CATALOG.entries).toHaveLength(49)
++    expect(GOVERNED_UNIT_CATALOG.entries.filter((e) => e.status === "active")).toHaveLength(44)
++    expect(GOVERNED_UNIT_CATALOG.entries.filter((e) => e.status === "inactive")).toHaveLength(5)
++  })
++
++  it("B — dois agrupamentos, e nenhum deles é unidade", () => {
++    expect(GOVERNED_UNIT_CATALOG.groups).toHaveLength(2)
++    const nomes = GOVERNED_UNIT_CATALOG.entries.map((e) => e.canonical_name)
++    expect(nomes).not.toContain("Carpina e Limoeiro")
++    expect(nomes).not.toContain("Limeira, Sumaré & JD Ângela")
++  })
++
++  // ── A ──
++  it("A — a importação é determinística: mesmo artefato, mesmo catálogo", () => {
++    const a = JSON.stringify(GOVERNED_UNIT_CATALOG)
++    const b = JSON.stringify(GOVERNED_UNIT_CATALOG)
++    expect(b).toBe(a)
++  })
++
++  // ── C ──
++  it("C — nenhum canonical_name duplicado", () => {
++    const nomes = GOVERNED_UNIT_CATALOG.entries.map((e) => e.canonical_name)
++    expect(new Set(nomes).size).toBe(nomes.length)
++  })
++
++  it("C — nenhum unit_id duplicado", () => {
++    const ids = GOVERNED_UNIT_CATALOG.entries.map((e) => e.unit_id)
++    expect(new Set(ids).size).toBe(ids.length)
++  })
++
++  it("C — nenhum alias colide com o canônico de OUTRA unidade", () => {
++    const canonicos = new Map(
++      GOVERNED_UNIT_CATALOG.entries.map((e) => [e.canonical_name.toLowerCase(), e.unit_id]),
++    )
++    for (const e of GOVERNED_UNIT_CATALOG.entries) {
++      for (const a of e.aliases) {
++        const dono = canonicos.get(a.toLowerCase())
++        expect(dono === undefined || dono === e.unit_id, `${a} → ${e.unit_id}`).toBe(true)
++      }
++    }
++  })
++
++  // ── D ──
++  it("D — alias ambíguo continua falhando fechado", () => {
++    expect(() =>
++      importUnitCatalog("1.0.0", [
++        { canonical_name: "Unidade Alfa", aliases: "duplicado" },
++        { canonical_name: "Unidade Beta", aliases: "duplicado" },
++      ]),
++    ).toThrowError(/já pertence a/)
++  })
++
++  // ── E ──
++  describe("E — unidades FORA do seed parcial de 18 resolvem", () => {
++    // Nenhuma destas existia no seed da Fase 2.6b.
++    const novas: readonly [string, string][] = [
++      ["Bangu", "bangu"],
++      ["Bonsucesso", "bonsucesso"],
++      ["Camaragibe", "camaragibe"],
++      ["Cariacica", "cariacica"],
++      ["Diadema", "diadema"],
++      ["Manaus", "manaus"],
++      ["Mossoró", "mossoro"],
++      ["Niteroi", "niteroi"],
++      ["Nova Iguaçu", "nova_iguacu"],
++      ["Osasco", "osasco"],
++      ["Petrolina", "petrolina"],
++      ["Santo André", "santo_andre"],
++      ["São Luís", "sao_luis"],
++      ["Serra", "serra"],
++      ["Serra Talhada", "serra_talhada"],
++      ["Taboão", "taboao"],
++      ["Teresina", "teresina"],
++      ["Vila Velha", "vila_velha"],
++    ]
++
++    for (const [nome, id] of novas) {
++      it(`${nome} → ${id}`, () => {
++        expect(idDe(resolver(nome))).toBe(id)
++      })
++    }
++
++    it("com prefixo institucional também — o motor remove `Grau`", () => {
++      expect(idDe(resolver("Grau Bangu"))).toBe("bangu")
++      expect(idDe(resolver("Grau Teresina"))).toBe("teresina")
++    })
++  })
++
++  // ── F ──
++  it("F — as cinco inativas resolvem como identidade CONHECIDA", () => {
++    const inativas: readonly [string, string][] = [
++      ["Duque de Caxias", "duque_de_caxias"],
++      ["Guarulhos", "guarulhos"],
++      ["Jd Angela", "jd_angela"],
++      ["São Gonçalo", "sao_goncalo"],
++      ["Vila Maria", "vila_maria"],
++    ]
++    for (const [nome, id] of inativas) {
++      expect(idDe(resolver(nome)), nome).toBe(id)
++    }
++  })
++
++  it("F — e nenhuma delas é `unknown`", () => {
++    for (const e of GOVERNED_UNIT_CATALOG.entries.filter((x) => x.status === "inactive")) {
++      expect(resolver(e.canonical_name).status, e.canonical_name).toBe("matched")
++    }
++  })
++
++  // ── G ──
++  it("G — os dois rótulos de agrupamento não são UnitId", () => {
++    for (const g of GOVERNED_UNIT_CATALOG.groups) {
++      const r = resolver(g.label)
++      expect(r.status, g.label).toBe("ambiguous")
++      expect(idDe(r), g.label).toBeNull()
++      expect(r.status === "ambiguous" && r.reason).toBe("GROUP_LABEL")
++    }
++  })
++
++  it("G — e os membros de cada um são unidades reais do catálogo", () => {
++    const ids = new Set(GOVERNED_UNIT_CATALOG.entries.map((e) => e.unit_id))
++    for (const g of GOVERNED_UNIT_CATALOG.groups) {
++      for (const m of g.members) expect(ids.has(m), `${g.label} → ${m}`).toBe(true)
++    }
++  })
++
++  it("G — o agrupamento de três tem TRÊS membros, não quatro", () => {
++    const g = GOVERNED_UNIT_CATALOG.groups.find((x) => x.label.startsWith("Limeira"))
++    expect(g?.members).toHaveLength(3)
++  })
++
++  // ── H ──
++  it("H — Jd Angela / Jardim Angela / Jardim Ângela seguem UMA identidade", () => {
++    const ids = ["Jd Angela", "Jardim Angela", "Jardim Ângela"].map((x) => idDe(resolver(x)))
++    expect(new Set(ids)).toEqual(new Set(["jd_angela"]))
++  })
++
++  it("todos os aliases da planilha resolvem para a sua unidade", () => {
++    for (const e of GOVERNED_UNIT_CATALOG.entries) {
++      for (const a of e.aliases) {
++        expect(idDe(resolver(a)), `${a} → ${e.unit_id}`).toBe(e.unit_id)
++      }
++    }
++  })
++
++  it("a fonte única de verdade é o catálogo completo — não há seed parcial", async () => {
++    const modulo = (await import("../src/unit-catalog")) as Record<string, unknown>
++    expect(Object.keys(modulo)).not.toContain("APPROVED_UNIT_CATALOG")
++    expect(Object.keys(modulo)).not.toContain("APPROVED_UNIT_ROWS")
++    expect(Object.keys(modulo)).toContain("GOVERNED_UNIT_CATALOG")
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// PROJEÇÃO EXATA — a invariante que substituiu `ALIASES_GOVERNADOS`.
++//
++// O gate final da 2.6c encontrou uma segunda fonte de governança: três aliases
++// escritos em TypeScript eram enxertados no catálogo DEPOIS do load. Regenerar a
++// planilha não reproduzia o catálogo efetivo, e essas decisões não podiam ser
++// auditadas nem removidas pelo caminho governado.
++//
++// A correção move os três para `governance/d13.alias-overrides.json`, que o build
++// step mescla antes de publicar. O que trava a porta é este bloco: os aliases
++// efetivos em runtime são EXATAMENTE os do artefato. O loader pode construir
++// Map/Set, mas não pode criar dado governado.
++
++describe("o runtime é projeção exata do artefato, não enriquecimento", () => {
++  const ARTEFATO = JSON.parse(
++    readFileSync(new URL("../../catalog/unidades.catalog.json", import.meta.url), "utf8"),
++  ) as {
++    catalog_version: string
++    units: { unit_id: string; canonical_name: string; aliases: string[]; status: string }[]
++    groups: { label: string; members: string[] }[]
++    sources: { role: string; file: string; sha256: string }[]
++  }
++
++  const aliasesDoArtefato = (): Map<string, string[]> =>
++    new Map(ARTEFATO.units.map((u) => [u.unit_id, [...u.aliases].sort()]))
++
++  const aliasesDoRuntime = (): Map<string, string[]> =>
++    new Map(
++      GOVERNED_UNIT_CATALOG.entries
++        .filter((e) => e.unit_id !== undefined)
++        .map((e) => [e.unit_id, [...e.aliases].sort()]),
++    )
++
++  it("nenhum alias a mais, nenhum a menos, nenhum alvo alterado", () => {
++    expect(aliasesDoRuntime()).toEqual(aliasesDoArtefato())
++  })
++
++  it("a contagem efetiva bate exatamente", () => {
++    const noArtefato = ARTEFATO.units.reduce((n, u) => n + u.aliases.length, 0)
++    const noRuntime = GOVERNED_UNIT_CATALOG.entries.reduce((n, e) => n + e.aliases.length, 0)
++    expect(noRuntime).toBe(noArtefato)
++  })
++
++  it("unidades, nomes canônicos e status são os do artefato", () => {
++    const doArtefato = ARTEFATO.units
++      .map((u) => `${u.unit_id}|${u.canonical_name}|${u.status}`)
++      .sort()
++    const doRuntime = GOVERNED_UNIT_CATALOG.entries
++      .filter((e) => e.unit_id !== undefined)
++      .map((e) => `${e.unit_id}|${e.canonical_name}|${e.status as string}`)
++      .sort()
++    expect(doRuntime).toEqual(doArtefato)
++  })
++
++  it("agrupamentos são os do artefato", () => {
++    const doArtefato = ARTEFATO.groups
++      .map((g) => `${g.label}|${[...g.members].sort().join(",")}`)
++      .sort()
++    const doRuntime = GOVERNED_UNIT_CATALOG.groups
++      .map((g) => `${g.label}|${[...g.members].sort().join(",")}`)
++      .sort()
++    expect(doRuntime).toEqual(doArtefato)
++  })
++
++  it("catalog_version vem do artefato", () => {
++    expect(GOVERNED_UNIT_CATALOG.catalog_version).toBe(ARTEFATO.catalog_version)
++  })
++
++  it("os três aliases humanos vêm do ARTEFATO, não de código", () => {
++    const noArtefato = new Set(ARTEFATO.units.flatMap((u) => u.aliases))
++    for (const a of ["BelfordRoxo", "Presidente P.", "Rio Preto"]) {
++      expect(noArtefato.has(a), a).toBe(true)
++    }
++  })
++
++  it("o artefato declara as duas fontes governadas", () => {
++    expect(ARTEFATO.sources.map((f) => f.role)).toEqual(["workbook", "alias_overrides"])
++    for (const f of ARTEFATO.sources) expect(f.sha256).toMatch(/^[a-f0-9]{64}$/)
++  })
++
++  it("o módulo não exporta nenhuma tabela de aliases", async () => {
++    const modulo: Record<string, unknown> = await import("../src/unit-catalog")
++    for (const nome of Object.keys(modulo)) {
++      expect(nome).not.toMatch(/ALIAS/i)
++    }
++  })
++
++  it("buildGovernedCatalog não inventa alias para um artefato arbitrário", () => {
++    // Prova direta: entra sem alias, sai sem alias. Se houvesse enxerto por
++    // unit_id, `prudente` voltaria com `Presidente P.` aqui.
++    const c = buildGovernedCatalog({
++      catalog_version: "1.0.0",
++      units: [
++        { unit_id: "prudente", canonical_name: "Prudente", aliases: [], status: "active" },
++        { unit_id: "belford_roxo", canonical_name: "Belford Roxo", aliases: [], status: "active" },
++        {
++          unit_id: "sao_jose_do_rio_preto",
++          canonical_name: "Sao Jose do Rio Preto",
++          aliases: [],
++          status: "active",
++        },
++      ],
++      groups: [],
++    })
++    for (const e of c.entries) expect(e.aliases, e.canonical_name).toEqual([])
++  })
++})
+diff --git a/intelligence/docs/FASE_2_6B_GOVERNED_CATALOG_AND_POLICY.md b/intelligence/docs/FASE_2_6B_GOVERNED_CATALOG_AND_POLICY.md
+new file mode 100644
+index 0000000..ac6d76f
+--- /dev/null
++++ b/intelligence/docs/FASE_2_6B_GOVERNED_CATALOG_AND_POLICY.md
+@@ -0,0 +1,1081 @@
++# Fase 2.6b — Catálogo governado, política aprovada e regra de ticket baixo
++
++**Data:** 2026-08-17
++**Estado:** D13 parcialmente desbloqueado. Hermes não instalada, Fase 3 não iniciada.
++
++---
++
++> **ATUALIZADO PELA FASE 2.6c.** `UNIDADES.xlsx` chegou e o catálogo COMPLETO foi
++> importado: 49 unidades (44 ativas, 5 inativas), 5 aliases, 2 agrupamentos. O seed
++> parcial de 18 unidades foi **removido**. A severidade `info` do low-ticket foi
++> **removida** — não era política aprovada. Ver §13 no fim deste documento.
++
++## 1. `UNIDADES.xlsx` não estava disponível *(resolvido na 2.6c)*
++
++Procurei em `~/Desktop`, `~/Downloads`, `~/Documents`, `~/Desktop/claude` e no
++repositório. O único resultado foi `supabase/migrations/20260611_unidades.sql`, que
++já era conhecido.
++
++Conforme §1 do briefing: **não inventei as linhas ausentes.** O que foi entregue:
++
++| Entregue | Estado |
++|---|---|
++| Estrutura do catálogo governado (`UnitCatalogEntry`, `UnitGroupLabel`) | **READY** |
++| Importador validado (`importUnitCatalog`) | **READY** |
++| Projeção para o índice de canonicalização (`toUnitCatalog`) | **READY** |
++| Resolução com agrupamentos (`canonicalizeWithGroups`) | **READY** |
++| Seed das decisões aprovadas por escrito | **READY** — 18 unidades, 2 agrupamentos |
++| Seed COMPLETO (~40 unidades com status) | **BLOCKED** — depende do arquivo |
++
++O importador aceita linhas na forma `UnitCatalogRow`. Ele **não** abre `.xlsx`: quem
++extrai entrega linhas, e a validação acontece no importador. Isso evita escolher
++biblioteca de planilha e adivinhar nome de coluna antes de ver o arquivo.
++
++---
++
++## 2. `UnitId` é dado, não código — decisão registrada
++
++`UnitId` permanece `string` validada por `/^[a-z][a-z0-9_]{1,63}$/`. O catálogo entra
++como dado.
++
++### Documentos superseded
++
++| Documento | O que dizia | Estado |
++|---|---|---|
++| `FASE_2_1_SCHEMA_V2_PROPOSAL.md` §6 | `unit_id` como união literal compilada | **SUPERSEDED** pela Fase 2.6b |
++| `D13_CATALOG_VALIDATION.md` §8 | *"o `UnitId` passa a ser união literal em vez de `string` validada"* | **SUPERSEDED** pela Fase 2.6b |
++
++**Motivo:** com ~40 unidades e crescendo, a união literal faria a abertura de uma
++escola virar deploy de TypeScript. O dia em que a operação abre uma unidade não pode
++ser o dia em que alguém compila o POC.
++
++O histórico não foi apagado — os documentos seguem no repositório e esta seção
++registra a substituição.
++
++**Consequência para o bloqueio B1:** deixa de depender de enum compilado. Passa a
++depender só do **conteúdo** governado do catálogo.
++
++---
++
++## 3. Decisões D13 aplicadas
++
++Todas vieram por escrito na aprovação da fase. Nenhum nome canônico foi escolhido
++por mim.
++
++### 3.1 Grafias
++
++| A fonte escreve | Canônico | Teste |
++|---|---|---|
++| `BelfordRoxo` | **Belford Roxo** | ✓ |
++| `Maracanau` | **Maracanaú** | ✓ |
++
++### 3.2 Jardim Ângela — uma unidade, três grafias
++
++`Jd Angela` · `Jardim Angela` · `Jardim Ângela` → **`jd_angela`** *(id corrigido na 2.6c: o canônico da planilha é `Jd Angela`)*
++
++Confirmado por teste: as três resolvem para **a mesma** identidade, e existe **uma**
++entrada no catálogo, não três. A unidade está **inativa** conforme a planilha atual.
++
++### 3.3 Abreviação
++
++| A fonte escreve | Canônico | Como |
++|---|---|---|
++| `Presidente P.` | **Prudente** | alias **governado** no catálogo — não escolha de similaridade em runtime |
++
++Teste dedicado verifica que o alias está na entrada, não que a similaridade acertou.
++
++### 3.4 Unidades próprias
++
++`Rio Centro` · `Bezerra` · `Santa Cruz` · `Zona Norte - RN` · `Madureira` — cinco
++unidades **distintas**. *(2.6c: a planilha grafa `Zona Norte - RN`; ver §13.5.)* `STA Cruz` é alias governado de Santa Cruz.
++
++`Rio Centro` ≠ `Zona Norte` ≠ `Madureira`: testado, três `unit_id` diferentes.
++
++### 3.5 Marabá
++
++`Grau Marabá` / `Grau Maraba` → **`maraba`**, uma única unidade. Não foi criada
++unidade extra para a forma com prefixo.
++
++Era o achado mais importante do `D13_CATALOG_VALIDATION.md`: a fonte reportava e o
++catálogo não conhecia. **Resolvido.**
++
++---
++
++## 4. Agrupamentos comerciais — o achado desta fase
++
++Dois textos que a fonte escreve **não são unidades e não são aliases**:
++
++| Rótulo | Membros |
++|---|---|
++| `Carpina e Limoeiro` | `carpina`, `limoeiro` |
++| `Limeira, Sumaré & JD Ângela` | `jd_angela`, `limeira`, `sumare` |
++
++### 4.1 O que o sistema faz
++
++Resultado: `ambiguous` com `reason: "GROUP_LABEL"` e `candidates` = exatamente os
++membros.
++
++- **Não** escolhe um membro.
++- **Não** duplica o valor para todos.
++- **Não** divide o valor entre eles.
++- **Não** vaza o texto cru do rótulo.
++
++Testado explicitamente que `Carpina e Limoeiro` ≠ `Carpina` e ≠ `Limoeiro`, e que
++`Limeira, Sumaré & JD Ângela` não resolve para nenhum dos três.
++
++### 4.2 A ordem importa
++
++O rótulo é conferido **antes** da similaridade, por igualdade de chave comparável.
++`Carpina e Limoeiro` contém `Carpina`, e qualquer caminho de similaridade poderia se
++agarrar a um membro.
++
++### 4.3 Compromisso registrado: por que `ambiguous` e não um status novo
++
++O briefing §4 preferia um status fechado `GROUPED_SOURCE_IDENTITY`, com permissão de
++usar `unresolved` + reason se a alteração fosse excessiva.
++
++Escolhi `ambiguous` + `reason`. **Motivo técnico concreto:** os Detectores A, C e D
++ramificam com `if (status === "unknown") ... else if (status === "ambiguous")`, sem
++exaustividade que o compilador cubra. Um quarto valor passaria silenciosamente por
++esses `else if` e **a qualidade deixaria de degradar** — o pior resultado possível
++num código já aprovado, e o TypeScript não apontaria.
++
++Reaproveitar `ambiguous` herda o comportamento já testado nos quatro detectores:
++nunca promovido a identidade, qualidade vai a `conflicted`, nome cru não atravessa. O
++`reason` preserva a distinção entre *"não sei qual das duas"* (`SIMILARITY`) e *"sei
++exatamente o que é, e não é uma escola"* (`GROUP_LABEL`).
++
++O campo é opcional e aditivo: nenhum código existente mudou.
++
++### 4.4 Separador de aliases: `;` e `|`, nunca vírgula
++
++`Limeira, Sumaré & JD Ângela` contém vírgula. Usá-la como separador de aliases
++partiria o rótulo ao meio. Testado.
++
++---
++
++## 5. Unidade inativa ≠ desconhecida
++
++| Situação | Comportamento |
++|---|---|
++| Unidade inativa aparece na fonte | identidade **resolvida**, status `inactive` preservado |
++| Nome fora do catálogo | `unknown` |
++
++Uma unidade desativada continua tendo identidade canônica conhecida. O que ela
++deixou de ser é *esperada* — e isso é cobertura, não canonicalização. Confundir os
++dois faria toda linha histórica de uma unidade fechada virar `unknown`
++retroativamente.
++
++`Jardim Ângela` é o caso real: inativa, e `Jd Angela` resolve.
++
++### 5.1 Limitação registrada: sem vigência temporal
++
++`UnitCatalogEntry` não tem `effective_from` / `effective_to`, porque `ceo.schools`
++hoje só tem `active` booleano. Consequência: o status é o de **hoje**, e um período
++anterior a uma desativação não é reconstituível. Decisão de governança pendente.
++
++---
++
++## 6. Catálogo ≠ `expected_units`
++
++Preservado sem alteração:
++
++```
++unidades ativas no catálogo   ≠   unidades esperadas no período
++```
++
++O port `ExpectedUnitsProvider` (`integration/src/ports.ts`) devolve
++`number | null`; `null` é **lacuna de governança**, nunca 100%. Nenhuma unidade ativa
++foi promovida automaticamente a denominador de cobertura.
++
++**`expected_units` continua OPEN GOVERNANCE DECISION.**
++
++---
++
++## 7. Política aprovada
++
++Registrada em `APPROVED_THRESHOLDS`:
++
++| Política | Valor | Nota |
++|---|---|---|
++| Participação relevante | **10%** = `1000` bp | número único; refinamento por detector é possível depois |
++| Valor financeiro relevante | **R$ 50.000** = `5_000_000` cents | **approved initial / calibratable** |
++| Quantidade relevante | **5 casos** | |
++| População mínima | **10 contratos** | abaixo disto o detector não afirma concentração |
++| Piso de ticket | **R$ 1.499,99** = `149_999` cents | comparação estritamente menor |
++
++Mais os dois anteriores: `installment_threshold = 19` e similaridade `0,80`.
++
++**"Calibratable" não autoriza o sistema a alterar nada.** Calibragem é decisão humana
++registrada, como esta.
++
++---
++
++## 8. O que permanece UNRESOLVED
++
++| Grupo | Campos | Consequência |
++|---|---|---|
++| Dimensão de severidade | `severity_dimension` em A, C, D | **config recusada** |
++| Escala de severidade | `severity_scale` em A, C, D; `severity_by_relative_bp` e `structural_severity` em B | **config recusada** |
++| Cobertura | `minimum_coverage_bp`, `coverage.degraded_below_bp`, `coverage.emit_event_below_bp` | **config recusada** |
++| Tolerância entre fontes | `material_relative_difference_bp`, `material_absolute_basis_points`, `structural_fields` (B) | **config recusada** |
++| Janela do Detector C | `window` | **config recusada** |
++| Agregadores do Detector D | `supported_metrics` | **config recusada** |
++| Seleção de caso contribuinte | `contributing_case_rule` (A) | **config recusada** |
++
++Os valores aprovados na §7 **não foram propagados automaticamente** para os campos de
++`DetectorConfig`. Eles vivem em `APPROVED_THRESHOLDS` como referência; a configuração
++de produção continua tendo de declará-los explicitamente, e continua **FAIL CLOSED**
++enquanto os campos acima faltarem.
++
++`TEST_CONFIG` segue em `tests/` com `config_version: "0.0.0"`. Nenhum
++`DEFAULT_CONFIG` foi criado — há teste que verifica a ausência.
++
++---
++
++## 9. Regra de ticket baixo
++
++### 9.1 O que ela afirma
++
++```
++"o ticket deste contrato está abaixo do piso aprovado"
++```
++
++E nada além. Não afirma fraude, erro, prejuízo, mau negócio, risco de inadimplência,
++causa, nem recomenda ação. Severidade `info` **fixa**: graduar exigiria uma escala
++sobre "quão abaixo do piso", e essa escala não foi aprovada.
++
++Um teste varre a saída contra `fraud`, `erro`, `prejuízo`, `risco`, `inadimpl`,
++`suspeit`, `irregular`, `caus` e `recomend`.
++
++### 9.2 O boundary
++
++| Ticket | Resultado |
++|---|---|
++| `149_997` | alerta |
++| `149_998` | **alerta** |
++| `149_999` | **não alerta** |
++| `150_000` | **não alerta** |
++| `150_001` | não alerta |
++
++Predicado e fórmula publicada leem a **mesma** constante, e há teste que extrai o
++número da fórmula e confere o boundary — a lição do gate da Fase 2.3.
++
++### 9.3 Independência dos R$ 50.000
++
++As duas são dinheiro, as duas em centavos, e é exatamente por isso que o risco de
++trocá-las existe:
++
++| Política | Pergunta |
++|---|---|
++| R$ 50.000 | um **agregado** é grande o bastante para merecer atenção? |
++| R$ 1.499,99 | um **contrato** é pequeno o bastante para merecer conferência? |
++
++Testes dedicados: um contrato de **R$ 40.000 não é** ticket baixo; um de **R$ 1.000
++é**, mesmo longe dos R$ 50 mil. O mutante que troca uma constante pela outra mata
++**12 testes**.
++
++### 9.4 Materialidade individual
++
++A regra **não exige** 10%, R$ 50 mil, 5 casos nem população de 10. O fato individual
++basta: um contrato só, abaixo do piso, gera alerta. Testado.
++
++Se depois houver agregação (*"quantos tickets baixos existem?"*), a materialidade
++desse agregado é decisão separada. Não inventada.
++
++### 9.5 Ticket não positivo — decisão pendente
++
++Lastro governado encontrado: `ceo.sales.ticket_cents` é coluna gerada de
++`transfer_cents * installments_grau`, com `transfer_cents >= 0` e
++`installments_grau > 0`. Logo:
++
++| Valor | No domínio | Tratamento |
++|---|---|---|
++| negativo | **impossível** | `INVALID_TICKET` — corrupção de dado |
++| zero | representável | `INVALID_TICKET` — **decisão pendente** |
++
++Aritmeticamente `0 < 149_999`, então zero passaria pelo predicado. Mas nenhuma regra
++governada declara venda de valor zero como venda. Um contrato de R$ 0,00
++provavelmente é linha incompleta, e alertar "ticket abaixo do piso" mandaria o
++comercial olhar o preço quando o problema é de ingestão.
++
++Então: `INVALID_TICKET`, contado, visível na qualidade, com lacuna
++`BUSINESS_RULE_PENDING`. **Se o CEO decidir que ticket zero é alerta comercial, isso
++vira regra explícita.**
++
++### 9.6 Ausente e inseguro
++
++| Situação | Tratamento |
++|---|---|
++| `null` | `TICKET_UNAVAILABLE`, lacuna `DATA_NOT_AVAILABLE` — **nunca zero** |
++| float (`1499.99`) | `INVALID_TICKET` — dinheiro é inteiro em centavos |
++| `NaN` / `Infinity` / fora da faixa | `INVALID_TICKET` |
++
++### 9.7 Evidência — limitação declarada
++
++Validado por contrato: snapshot existe, evidência existe, `evidence.snapshot_id`
++corresponde, `evidence.locator.dataset_id` corresponde ao dataset do snapshot.
++
++**Limitação:** `Evidence.locator` chega até `row_key`, o que liga a evidência à
++**linha**. O contrato **não** carrega `subject_ref`, então a associação
++evidência↔pessoa não é verificável — apenas evidência↔linha↔dataset. Não afirmo
++propriedade que o contrato não sustenta.
++
++### 9.8 Identidade
++
++`structuralId` sobre `{ event_type, rule_id, rule_version, floor_cents, período,
++subject_ref, datasets }`. `snapshot_id` fica **fora** — reingerir o mesmo dataset
++lógico não cria alerta novo. `rule_version` entra porque mudar a regra observável
++muda o fato.
++
++### 9.9 Extensão de contrato
++
++`event.schema.json`: `event_type` ganhou **`low_ticket_contract`**. Extensão fechada
++e mínima — o enum continua allowlist, nenhuma string arbitrária é aceita. Nenhum
++outro campo do schema mudou.
++
++---
++
++## 10. Testes
++
++| Suíte | Testes |
++|---|---|
++| `intelligence/` total | **1.238** (24 arquivos) |
++| Catálogo governado + D13 (novo) | **41** |
++| Ticket baixo (novo) | **62** |
++| Harness end-to-end | **43** (era 31) |
++| Detector A | 164 |
++| Detector B | 74 |
++| Detector C | 196 |
++| Detector D | 147 |
++| Portal / Motor | 182 cada |
++
++### 10.1 Mutation tests
++
++| Mutante | Falhas |
++|---|---|
++| piso vira `<=` em vez de `<` | **4** |
++| reutiliza R$ 50 mil no lugar do piso de ticket | **12** |
++| ticket não positivo vira "ticket baixo" normal | **6** |
++| agrupamento resolve por similaridade | **6** |
++
++Nenhum mutante permanece no código.
++
++### 10.2 O harness provou algo novo
++
++Com o catálogo **governado** (não o sintético), `Grau Marabá` passou a resolver e o
++Detector A deixou de degradar por identidade desconhecida — `quality_status` vai a
++`ok`. É a demonstração direta de que fechar D13 melhora a qualidade dos quatro
++detectores.
++
++---
++
++## 11. Blockers restantes para a Fase 3
++
++| # | Critério | Antes | Agora |
++|---|---|---|---|
++| 1 | Catálogo D13 governado | BLOCKED | **PARTIAL** — 18 unidades + 2 agrupamentos aprovados; seed completo depende de `UNIDADES.xlsx` |
++| 2 | Fonte de `expected_units` | BLOCKED | **BLOCKED** |
++| 3 | Thresholds aprovados | BLOCKED | **PARTIAL** — 5 políticas aprovadas; 7 grupos seguem unresolved |
++| 4 | Contrato Leonardo/Supabase | BLOCKED | **BLOCKED** |
++| 5 | Contrato pasta do Lucas | BLOCKED | **BLOCKED** |
++| 6 | Provenance ownership | READY | READY |
++| 7 | Harness de integração | READY | READY — 43 testes |
++| 8 | Briefing determinístico | BLOCKED | BLOCKED |
++| 9 | Read-model da Hermes | BLOCKED | BLOCKED |
++| 10 | Separação de credenciais | READY | READY |
++| 11 | Sem PII / nome cru | READY | READY |
++| 12 | A/B/C/D SHIP | READY | READY |
++| 13 | Gate adversarial | PENDING | PENDING |
++
++**De 7 blockers para 5**, com dois convertidos em PARTIAL.
++
++### 11.1 O que falta em cada PARTIAL
++
++**#1 catálogo:** `UNIDADES.xlsx` no workspace. O importador está pronto — é ler as
++linhas e chamar `importUnitCatalog`. As decisões já aprovadas não precisam ser
++revisitadas.
++
++**#3 thresholds:** os 7 grupos de `FASE_2_6_BUSINESS_DECISIONS.md` §3 que sobraram —
++dimensão de severidade, escala de severidade, cobertura, tolerância entre fontes,
++janela do C, agregadores do D, seleção de caso contribuinte.
++
++---
++
++## 12. O que esta fase não fez
++
++- Não instalou Hermes, não iniciou a Fase 3.
++- Não conectou Supabase nem acessou pasta.
++- Não inventou nenhuma linha ausente de `UNIDADES.xlsx`.
++- Não inventou `expected_units`.
++- Não preencheu nenhum threshold não aprovado.
++- Não propagou os valores aprovados para `DetectorConfig` — eles são referência, e a
++  config de produção continua fail-closed.
++- Nada commitado, nada empurrado.
++
++---
++
++# Fase 2.6c — Catálogo completo e severidade removida
++
++**Data:** 2026-08-17
++
++## 13.1 O arquivo
++
++| Item | Valor |
++|---|---|
++| Caminho | `~/Library/Containers/net.whatsapp.WhatsApp/Data/tmp/documents/CC55DF75-8B8C-4351-ACD8-053E0875D91F/UNIDADES.xlsx` |
++| Aba | `Planilha1` (única) |
++| Colunas REAIS | `Unidade` · `Apelido` · `Ativo` |
++| Linhas | 50 (1 cabeçalho + **49 de dados**) |
++
++Nenhuma outra coluna existe. Nada foi inferido.
++
++## 13.2 Totais derivados do arquivo
++
++| Métrica | Valor |
++|---|---|
++| Unidades | **49** |
++| Ativas (`Ativo = Sim`) | **44** |
++| Inativas (`Ativo = Não`) | **5** |
++| Aliases | **5** |
++| Agrupamentos | **2** |
++
++As cinco inativas: `Duque de Caxias`, `Guarulhos`, `Jd Angela`, `São Gonçalo`,
++`Vila Maria`.
++
++Os cinco aliases da planilha:
++
++- `Curitiba` ← 'Curitiba/Centro'
++- `Fortaleza - Centro` ← 'Centro FZA'
++- `Santa Cruz` ← 'STA Cruz'
++- `São João de Meriti` ← 'S.J de Meriti'
++- `Zona Norte - RN` ← 'Natal Zona Norte'
++
++## 13.3 A regra que a planilha codifica
++
++Um `Apelido` em **uma** unidade é alias dela. Um `Apelido` em **duas ou mais** é
++AGRUPAMENTO comercial.
++
++Não é interpretação minha:
++
++| Apelido | Aparece em |
++|---|---|
++| `Carpina e Limoeiro` | `Carpina`, `Limoeiro` |
++| `Limeira, Sumaré & JD Ângela` | `Jd Angela`, `Limeira`, `Sumaré` |
++
++A planilha e a decisão do CEO dizem a mesma coisa. O segundo tem **3** membros, não
++quatro — `Jd Angela` é uma unidade só.
++
++Tratá-los como alias faria um texto apontar para duas unidades, que é exatamente o
++que o importador recusa.
++
++## 13.4 Pipeline: build step, não runtime
++
++```
++UNIDADES.xlsx
++  → tools/xlsx_to_catalog.py     (build step, stdlib: zipfile + xml.etree)
++  → catalog/unidades.catalog.json (artefato governado, versionado)
++  → detectors/src/unit-catalog.ts (runtime: importa JSON, zero dependência de Excel)
++```
++
++`openpyxl` não foi adicionado — um `.xlsx` é zip com XML, e a stdlib basta para
++converter 10 KB uma vez por mudança de catálogo.
++
++## 13.5 Achados de qualidade — reportados, não corrigidos
++
++A planilha é a autoridade. Não silenciei nada:
++
++| Achado | Observação |
++|---|---|
++| `Sâo José do Rio Preto` | grafia com circunflexo em vez de til. A normalização remove acento, então a identidade funciona; o `display_name` sai como está no arquivo |
++| `Jd Angela` como canônico | abreviação usada como nome canônico. A regra `jd → jardim` faz as três formas casarem |
++| `Divinopólis` | acento em posição incomum (`Divinópolis` seria o usual) |
++| `Zona Norte - RN` | **`Zona Norte` sozinho NÃO resolve.** Se as planilhas de venda escreverem a forma curta, precisa de alias governado. Teste dedicado registra isso |
++| `Prudente` com Apelido `Prudente` | alias igual ao canônico; descartado como redundância |
++| `Mogi` como canônico | não `Mogi das Cruzes`. Os aliases `Mogi`/`Grau Mogi` casam por regra de prefixo |
++
++## 13.6 Overrides governados
++
++Três formas que as planilhas de venda usam e o catálogo de unidades não lista:
++
++| Alias | Unidade | Lastro |
++|---|---|---|
++| `Presidente P.` | `prudente` | decisão da Fase 2.6b — `P.` não é expansível |
++| `BelfordRoxo` | `belford_roxo` | decisão da Fase 2.6b — normalização não insere espaço |
++| `Rio Preto` | `sao_jose_do_rio_preto` | decisão D13 anterior |
++
++`Grau Marabá` e `STA Cruz` **não** precisaram de override: o primeiro resolve pela
++regra de remoção do prefixo `Grau`, o segundo já está no Apelido da planilha.
++
++## 13.7 Duplicidades: nenhuma
++
++Verificado por teste: nenhum `canonical_name` duplicado, nenhum `unit_id` duplicado,
++nenhum alias apontando para duas unidades, nenhum alias colidindo com o canônico de
++outra unidade, nenhum status contraditório.
++
++## 13.8 Seed parcial removido
++
++`APPROVED_UNIT_CATALOG` e `APPROVED_UNIT_ROWS` **não existem mais** — há teste que
++verifica a ausência dos dois nos exports. Fonte única: `GOVERNED_UNIT_CATALOG`,
++construído do artefato.
++
++## 13.9 Severidade `info` removida
++
++`severity = "info"` **não era política aprovada** — foi escolhida por mim na 2.6b.
++
++Agora:
++
++| Antes | Agora |
++|---|---|
++| Event com `severity: "info"` | **nenhum Event** |
++| — | `matched: true`, `threshold_cents`, `event_id`, evidência, qualidade |
++| — | `emitted: false`, `not_emitted_reason: "SEVERITY_POLICY_UNRESOLVED"` |
++
++O **fato** continua detectado, contado e auditável, com identidade lógica calculada.
++`construirEvento` foi removido — nenhum código morto.
++
++Testado: nenhum `"info"`, `"low"`, `"medium"`, `"high"` ou `"critical"` aparece na
++saída, e o campo `severity` não existe no resultado.
++
++`low_ticket_contract` permanece no enum de `event.schema.json` para quando a política
++existir — a única mudança será passar a emitir.
++
++## 13.10 Estado dos dois itens
++
++| Item | Estado |
++|---|---|
++| Piso de ticket R$ 1.499,99 | **APPROVED** |
++| Severidade do low-ticket | **UNRESOLVED** — bloqueia emissão |
++| Catálogo D13 | **READY** — 49 unidades carregadas e validadas |
++
++**O Event executivo de low-ticket NÃO está production-ready** enquanto a severidade
++não for definida.
++
++## 13.11 Testes
++
++| Suíte | Testes |
++|---|---|
++| `intelligence/` total | **1.282** (24 arquivos) |
++| Catálogo governado + D13 | **76** (era 41) |
++| Ticket baixo | **69** (era 62) |
++| Harness end-to-end | **45** (era 43) |
++
++## 13.12 Blockers restantes
++
++| # | Critério | Estado |
++|---|---|---|
++| 1 | Catálogo D13 | **READY** ✅ |
++| 2 | `expected_units` | BLOCKED |
++| 3 | Thresholds | **PARTIAL** — 5 aprovados; 7 grupos + severidade do low-ticket |
++| 4 | Leonardo/Supabase | BLOCKED |
++| 5 | Pasta do Lucas | BLOCKED |
++| 8 | Briefing determinístico | BLOCKED |
++| 9 | Read-model da Hermes | BLOCKED |
++
++**4 blockers** (era 5). O catálogo saiu da lista.
++
++---
++
++# 14. Fase 2.6c — correção dos dois HIGH do gate adversarial
++
++O gate de 2.6c saiu **NO-SHIP** com dois HIGH. Ambos corrigidos aqui. Nenhum
++threshold novo foi inventado, nenhuma política de severidade foi decidida.
++
++## 14.1 HIGH 1 — o importador perdia dado em silêncio
++
++**O defeito.** O conversor tratava linha inválida como aviso: registrava a
++mensagem, descartava a linha com `continue` e escrevia o JSON com código de
++saída zero. Uma célula `Ativo` em branco fazia uma unidade governada sumir do
++catálogo de runtime. Lá ela virava `unknown` a cada ingestão — e o validador de
++runtime não recupera o que o build step jogou fora. Um catálogo de 48 unidades
++saído de uma planilha de 49 é indistinguível, no artefato, de um catálogo
++correto de 48.
++
++**A correção.** O pipeline agora é atômico e fecha fechado:
++
++```
++ler zip  →  validar cabeçalho  →  validar TODAS as linhas
++         →  validar integridade global  →  montar em memória
++         →  só então escrever, atomicamente
++```
++
++Nada é escrito antes de o conjunto inteiro estar válido. Em erro: cada problema
++vai para `stderr`, o processo sai com código 1, e **o artefato governado
++anterior não é tocado**.
++
++### Condições FATAIS (a conversão inteira é recusada)
++
++| Condição | Por quê |
++| --- | --- |
++| Cabeçalho ausente, renomeado, incompleto ou fora de posição | Nomes alternativos não são adivinhados |
++| `Unidade` vazia | Não há identidade a governar |
++| `Ativo` vazia | Status não é presumido |
++| `Ativo` fora de `{Sim, Não}` | Sem conversão implícita para booleano |
++| Linha parcialmente preenchida | Alguém escreveu algo e a conversão não sabe o quê |
++| Nome curto demais para gerar `unit_id` válido | O id não pode ser sintetizado |
++| `unit_id` duplicado (inclusive por normalização) | Escolher o primeiro ou o último é decisão de negócio |
++| Identidade canônica duplicada | idem |
++| Status contraditório para a mesma unidade | idem |
++| Apelido apontando para unidades diferentes | Ambiguidade de origem |
++| Apelido colidindo com o canônico de outra unidade | Ambiguidade de origem |
++| Membro de agrupamento inexistente | Referência quebrada |
++| Agrupamento com menos de duas unidades | Não é agrupamento |
++| Arquivo inexistente ou zip inválido | Falha limpa, sem traceback |
++
++Uma linha completamente em branco no fim **não é dado** e é ignorada. Uma linha
++parcialmente preenchida é fatal.
++
++### O único aviso que sobrou
++
++`Apelido` idêntico ao nome canônico: descartar essa redundância não perde forma
++nenhuma. É a definição operacional do critério — **avisa-se só o que não é
++lossy**. Toda condição que descartaria linha, status ou apelido é erro.
++
++### Escrita atômica
++
++`tempfile.mkstemp` no mesmo diretório do destino, `flush` + `fsync`, e
++`os.replace`. Como o temporário nasce no mesmo sistema de arquivos, o
++`os.replace` é uma troca atômica: o leitor vê o artefato antigo inteiro ou o
++novo inteiro, nunca um JSON truncado. Em erro o temporário é removido e o
++destino permanece byte a byte igual.
++
++Isso foi observado na prática nesta sessão: uma execução falha contra um caminho
++inexistente deixou `catalog/unidades.catalog.json` **byte-identical**.
++
++### O que o importador NÃO faz
++
++Não corrige grafia. `Sâo José do Rio Preto`, `Divinopólis`, `Mogi` e `Jd Angela`
++entram no artefato exatamente como estão na planilha. A planilha continua sendo
++autoridade de display até decisão humana. Os testes afirmam isso explicitamente,
++para que uma "limpeza" futura quebre o build em vez de passar despercebida.
++
++## 14.2 HIGH 2 — a identidade low-ticket dependia do lote
++
++**O defeito.** `identidadeDoAlerta` hasheava o conjunto de **todos** os escopos
++governados presentes no lote. Um contrato low-ticket idêntico recebia `event_id`
++diferente só porque outro registro, sem relação nenhuma com ele, veio de outro
++dataset na mesma execução. Deduplicação por identidade quebra com isso.
++
++**A correção.** A identidade usa apenas o escopo do próprio contrato:
++
++```ts
++identidadeDoAlerta(input, escopoDoContrato(escopos, c), c.subject_ref)
++```
++
++Material da identidade, sem gramática de delimitador:
++
++```
++event_type, rule_id, rule_version,
++floor_cents,
++period_start, period_end,
++subject_ref,
++logical_dataset: { source_system, dataset_id }   ← do contrato, e só dele
++```
++
++`snapshot_id` fica **fora**: reingerir o mesmo dataset lógico não cria fato novo.
++`detected_at` também fica fora, pelo mesmo motivo. Um contrato sem escopo
++governado no lote levanta `GatewayError`; nenhuma identidade é inventada.
++
++**Por que lote misto é legítimo aqui.** Cada fato low-ticket é individual: o
++alerta descreve um contrato, não uma agregação. Não confundir com A/C/D, onde
++agregação sobre múltiplos datasets continua fail-closed — lá o denominador
++misturaria universos diferentes.
++
++## 14.3 Testes
++
++| Suíte | Antes | Depois |
++| --- | --- | --- |
++| `catalog-import.test.ts` (novo) | — | 36 |
++| `low-ticket.test.ts` | 69 | 82 |
++| A / B / C / D | 164 / 74 / 196 / 147 | inalterados |
++
++Os testes do importador usam planilhas `.xlsx` sintéticas geradas em memória por
++`tools/make_test_xlsx.py`. Não dependem do arquivo original — que veio por
++WhatsApp e já foi apagado pelo app. O artefato governado em uso continua sendo o
++derivado dele, e um teste afirma sua forma (49 unidades, 44 ativas, 5 inativas,
++2 agrupamentos) e as grafias originais.
++
++**Mutação (obrigatória no briefing).** Ambos os mutantes morreram:
++
++| Mutante | Testes que falharam |
++| --- | --- |
++| `invalid row -> warning + continue` | 15 |
++| identity com todos os escopos do lote | 2 (§11-A e §11-C) |
++
++## 14.4 O que continua sem decisão
++
++A correção é de engenharia. Nada aqui aprova política:
++
++- **severidade low-ticket:** UNRESOLVED. `event = null`, `emitted = false`,
++  `not_emitted_reason = "SEVERITY_POLICY_UNRESOLVED"`. O fato sobrevive; o Event
++  executivo não. Low-ticket **não** é production-ready como alerta executivo.
++- **piso low-ticket:** APPROVED em 149.999 centavos, estritamente menor,
++  independente do piso de materialidade de R$ 50.000.
++- **`expected_units`:** ainda sem fonte.
++
++---
++
++# 15. Proveniência do catálogo e prova de reprodutibilidade
++
++## 15.1 Localização durável
++
++O source do catálogo governado passa a viver dentro do repositório:
++
++```
++intelligence/governance/source/UNIDADES.xlsx
++```
++
++Antes ele estava numa pasta temporária do WhatsApp, que o app apagou. Um
++artefato governado cujo source não pode ser reapresentado não é auditável.
++
++| | |
++| --- | --- |
++| Arquivo | `intelligence/governance/source/UNIDADES.xlsx` |
++| Tamanho | 10.400 bytes |
++| Planilha | `Planilha1` (única) |
++| Colunas | `Unidade`, `Apelido`, `Ativo` |
++| SHA-256 | `fd8c7e001ea2b36da41bd071923df1fb50ef0a7fc69de2c5e19cebc6118a1409` |
++
++Hash calculado com `shasum -a 256`, primitiva do sistema. Nenhum mecanismo
++criptográfico próprio foi construído.
++
++## 15.2 O que a reprodução prova — e o que não prova
++
++**Afirmação permitida:** este source durável, SHA-256 `fd8c7e00…a1409`,
++reproduz o catálogo governado atual.
++
++**Afirmação NÃO permitida:** que este arquivo é o mesmo binário que chegou pelo
++WhatsApp. O original foi apagado antes que qualquer hash fosse registrado, então
++não existe evidência de identidade binária histórica. O que existe é evidência
++de **equivalência para o pipeline governado atual** — mais fraca, e suficiente
++para reprodutibilidade daqui em diante.
++
++## 15.3 Reconversão executada
++
++```
++python3 tools/xlsx_to_catalog.py \
++  governance/source/UNIDADES.xlsx \
++  <destino temporário>
++```
++
++Exit code `0`. O destino foi um diretório temporário: o artefato governado não
++foi substituído antes da comparação, e permaneceu com SHA-256
++`3ee286aea264ad0180acdea1c9f518a2170a9457fe1f5c8a74702c073cfafc9d` do início ao
++fim do procedimento.
++
++Valores **derivados do arquivo** pelo importador — não fornecidos a ele:
++
++```
++unidades: 49 (ativas 44, inativas 5)
++aliases:  5
++grupos:   2
++  'Carpina e Limoeiro'          → ['carpina', 'limoeiro']
++  'Limeira, Sumaré & JD Ângela' → ['jd_angela', 'limeira', 'sumare']
++AVISO (não lossy): linha 32 (Prudente): Apelido igual ao canônico — redundante
++```
++
++## 15.4 Comparação: **SEMANTICALLY_IDENTICAL**
++
++**A. Contagens** — idênticas: 49 unidades, 44 ativas, 5 inativas, 5 aliases,
++2 agrupamentos, dos dois lados.
++
++**B. Conteúdo semântico** — idêntico. Comparando a tupla governada de cada
++unidade (`unit_id`, `canonical_name`, `status`, `aliases` ordenados) e de cada
++agrupamento (`label`, `members` ordenados): nenhuma unidade, status, alias,
++identidade ou associação de grupo diferiu. `catalog_version`, `columns` e
++`source_file` também iguais.
++
++**C. Bytes** — diferem em 72 bytes, num único campo:
++
++```diff
++-  "warnings": []
+++  "warnings": [
+++    "linha 32 (Prudente): Apelido igual ao canônico — redundante"
+++  ]
++```
++
++### Por que essa diferença não é divergência
++
++A causa é uma mudança **no conversor**, não no source. O artefato atual foi
++gerado pela versão anterior do importador, cujos avisos cobriam apenas as duas
++condições *lossy* — linha descartada e `Ativo` não reconhecido — que a correção
++do HIGH 1 transformou em erros fatais. Aquela versão não tinha aviso algum para
++apelido redundante, então produziu `warnings: []`. A versão atual emite
++exatamente um aviso, e é o único aviso não-lossy que sobrou.
++
++Dois pontos que isso estabelece de passagem:
++
++1. `warnings: []` na geração original é evidência de que **nenhuma linha foi
++   descartada em silêncio** naquela execução — o defeito do HIGH 1 existia, mas
++   não chegou a corromper este artefato. É por isso que o dado governado bate.
++2. `warnings` é diagnóstico, não dado governado. `buildGovernedCatalog` lê
++   apenas `units` (`unit_id`, `canonical_name`, `aliases`, `status`), `groups`
++   (`label`, `members`) e `catalog_version`. Nunca lê `warnings`, `columns` ou
++   `source_file`. O catálogo efetivo em runtime é bit a bit o mesmo dos dois
++   artefatos.
++
++## 15.5 Testes
++
++219 testes verdes em `catalog-import` (36), `unit-catalog` (76),
++`canonical-units` e `integration` (45). O catálogo governado permaneceu intacto
++durante toda a comparação.
++
++## 15.6 Regeneração — autorizada e realizada
++
++A substituição foi autorizada pelo arquiteto após a comparação
++**SEMANTICALLY_IDENTICAL** da §15.4, e executada. O artefato governado em
++`catalog/unidades.catalog.json` **passa a ser produto do importador fail-closed**,
++gerado a partir de `governance/source/UNIDADES.xlsx`.
++
++A afirmação de proveniência continua sendo a da §15.2: este source durável
++reproduz e gera o catálogo governado atual. Nada aqui afirma identidade binária
++com o arquivo temporário do WhatsApp.
++
++### Portão aplicado antes da escrita
++
++A regeneração não foi feita direto sobre o destino. Primeiro o candidato foi
++gerado num temporário e comparado contra o artefato vigente, com uma única
++diferença autorizada — o warning de apelido redundante. Qualquer outra diferença
++abortaria sem tocar no destino. O portão passou; só então o importador rodou
++contra o destino real, usando o mesmo caminho atômico
++(`validar tudo → montar em memória → temp → fsync → os.replace`). Nenhum JSON foi
++editado à mão.
++
++| | SHA-256 |
++| --- | --- |
++| Source `UNIDADES.xlsx` | `fd8c7e001ea2b36da41bd071923df1fb50ef0a7fc69de2c5e19cebc6118a1409` |
++| Catálogo anterior | `3ee286aea264ad0180acdea1c9f518a2170a9457fe1f5c8a74702c073cfafc9d` |
++| Catálogo novo | `5dbd1382fc29251cd5a5f9729f017b4c7f4a8284f7fdba900079344f43fae6ad` |
++
++A mudança de hash do JSON decorre **exclusivamente** do warning diagnóstico
++acrescentado — foi a única diferença, verificada campo a campo antes e por `diff`
++depois. O dado governado é bit a bit o mesmo.
++
++## 15.7 Defeito encontrado pela própria regeneração: modo do arquivo
++
++A primeira regeneração deixou o artefato com modo `0600` em vez de `0644`.
++
++Causa: `tempfile.mkstemp` cria com `0600` por segurança, e `os.replace` leva o
++modo do temporário junto para o destino. Ou seja — a escrita atômica que a
++correção do HIGH 1 introduziu trocava, em silêncio, a permissão de um artefato
++versionado. Um catálogo `0600` some do build de qualquer outro usuário ou
++processo de CI, e some com erro de I/O, não com erro de validação.
++
++Corrigido em `escrever_atomico`: o temporário recebe o modo do destino quando ele
++já existe, e o padrão do `umask` quando é arquivo novo. Verificado nos três
++casos — destino pré-existente `0644`, segunda regeneração seguida, e destino
++inexistente. Todos `0644`.
++
++Vale registrar como o defeito apareceu: não foi um teste que o pegou, foi o `ls`
++da verificação pós-escrita. A suíte do importador afirmava conteúdo e
++atomicidade, não metadados do sistema de arquivos. Essa lacuna foi fechada:
++
++| Caso | Afirma |
++| --- | --- |
++| A | destino `0644` continua `0644` depois do replace |
++| B | o modo herdado é o do destino — testado com `0640`, `0600` e `0664` |
++| C | destino novo respeita o padrão do processo, não o `0600` do `mkstemp` |
++| C′ | guarda contra umask restritivo, para o caso C não passar vazio |
++| D | conversão que falha não muda bytes **nem** modo, e não deixa temporário |
++| — | regenerações consecutivas preservam o modo |
++| — | o artefato governado em uso não está `0600` |
++
++O caso C compara contra um arquivo de controle escrito no mesmo diretório e no
++mesmo processo, em vez de fixar um número. É o próprio padrão do umask, então o
++teste vale em qualquer ambiente sem depender de API de umask.
++
++**Mutação.** Remover a herança de modo e voltar ao `mkstemp` + `replace` puro
++mata 5 desses testes. Um segundo mutante — trocar a herança por `0644` fixo —
++mata exatamente um: o caso B, que é o único que alega distinguir herança de
++constante. O caso D sobrevive aos dois, como deve: ele cobre o caminho de falha,
++que nunca chega ao `replace`.
++
++## 15.8 Verificação pós-substituição
++
++O `GOVERNED_UNIT_CATALOG` foi carregado pelo runtime a partir do novo artefato e
++confirmou, lendo o próprio objeto em memória:
++
++- SHA-256 do arquivo que o runtime abre: `5dbd1382…fae6ad`
++- 49 unidades · 44 ativas · 5 inativas · 5 aliases · 2 agrupamentos
++- D13: `BelfordRoxo`→`belford_roxo`, `Maracanau`→`maracanau`,
++  `Presidente P.`→`prudente`, `STA Cruz`→`santa_cruz`,
++  `Rio Preto`→`sao_jose_do_rio_preto`, `Jardim Ângela`→`jd_angela`,
++  `Grau Marabá`→`maraba`
++- `Jd Angela` **resolve** para `jd_angela` com `status: inactive` — inativa não
++  vira `unknown`
++- `Carpina e Limoeiro` → `ambiguous` / `GROUP_LABEL` com `[carpina, limoeiro]`;
++  `Limeira, Sumaré & JD Ângela` → `ambiguous` / `GROUP_LABEL` com
++  `[jd_angela, limeira, sumare]` — agrupamento continua não atômico
++- `carpina`, `limoeiro`, `limeira`, `sumare`, `jd_angela` seguem distintas
++
++`npm run verify` completo: schemas, lint, typecheck e **1331 testes em 25
++arquivos**, todos verdes.
++
++---
++
++# 16. A segunda fonte de governança escondida em TypeScript
++
++O gate final da 2.6c saiu NO-SHIP com um HIGH que os anteriores não pegaram.
++
++## 16.1 O defeito
++
++`buildGovernedCatalog` acrescentava aliases de um `ALIASES_GOVERNADOS` escrito em
++TypeScript, **depois** de carregar o artefato:
++
++```ts
++const extras = ALIASES_GOVERNADOS[u.unit_id] ?? []
++aliases: [...u.aliases, ...extras]
++```
++
++O artefato tinha 5 aliases; o runtime expunha 8. Três decisões humanas —
++`Presidente P.`, `BelfordRoxo`, `Rio Preto` — viviam só em código.
++
++Consequências:
++
++- `UNIDADES.xlsx → catálogo` **não reproduzia** o comportamento efetivo. Toda a
++  prova de reprodutibilidade da §15 valia para o artefato, não para o runtime.
++- As três decisões não podiam ser auditadas, revisadas ou removidas pelo caminho
++  governado: quem as mudasse editaria TypeScript, sem hash e sem versão de fonte.
++- A afirmação "fonte única de verdade para D13" era falsa. Eram duas, e a segunda
++  era invisível para quem olhasse a planilha.
++
++Vale notar como escapou: os testes verificavam que `BelfordRoxo` resolve para
++`belford_roxo`. Resolvia. O que ninguém afirmava é **de onde** o alias vinha.
++
++## 16.2 Duas fontes governadas, explícitas
++
++| Fonte | Papel |
++| --- | --- |
++| `governance/source/UNIDADES.xlsx` | catálogo operacional; autoridade de nome canônico e status |
++| `governance/d13.alias-overrides.json` | decisões humanas de canonicalização aprovadas |
++
++O arquivo de overrides tem schema fechado e validável:
++
++```json
++{
++  "schema_version": "1.0.0",
++  "aliases": [
++    { "alias": "Presidente P.", "target_unit_id": "prudente", "rationale": "...", "approved_in": "FASE_2_6B" }
++  ]
++}
++```
++
++`rationale` e `approved_in` carregam o rastro que antes vivia em comentário de
++código. Nenhum alias novo foi inventado: são exatamente os três que existiam.
++
++## 16.3 Pipeline
++
++```
++parse XLSX  →  validar todas as linhas  →  catálogo base
++            →  parse overrides governados  →  validar contra o catálogo base
++            →  mesclar EM MEMÓRIA
++            →  integridade global
++            →  artefato completo  →  publicação atômica
++```
++
++Os overrides entram **antes** da integridade global de propósito: alias apontando
++para duas unidades e alias colidindo com canônico já eram checados ali, e um
++alias humano precisa passar pelas mesmas guardas que um alias da planilha. Reusar
++a guarda em vez de duplicá-la é o que garante que as duas fontes sejam tratadas
++com o mesmo rigor.
++
++### Condições fatais próprias dos overrides
++
++`schema_version` não suportada ou ausente · `aliases` ausente ou de tipo errado ·
++entrada que não é objeto · `alias` vazio/não textual · `target_unit_id`
++vazio/não textual · alias declarado duas vezes (mesmo com alvos iguais) ·
++`target_unit_id` inexistente no catálogo da planilha · alias que é rótulo de
++agrupamento · `target_unit_id` que é rótulo de agrupamento · JSON malformado ·
++arquivo ausente.
++
++A recusa do rótulo de agrupamento compara por identidade normalizada, não por
++texto: `carpina  e  limoeiro` é recusado igual a `Carpina e Limoeiro`. Decisão
++humana não transforma agrupamento comercial em unidade.
++
++## 16.4 O runtime virou projeção
++
++`ALIASES_GOVERNADOS` foi removido. `buildGovernedCatalog` copia o artefato e não
++acrescenta nada. A invariante que substituiu aquilo, afirmada diretamente por
++teste:
++
++> os aliases efetivos em runtime são exatamente os aliases do artefato — nenhum a
++> mais, nenhum a menos, nenhum alvo alterado.
++
++O loader pode construir `Map`/`Set`; não pode criar dado governado. Um teste
++adicional passa um artefato sintético sem aliases por `buildGovernedCatalog` e
++exige que ele saia sem aliases — se houvesse enxerto por `unit_id`, `prudente`
++voltaria com `Presidente P.` ali.
++
++## 16.5 Proveniência no artefato
++
++```json
++"importer_version": "2.0.0",
++"sources": [
++  { "role": "workbook", "file": "UNIDADES.xlsx",
++    "sha256": "fd8c7e001ea2b36da41bd071923df1fb50ef0a7fc69de2c5e19cebc6118a1409" },
++  { "role": "alias_overrides", "file": "d13.alias-overrides.json",
++    "sha256": "b80a7d81e50aa94541f3ecd5ec8b1979f6a7eca53d06defcf7c2f72af4a67c4e",
++    "alias_count": 3 }
++]
++```
++
++O campo `source_file` foi substituído: havia duas fontes e uma só representação.
++Hashes por `hashlib`, primitiva da stdlib. Nenhum hash é usado como `UnitId`.
++
++## 16.6 Diff autorizado do artefato
++
++`5dbd1382…fae6ad` → `0e518196…836f0f`. Exatamente três aliases e a proveniência:
++
++```diff
++-  "source_file": "UNIDADES.xlsx",
+++  "importer_version": "2.0.0",
+++  "sources": [ … workbook + alias_overrides com sha256 … ],
++-      "aliases": [],            (belford_roxo)
+++      "aliases": [ "BelfordRoxo" ],
++-      "aliases": [],            (prudente)
+++      "aliases": [ "Presidente P." ],
++-      "aliases": [],            (sao_jose_do_rio_preto)
+++      "aliases": [ "Rio Preto" ],
++```
++
++Nenhuma unidade, status, agrupamento ou nome canônico mudou. Estado derivado:
++**49 unidades · 44 ativas · 5 inativas · 8 aliases efetivos · 2 agrupamentos**.
++Os 8 são derivados — um teste calcula `daPlanilha + doOverride` e compara, em vez
++de afirmar o número.
++
++O `UNIDADES.xlsx` permanece com SHA-256 `fd8c7e00…a1409`. O importador nunca
++escreve na fonte.
++
++## 16.7 Mutação
++
++| Mutante | Testes mortos |
++| --- | --- |
++| reintroduzir alias em runtime fora do artefato | 3 (projeção exata) |
++| ignorar `d13.alias-overrides.json` no build | 8 no importador; e regenerando o artefato real, mais 5 em D13 — `BelfordRoxo`, `Presidente P.` e a origem dos três aliases |
++| `target_unit_id` inexistente vira aviso | 2 (fail-closed + atomicidade) |
++
++## 16.8 Um defeito no meu próprio teste
++
++O teste de determinismo gerava **dois** `.xlsx` com o mesmo conteúdo lógico e
++exigia artefatos byte-idênticos. Passava antes; passou a falhar quando a
++proveniência entrou — um `.xlsx` é um zip, e o zip embute timestamp, então os
++dois arquivos nunca tiveram os mesmos bytes.
++
++A falha estava certa. O teste é que afirmava a coisa errada: "mesmo conteúdo
++lógico" nunca foi a garantia, e agora que o artefato registra a identidade da
++fonte, dois arquivos distintos **devem** produzir artefatos distintos. Foi
++separado em três afirmações honestas — a mesma fonte dá bytes idênticos; fontes
++distintas de mesmo conteúdo dão o mesmo dado governado (comparado sem `sources`);
++e uma fonte diferente muda o hash registrado.
++
++## 16.9 Estado
++
++`npm run verify`: **1374 testes / 25 arquivos**. A/B/C/D em 164 / 74 / 196 / 147,
++sem regressão. Portal `tsc` limpo, 182 testes do motor CEO verdes.
++
++Não existe segunda fonte de governança em TypeScript. `grep` por
++`ALIASES_GOVERNADOS`, `APPROVED_UNIT_CATALOG` e `APPROVED_UNIT_ROWS` só encontra
++os testes que afirmam a ausência delas e o comentário que explica a remoção.
++
++Low-ticket permanece intocado: severidade **UNRESOLVED**, `event = null`,
++`not_emitted_reason = "SEVERITY_POLICY_UNRESOLVED"`.
+diff --git a/intelligence/governance/d13.alias-overrides.json b/intelligence/governance/d13.alias-overrides.json
+new file mode 100644
+index 0000000..579099f
+--- /dev/null
++++ b/intelligence/governance/d13.alias-overrides.json
+@@ -0,0 +1,24 @@
++{
++  "schema_version": "1.0.0",
++  "description": "Decisoes humanas de canonicalizacao D13 que nao vieram da planilha operacional. Fonte governada, consumida pelo build step junto com UNIDADES.xlsx.",
++  "aliases": [
++    {
++      "alias": "Presidente P.",
++      "target_unit_id": "prudente",
++      "rationale": "Forma usada em public.unidades. A planilha traz 'Prudente' como canonico mas nao traz 'Presidente P.'. 'P.' nao e expansivel por regra: poderia ser Penha ou Piedade.",
++      "approved_in": "FASE_2_6B"
++    },
++    {
++      "alias": "BelfordRoxo",
++      "target_unit_id": "belford_roxo",
++      "rationale": "A planilha grafa com espaco. A normalizacao colapsa espacos repetidos mas nao insere espaco, entao 'belfordroxo' e 'belford roxo' nao casariam entre si.",
++      "approved_in": "FASE_2_6B"
++    },
++    {
++      "alias": "Rio Preto",
++      "target_unit_id": "sao_jose_do_rio_preto",
++      "rationale": "Forma curta usada nas planilhas de venda. Decisao D13 anterior, confirmada pelo CEO.",
++      "approved_in": "FASE_2_6B"
++    }
++  ]
++}
+diff --git a/intelligence/tools/xlsx_to_catalog.py b/intelligence/tools/xlsx_to_catalog.py
+new file mode 100644
+index 0000000..9be375c
+--- /dev/null
++++ b/intelligence/tools/xlsx_to_catalog.py
+@@ -0,0 +1,512 @@
++#!/usr/bin/env python3
++"""
++Converte UNIDADES.xlsx no artefato governado de catálogo.
++
++É BUILD STEP, não runtime. O D13 em produção consome o JSON gerado; nada em
++`detectors/src` abre planilha, e nenhuma dependência de Excel entra no runtime.
++
++─── Por que stdlib ───────────────────────────────────────────────────────────
++
++`openpyxl` não está instalado e adicioná-lo criaria dependência para converter um
++arquivo de 10 KB uma vez por mudança de catálogo. Um `.xlsx` é um zip com XML, e
++`zipfile` + `xml.etree` da stdlib bastam.
++
++─── Colunas REAIS do arquivo ─────────────────────────────────────────────────
++
++    Unidade   nome canônico
++    Apelido   forma alternativa que a fonte escreve
++    Ativo     "Sim" | "Não"
++
++Nenhuma outra coluna existe. Nada foi inferido.
++
++─── A regra que a própria planilha codifica ──────────────────────────────────
++
++Um `Apelido` que aparece em UMA unidade é alias dela.
++Um `Apelido` que aparece em DUAS OU MAIS unidades é AGRUPAMENTO comercial.
++
++Isto não é interpretação minha: `Carpina e Limoeiro` está no Apelido de `Carpina`
++e de `Limoeiro`; `Limeira, Sumaré & JD Ângela` está no de `Jd Angela`, `Limeira` e
++`Sumaré`. O CEO confirmou que os dois são agrupamentos. A planilha e a decisão
++humana dizem a mesma coisa, e a regra derivada é exatamente essa.
++
++Tratá-los como alias faria um texto apontar para duas unidades — que é justamente
++o que o importador recusa.
++
++─── Fail-closed ATÔMICO ──────────────────────────────────────────────────────
++
++Qualquer linha de dados que não converta inequivocamente torna a conversão INTEIRA
++inválida: saída não-zero, nenhum artefato escrito, artefato anterior intacto.
++
++Motivo: uma linha descartada aqui vira `unknown` em runtime todo mês, e o validador
++de runtime não recupera o que o build step jogou fora. 48 unidades de 49 não é um
++catálogo parcialmente bom — é um catálogo errado.
++
++`AVISO` existe só para condição NÃO LOSSY: hoje, apenas `Apelido` idêntico ao nome
++canônico, cujo descarte não perde forma alguma.
++
++─── Duas fontes governadas ───────────────────────────────────────────────────
++
++    UNIDADES.xlsx              catálogo operacional, autoridade de display
++    d13.alias-overrides.json   decisões humanas de canonicalização aprovadas
++
++As decisões humanas viviam em TypeScript e eram aplicadas DEPOIS do load, então a
++planilha sozinha não reproduzia o catálogo efetivo em runtime. Agora as duas
++fontes entram aqui, e o artefato gerado contém todos os aliases efetivos. O
++runtime só carrega e valida — não enriquece.
++
++Uso:
++    python3 tools/xlsx_to_catalog.py <caminho.xlsx> <overrides.json> catalog/unidades.catalog.json
++
++Saída: 0 em sucesso, 1 em recusa.
++"""
++
++import hashlib
++import json
++import os
++import stat
++import sys
++import tempfile
++import unicodedata
++import xml.etree.ElementTree as ET
++import zipfile
++from collections import defaultdict
++
++NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
++CATALOG_VERSION = "1.0.0"
++IMPORTER_VERSION = "2.0.0"
++SCHEMAS_DE_OVERRIDE_SUPORTADOS = frozenset({"1.0.0"})
++
++
++def sha256(caminho):
++    """Identidade da fonte. `hashlib` da stdlib — nada de criptografia caseira."""
++    h = hashlib.sha256()
++    with open(caminho, "rb") as f:
++        for bloco in iter(lambda: f.read(65536), b""):
++            h.update(bloco)
++    return h.hexdigest()
++
++
++def ler_planilha(caminho):
++    """Linhas como dicionário coluna→valor. Célula vazia é ausente, não string vazia."""
++    z = zipfile.ZipFile(caminho)
++
++    compartilhadas = []
++    try:
++        ss = ET.fromstring(z.read("xl/sharedStrings.xml"))
++        for si in ss.iter(NS + "si"):
++            compartilhadas.append("".join(t.text or "" for t in si.iter(NS + "t")))
++    except KeyError:
++        pass
++
++    folha = ET.fromstring(z.read("xl/worksheets/sheet1.xml"))
++    linhas = []
++    for row in folha.iter(NS + "row"):
++        celulas = {}
++        for c in row.iter(NS + "c"):
++            ref = c.attrib.get("r", "")
++            coluna = "".join(x for x in ref if x.isalpha())
++            tipo = c.attrib.get("t")
++            v = c.find(NS + "v")
++            inline = c.find(NS + "is")
++            if tipo == "s" and v is not None:
++                valor = compartilhadas[int(v.text)]
++            elif tipo == "inlineStr" and inline is not None:
++                valor = "".join(x.text or "" for x in inline.iter(NS + "t"))
++            elif v is not None:
++                valor = v.text
++            else:
++                valor = None
++            if valor is not None and str(valor).strip() != "":
++                celulas[coluna] = str(valor).strip()
++        if celulas:
++            linhas.append(celulas)
++    return linhas
++
++
++def unit_id(nome):
++    """Mesma derivação de `unitIdFromCanonicalName` em `unit-catalog.ts`."""
++    sem_acento = "".join(
++        ch for ch in unicodedata.normalize("NFD", nome) if unicodedata.category(ch) != "Mn"
++    )
++    saida = []
++    for ch in sem_acento.lower():
++        saida.append(ch if ch.isascii() and (ch.isalnum()) else "_")
++    juntado = "".join(saida)
++    while "__" in juntado:
++        juntado = juntado.replace("__", "_")
++    return juntado.strip("_")[:64]
++
++
++class ErroDeConversao(Exception):
++    """Conversão inválida. Nenhum artefato é escrito."""
++
++    def __init__(self, problemas):
++        self.problemas = problemas
++        super().__init__(f"{len(problemas)} problema(s) na conversão")
++
++
++VOCABULARIO_ATIVO = {"Sim": "active", "Não": "inactive"}
++
++
++def ler_overrides(caminho):
++    """
++    Decisões humanas de canonicalização que a planilha operacional não registra.
++
++    Existem porque `public.unidades` e as planilhas de venda escrevem formas que o
++    catálogo de unidades não repete — `Presidente P.`, `BelfordRoxo`, `Rio Preto`.
++    Antes viviam em TypeScript, o que fazia o runtime enriquecer o catálogo DEPOIS
++    de carregá-lo: a planilha sozinha não reproduzia o comportamento efetivo.
++
++    Aqui são dado governado, versionado e hasheado como qualquer outra fonte.
++    """
++    with open(caminho, encoding="utf-8") as f:
++        try:
++            doc = json.load(f)
++        except json.JSONDecodeError as e:
++            raise ErroDeConversao([f"overrides: JSON inválido — {e}"]) from None
++
++    if not isinstance(doc, dict):
++        raise ErroDeConversao(["overrides: a raiz precisa ser um objeto"])
++
++    versao = doc.get("schema_version")
++    if versao not in SCHEMAS_DE_OVERRIDE_SUPORTADOS:
++        raise ErroDeConversao(
++            [
++                f"overrides: schema_version {versao!r} não suportada; "
++                f"suportadas: {sorted(SCHEMAS_DE_OVERRIDE_SUPORTADOS)}"
++            ]
++        )
++
++    entradas = doc.get("aliases")
++    if not isinstance(entradas, list):
++        raise ErroDeConversao(["overrides: campo `aliases` precisa ser lista"])
++
++    problemas = []
++    vistos = {}
++    saida = []
++
++    for n, e in enumerate(entradas, start=1):
++        if not isinstance(e, dict):
++            problemas.append(f"overrides[{n}]: cada entrada precisa ser um objeto")
++            continue
++
++        alias = e.get("alias")
++        alvo = e.get("target_unit_id")
++
++        if not isinstance(alias, str) or alias.strip() == "":
++            problemas.append(f"overrides[{n}]: `alias` ausente, vazio ou não textual")
++            continue
++        if not isinstance(alvo, str) or alvo.strip() == "":
++            problemas.append(
++                f"overrides[{n}] ({alias!r}): `target_unit_id` ausente, vazio ou não textual"
++            )
++            continue
++
++        alias, alvo = alias.strip(), alvo.strip()
++        chave = alias.lower()
++
++        # Alias repetido é ambiguidade mesmo quando os alvos coincidem: um arquivo
++        # governado não declara a mesma decisão duas vezes por acidente.
++        if chave in vistos:
++            anterior, alvo_anterior = vistos[chave]
++            detalhe = (
++                f"alvos {alvo_anterior!r} e {alvo!r}" if alvo_anterior != alvo else "duplicata"
++            )
++            problemas.append(
++                f"overrides: alias {alias!r} declarado em [{anterior}] e [{n}] — {detalhe}"
++            )
++            continue
++        vistos[chave] = (n, alvo)
++        saida.append({"alias": alias, "target_unit_id": alvo, "ordem": n})
++
++    if problemas:
++        raise ErroDeConversao(problemas)
++    return saida
++
++
++def converter(caminho_xlsx, caminho_overrides):
++    """
++    Constrói o catálogo em memória. Levanta `ErroDeConversao` em qualquer problema.
++
++    ─── Por que TODA linha inválida é fatal ──────────────────────────────────────
++
++    A versão anterior descartava linha inválida, emitia aviso e escrevia o JSON com
++    sucesso. Uma célula `Ativo` em branco, um typo, um schema drift — e uma unidade
++    governada desaparecia do catálogo de runtime, onde virava `unknown` a cada
++    ingestão. O validador de runtime não recupera linha que o build step jogou fora.
++
++    Então: nada é descartado. Ou o catálogo representa a planilha inteira, ou não
++    existe catálogo novo.
++    """
++    overrides = ler_overrides(caminho_overrides)
++    linhas = ler_planilha(caminho_xlsx)
++    problemas = []
++
++    if not linhas:
++        raise ErroDeConversao(["planilha vazia"])
++
++    # ── Cabeçalho: colunas governadas, sem adivinhação de nome alternativo ──
++    cabecalho = linhas[0]
++    esperado = {"A": "Unidade", "B": "Apelido", "C": "Ativo"}
++    if cabecalho != esperado:
++        faltando = [v for k, v in esperado.items() if cabecalho.get(k) != v]
++        extras = [v for k, v in cabecalho.items() if esperado.get(k) != v]
++        raise ErroDeConversao(
++            [
++                f"cabeçalho: colunas governadas ausentes ou fora de posição: {faltando}"
++                + (f"; encontrado: {extras}" if extras else "")
++            ]
++        )
++
++    dados = linhas[1:]
++
++    # Quantas unidades cada Apelido cobre. É isto que separa alias de agrupamento.
++    cobertura = defaultdict(list)
++    for r in dados:
++        apelido = r.get("B")
++        nome = r.get("A")
++        if apelido and nome:
++            cobertura[apelido].append(unit_id(nome))
++
++    unidades = []
++    grupos = {}
++    avisos = []
++    por_id = {}
++    canonicos = {}
++    dono_do_alias = {}
++
++    for i, r in enumerate(dados, start=2):
++        nome = r.get("A")
++        ativo = r.get("C")
++        apelido = r.get("B")
++
++        # Linha COMPLETAMENTE vazia no fim da planilha não é dado. Parcialmente
++        # preenchida é: alguém escreveu algo e a conversão não sabe o quê.
++        if nome is None and ativo is None and apelido is None:
++            continue
++
++        if nome is None:
++            problemas.append(f"linha {i}: `Unidade` vazia (Apelido={apelido!r}, Ativo={ativo!r})")
++            continue
++
++        if ativo is None:
++            problemas.append(f"linha {i} ({nome}): `Ativo` vazia — status não é presumido")
++            continue
++
++        if ativo not in VOCABULARIO_ATIVO:
++            problemas.append(
++                f"linha {i} ({nome}): `Ativo` = {ativo!r} fora do vocabulário "
++                f"{sorted(VOCABULARIO_ATIVO)}"
++            )
++            continue
++
++        status = VOCABULARIO_ATIVO[ativo]
++        uid = unit_id(nome)
++
++        if not uid or len(uid) < 2:
++            problemas.append(f"linha {i} ({nome}): nome curto demais para gerar unit_id válido")
++            continue
++
++        if uid in por_id:
++            anterior = por_id[uid]
++            problemas.append(
++                f"linha {i} ({nome}): unit_id {uid!r} duplicado — já usado na linha "
++                f"{anterior['linha']} ({anterior['nome']})"
++            )
++            continue
++
++        chave_canonica = nome.strip().lower()
++        if chave_canonica in canonicos:
++            problemas.append(
++                f"linha {i} ({nome}): identidade canônica duplicada da linha "
++                f"{canonicos[chave_canonica]}"
++            )
++            continue
++
++        aliases = []
++        if apelido:
++            membros = sorted(set(cobertura[apelido]))
++            if len(membros) >= 2:
++                # AGRUPAMENTO. Não é alias de nenhum dos membros.
++                grupos[apelido] = membros
++            elif apelido == nome:
++                # Redundância inofensiva e NÃO LOSSY: o alias é igual ao canônico,
++                # então descartá-lo não perde forma nenhuma. Único aviso permitido.
++                avisos.append(f"linha {i} ({nome}): Apelido igual ao canônico — redundante")
++            else:
++                aliases.append(apelido)
++
++        por_id[uid] = {"linha": i, "nome": nome}
++        canonicos[chave_canonica] = i
++        unidades.append(
++            {
++                "unit_id": uid,
++                "canonical_name": nome,
++                "aliases": aliases,
++                "status": status,
++            }
++        )
++
++    # ── Overrides governados: decisões humanas que a planilha não registra ──
++    #
++    # Entram ANTES da integridade global de propósito: alias→duas unidades e
++    # alias colidindo com canônico já são checados abaixo, e um alias humano
++    # precisa passar exatamente pelas mesmas guardas que um alias da planilha.
++    por_unit_id = {u["unit_id"]: u for u in unidades}
++    id_dos_rotulos = {unit_id(r): r for r in grupos}
++
++    for ov in overrides:
++        alias, alvo = ov["alias"], ov["target_unit_id"]
++
++        rotulo = id_dos_rotulos.get(unit_id(alias))
++        if rotulo is not None:
++            problemas.append(
++                f"override[{ov['ordem']}]: alias {alias!r} é o rótulo de agrupamento "
++                f"{rotulo!r} — decisão humana não transforma agrupamento em unidade"
++            )
++            continue
++
++        rotulo_alvo = id_dos_rotulos.get(unit_id(alvo))
++        if rotulo_alvo is not None:
++            problemas.append(
++                f"override[{ov['ordem']}] ({alias!r}): target_unit_id {alvo!r} é o "
++                f"rótulo de agrupamento {rotulo_alvo!r}, não uma unidade"
++            )
++            continue
++
++        if alvo not in por_unit_id:
++            problemas.append(
++                f"override[{ov['ordem']}] ({alias!r}): target_unit_id {alvo!r} não "
++                f"existe no catálogo da planilha"
++            )
++            continue
++
++        por_unit_id[alvo]["aliases"].append(alias)
++
++    # ── Integridade global, antes de qualquer escrita ──
++    for u in unidades:
++        for a in u["aliases"]:
++            chave = a.lower()
++            dono = dono_do_alias.get(chave)
++            if dono is not None and dono != u["unit_id"]:
++                problemas.append(
++                    f"alias {a!r} aponta para {dono!r} e para {u['unit_id']!r}"
++                )
++                continue
++            dono_do_alias[chave] = u["unit_id"]
++
++    for u in unidades:
++        for a in u["aliases"]:
++            colide = canonicos.get(a.strip().lower())
++            if colide is not None and unit_id(a) != u["unit_id"]:
++                problemas.append(
++                    f"alias {a!r} de {u['unit_id']!r} colide com o canônico da linha {colide}"
++                )
++
++    ids = {u["unit_id"] for u in unidades}
++    for rotulo, membros in sorted(grupos.items()):
++        ausentes = [m for m in membros if m not in ids]
++        if ausentes:
++            problemas.append(f"agrupamento {rotulo!r}: membros inexistentes: {ausentes}")
++        if len(membros) < 2:
++            problemas.append(f"agrupamento {rotulo!r}: precisa de ao menos duas unidades")
++
++    if problemas:
++        raise ErroDeConversao(problemas)
++
++    return {
++        "catalog_version": CATALOG_VERSION,
++        "importer_version": IMPORTER_VERSION,
++        "columns": ["Unidade", "Apelido", "Ativo"],
++        # Identidade das fontes que produziram ESTE artefato. Reproduzir o catálogo
++        # exige as duas; nenhum alias efetivo nasce fora daqui.
++        "sources": [
++            {
++                "role": "workbook",
++                "file": os.path.basename(caminho_xlsx),
++                "sha256": sha256(caminho_xlsx),
++            },
++            {
++                "role": "alias_overrides",
++                "file": os.path.basename(caminho_overrides),
++                "sha256": sha256(caminho_overrides),
++                "alias_count": len(overrides),
++            },
++        ],
++        "units": unidades,
++        "groups": [{"label": k, "members": v} for k, v in sorted(grupos.items())],
++        "warnings": avisos,
++    }
++
++
++def escrever_atomico(caminho, catalogo):
++    """
++    Escreve num temporário do MESMO filesystem e substitui atomicamente.
++
++    `os.replace` é atômico dentro do mesmo filesystem: ou o artefato antigo continua
++    inteiro, ou o novo está inteiro. Nunca um JSON truncado no meio — que seria pior
++    que a versão anterior do bug, porque o runtime falharia ao carregar.
++    """
++    destino = os.path.abspath(caminho)
++    pasta = os.path.dirname(destino)
++    os.makedirs(pasta, exist_ok=True)
++
++    fd, temp = tempfile.mkstemp(dir=pasta, prefix=".catalog-", suffix=".json.tmp")
++    try:
++        with os.fdopen(fd, "w", encoding="utf-8") as f:
++            json.dump(catalogo, f, ensure_ascii=False, indent=2, sort_keys=False)
++            f.write("\n")
++            f.flush()
++            os.fsync(f.fileno())
++
++        # `mkstemp` cria com 0600 e `os.replace` carrega o modo do temporário para o
++        # destino. Sem isto, regenerar o catálogo o tornaria ilegível por outro
++        # usuário — um artefato versionado que some do build de outra pessoa.
++        # Preserva o modo do destino quando ele já existe; senão, o padrão do umask.
++        try:
++            os.chmod(temp, stat.S_IMODE(os.stat(destino).st_mode))
++        except FileNotFoundError:
++            umask = os.umask(0)
++            os.umask(umask)
++            os.chmod(temp, 0o666 & ~umask)
++
++        os.replace(temp, destino)
++    except BaseException:
++        if os.path.exists(temp):
++            os.unlink(temp)
++        raise
++
++
++if __name__ == "__main__":
++    if len(sys.argv) != 4:
++        raise SystemExit(__doc__)
++
++    for rotulo, caminho in (("planilha", sys.argv[1]), ("overrides", sys.argv[2])):
++        if not os.path.isfile(caminho):
++            print(
++                f"CONVERSÃO RECUSADA — {rotulo} não encontrada: {caminho}", file=sys.stderr
++            )
++            raise SystemExit(1)
++
++    try:
++        catalogo = converter(sys.argv[1], sys.argv[2])
++    except (ErroDeConversao, zipfile.BadZipFile) as e:
++        print("CONVERSÃO RECUSADA — nenhum artefato foi escrito:", file=sys.stderr)
++        for p in getattr(e, "problemas", [str(e)]):
++            print(f"  - {p}", file=sys.stderr)
++        # O artefato governado anterior permanece intacto.
++        raise SystemExit(1) from None
++
++    escrever_atomico(sys.argv[3], catalogo)
++
++    ativas = sum(1 for u in catalogo["units"] if u["status"] == "active")
++    inativas = sum(1 for u in catalogo["units"] if u["status"] == "inactive")
++    print(f"unidades: {len(catalogo['units'])} (ativas {ativas}, inativas {inativas})")
++    print(f"aliases:  {sum(len(u['aliases']) for u in catalogo['units'])}")
++    print(f"grupos:   {len(catalogo['groups'])}")
++    for g in catalogo["groups"]:
++        print(f"  {g['label']!r} → {g['members']}")
++    for f in catalogo["sources"]:
++        print(f"fonte {f['role']}: {f['file']} sha256={f['sha256']}")
++    for a in catalogo["warnings"]:
++        print(f"AVISO (não lossy): {a}")

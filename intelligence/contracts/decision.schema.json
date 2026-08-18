@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://creditum.internal/intelligence/contracts/decision.schema.json",
+  "title": "Decisão humana (ledger append-only)",
+  "description": "Registro da decisão do responsável humano sobre uma recomendação. Correção NUNCA sobrescreve: cria novo registro com `supersedes` apontando para o anterior (§13).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "decision_id",
+    "schema_version",
+    "recommendation_id",
+    "run_id",
+    "decided_at",
+    "decided_by_role",
+    "outcome"
+  ],
+  "properties": {
+    "decision_id": { "$ref": "#/$defs/identifier" },
+    "schema_version": { "$ref": "#/$defs/schema_version" },
+    "recommendation_id": { "$ref": "#/$defs/identifier" },
+    "run_id": { "$ref": "#/$defs/identifier" },
+    "decided_at": { "type": "string", "format": "date-time" },
+    "decided_by_role": {
+      "description": "Papel, não nome. O ledger não guarda PII de colaborador.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "outcome": { "enum": ["approved", "rejected", "combined", "deepen"] },
+    "chosen_stances": {
+      "description": "Posturas escolhidas. `uniqueItems` porque escolher 'moderate' duas vezes não é uma decisão mais forte — é um registro corrompido.",
+      "type": "array",
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": { "enum": ["conservative", "moderate", "aggressive"] }
+    },
+    "rationale": { "type": "string", "maxLength": 4000 },
+    "conflict_resolutions": {
+      "description": "Resolução HUMANA de conflitos declarados pelo sistema. É a única via pela qual um conflito pode ser fechado. O conflito original permanece `resolved: false` no snapshot e na recomendação para sempre — a resolução é um evento novo no ledger, vinculado por `conflict_id`, e não uma edição do registro anterior. Quem lê o histórico continua enxergando que houve divergência, quem resolveu e com base em quê.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/conflict_resolution" }
+    },
+    "usefulness_rating": {
+      "description": "Avaliação humana de clareza e capacidade de decidir, 1–5. Critério de aprovação §16 exige média ≥ 4.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "supersedes": {
+      "description": "Correção de uma decisão anterior. O registro original permanece intacto.",
+      "$ref": "#/$defs/identifier"
+    },
+    "observed_result": {
+      "description": "Resultado posterior, quando disponível. É o que fecha o ciclo de aprendizado.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recorded_at", "summary"],
+      "properties": {
+        "recorded_at": { "type": "string", "format": "date-time" },
+        "summary": { "type": "string", "maxLength": 4000 },
+        "amount_cents": { "type": "integer" },
+        "evidence_refs": { "type": "array", "items": { "$ref": "#/$defs/identifier" } }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "description": "Aprovar exige dizer O QUE foi aprovado. Lista vazia é aprovação de nada.",
+      "if": { "properties": { "outcome": { "const": "approved" } }, "required": ["outcome"] },
+      "then": {
+        "required": ["chosen_stances"],
+        "properties": { "chosen_stances": { "type": "array", "minItems": 1 } }
+      }
+    },
+    {
+      "description": "Combinar exige ao menos duas posturas — senão é aprovação simples com outro nome.",
+      "if": { "properties": { "outcome": { "const": "combined" } }, "required": ["outcome"] },
+      "then": {
+        "required": ["chosen_stances"],
+        "properties": { "chosen_stances": { "type": "array", "minItems": 2 } }
+      }
+    }
+  ],
+  "$defs": {
+    "identifier": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_.:-]{2,127}$" },
+    "schema_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "conflict_resolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["conflict_id", "resolution", "rationale", "resolved_at", "resolved_by_role"],
+      "properties": {
+        "conflict_id": {
+          "description": "Aponta para o conflito original, que continua existindo e continua marcado como não resolvido.",
+          "$ref": "#/$defs/identifier"
+        },
+        "resolution": {
+          "description": "chose_version = uma das versões é a correta. both_wrong = nenhuma serve, a fonte precisa ser corrigida. kept_open = decisão consciente de não resolver ainda. superseded = fonte nova tornou a disputa irrelevante.",
+          "enum": ["chose_version", "both_wrong", "kept_open", "superseded"]
+        },
+        "chosen_version_repr": {
+          "description": "Obrigatório quando resolution = chose_version. Texto da versão escolhida, para que o histórico registre O QUE foi escolhido e não só que houve escolha.",
+          "type": "string",
+          "maxLength": 512
+        },
+        "rationale": {
+          "description": "Por que. Resolver conflito sem justificativa registrada é o mesmo que o sistema ter escolhido sozinho.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "resolved_at": { "type": "string", "format": "date-time" },
+        "resolved_by_role": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "evidence_refs": { "type": "array", "items": { "$ref": "#/$defs/identifier" } }
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "properties": { "resolution": { "const": "chose_version" } },
+            "required": ["resolution"]
+          },
+          "then": { "required": ["chosen_version_repr"] }
+        }
+      ]
+    }
+  }
+}

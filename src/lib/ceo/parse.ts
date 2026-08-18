@@ -57,6 +57,11 @@ export function parseBRLToCents(raw: unknown): number | null {
   if (!m) return null
   const [, open, sign1, sign2, num, close] = m
 
+  // O grupo do número não é opcional na gramática, mas `RegExpMatchArray` não
+  // expressa isso. O narrowing mantém a promessa do módulo — nada adivinhado —
+  // sem asserção. Inalcançável em runtime: se casou, o grupo existe.
+  if (num === undefined) return null
+
   // Parênteses precisam abrir E fechar
   if (Boolean(open) !== Boolean(close)) return null
   // Sinal duplicado ("- R$ -100") é entrada corrompida, não valor
@@ -102,6 +107,21 @@ const GROUPED = /^\d{1,3}(?:\.\d{3})+$/
 const GROUPED_DEC = /^(\d{1,3}(?:\.\d{3})+),(\d{1,2})$/
 const DEC_DOT = /^(\d+)\.(\d{1,2})$/
 
+/**
+ * Extrai os dois primeiros grupos de captura com narrowing real.
+ *
+ * As três gramáticas com grupos (`GROUPED_DEC`, `DEC_COMMA`, `DEC_DOT`) sempre
+ * produzem os dois quando casam — mas `RegExpMatchArray` tipa todo índice como
+ * possivelmente ausente. Devolver `null` em vez de assertar preserva a regra do
+ * módulo: quando não dá para ler com segurança, devolve-se ausência.
+ */
+function twoGroups(m: RegExpMatchArray): readonly [string, string] | null {
+  const a = m[1]
+  const b = m[2]
+  if (a === undefined || b === undefined) return null
+  return [a, b]
+}
+
 function toCents(s: string): number | null {
   let intText: string
   let fracText: string
@@ -111,17 +131,23 @@ function toCents(s: string): number | null {
     intText = s
     fracText = ""
   } else if ((m = s.match(GROUPED_DEC))) {
-    intText = m[1].replace(/\./g, "")
-    fracText = m[2]
+    const g = twoGroups(m)
+    if (g === null) return null
+    intText = g[0].replace(/\./g, "")
+    fracText = g[1]
   } else if (GROUPED.test(s)) {
     intText = s.replace(/\./g, "")
     fracText = ""
   } else if ((m = s.match(DEC_COMMA))) {
-    intText = m[1]
-    fracText = m[2]
+    const g = twoGroups(m)
+    if (g === null) return null
+    intText = g[0]
+    fracText = g[1]
   } else if ((m = s.match(DEC_DOT))) {
-    intText = m[1]
-    fracText = m[2]
+    const g = twoGroups(m)
+    if (g === null) return null
+    intText = g[0]
+    fracText = g[1]
   } else {
     // Não casou com nenhuma forma conhecida. Não tento salvar.
     return null

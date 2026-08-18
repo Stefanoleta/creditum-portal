@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://creditum.internal/intelligence/contracts/evidence.schema.json",
+  "title": "Evidência",
+  "description": "Âncora rastreável entre uma afirmação e o lugar exato da fonte que a sustenta. Todo número apresentado ao humano precisa de pelo menos uma.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["evidence_id", "snapshot_id", "kind", "locator", "observed_at"],
+  "properties": {
+    "evidence_id": { "$ref": "#/$defs/identifier" },
+    "snapshot_id": { "$ref": "#/$defs/identifier" },
+    "kind": {
+      "description": "cell/row = localização na fonte. computed = resultado de fórmula determinística. absence = a ausência É a evidência (ex.: campo nunca preenchido).",
+      "enum": ["cell", "row", "aggregate", "computed", "absence"]
+    },
+    "locator": {
+      "description": "Onde exatamente. Nunca inclui conteúdo de PII. A especificidade exigida depende do `kind` — ver allOf.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataset_id"],
+      "properties": {
+        "dataset_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "sheet": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "row_key": {
+          "description": "sha256(fonte|dataset|aba|posição) — nunca o número de linha sozinho (D6).",
+          "$ref": "#/$defs/sha256"
+        },
+        "column": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
+    },
+    "observed_at": { "type": "string", "format": "date-time" },
+    "formula": {
+      "description": "Obrigatória quando kind = computed. Métrica calculada sem fórmula é inválida por construção.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "untrusted_excerpt": { "$ref": "#/$defs/untrusted_text" }
+  },
+  "allOf": [
+    {
+      "if": { "type": "object", "properties": { "kind": { "const": "computed" } }, "required": ["kind"] },
+      "then": { "required": ["formula"] }
+    },
+    {
+      "description": "Uma célula é a interseção de linha e coluna. Sem as duas, 'cell' é só um rótulo — e uma afirmação ancorada num lugar impreciso não é rastreável.",
+      "if": { "type": "object", "properties": { "kind": { "const": "cell" } }, "required": ["kind"] },
+      "then": {
+        "properties": {
+          "locator": { "type": "object", "required": ["sheet", "row_key", "column"] }
+        },
+        "required": ["locator"]
+      }
+    },
+    {
+      "if": { "type": "object", "properties": { "kind": { "const": "row" } }, "required": ["kind"] },
+      "then": {
+        "properties": {
+          "locator": { "type": "object", "required": ["sheet", "row_key"] }
+        },
+        "required": ["locator"]
+      }
+    },
+    {
+      "description": "Agregado precisa dizer sobre o quê agregou.",
+      "if": { "type": "object", "properties": { "kind": { "const": "aggregate" } }, "required": ["kind"] },
+      "then": {
+        "properties": {
+          "locator": { "type": "object", "required": ["sheet"] }
+        },
+        "required": ["locator"]
+      }
+    }
+  ],
+  "$defs": {
+    "identifier": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_.:-]{2,127}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "untrusted_text": {
+      "description": "Envelope obrigatório para QUALQUER texto vindo da fonte. O rótulo existe para que o texto seja tratado como dado, nunca como instrução (§12.3).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["untrusted", "content"],
+      "properties": {
+        "untrusted": { "const": true },
+        "content": { "type": "string", "maxLength": 2048 },
+        "origin": { "type": "string", "maxLength": 256 }
+      }
+    }
+  }
+}

@@ -1,0 +1,2869 @@
+diff --git a/intelligence/detectors/src/low-ticket.ts b/intelligence/detectors/src/low-ticket.ts
+new file mode 100644
+index 0000000..fbe6bab
+--- /dev/null
++++ b/intelligence/detectors/src/low-ticket.ts
+@@ -0,0 +1,465 @@
++/**
++ * Regra de ticket baixo — contrato individual abaixo do piso comercial.
++ *
++ * ─── O que a regra afirma, e só isso ──────────────────────────────────────────
++ *
++ *   "o ticket deste contrato está abaixo do piso aprovado"
++ *
++ * Não afirma fraude. Não afirma erro de digitação. Não afirma prejuízo. Não afirma
++ * mau negócio. Não afirma risco de inadimplência. Não afirma causa. Não recomenda
++ * nada. É alerta OPERACIONAL FACTUAL: alguém conferiu um número e ele está abaixo
++ * de um piso que o CEO definiu.
++ *
++ * A disciplina é a mesma dos outros quatro detectores, e por um motivo prático: um
++ * alerta que diz "possível fraude" muda o comportamento de quem lê antes de
++ * qualquer verificação. Um alerta que diz "ticket abaixo do piso" faz a pessoa ir
++ * olhar.
++ *
++ * ─── O piso é regra, não parâmetro ────────────────────────────────────────────
++ *
++ * `R$ 1.499,99` = `149_999` centavos, comparação **estritamente menor**:
++ *
++ *   149_998  → alerta
++ *   149_999  → NÃO alerta
++ *   150_000  → NÃO alerta
++ *
++ * Vive em `APPROVED_THRESHOLDS`, ao lado do `installment_threshold`, e o predicado
++ * e o texto da fórmula derivam da MESMA constante — a lição do gate da Fase 2.3.
++ *
++ * ─── Independência dos R$ 50.000 ──────────────────────────────────────────────
++ *
++ * `material_amount_cents` (R$ 50.000) e `low_ticket_floor_cents` (R$ 1.499,99) são
++ * as duas dinheiro, as duas em centavos, e respondem a perguntas opostas:
++ *
++ *   R$ 50.000     um AGREGADO é grande o bastante para merecer atenção?
++ *   R$ 1.499,99   um CONTRATO é pequeno o bastante para merecer conferência?
++ *
++ * Trocar uma pela outra faria um contrato de R$ 40.000 virar alerta de ticket
++ * baixo. Há teste dedicado a isso.
++ *
++ * Função pura: sem rede, disco, env, relógio implícito, aleatoriedade ou mutação.
++ * Só `observed` e `gap` — nenhum cálculo agregado, nenhuma inferência.
++ */
++
++import { GatewayError } from "../../gateway/src/errors"
++import { deepFreeze } from "../../gateway/src/immutability"
++import type { Evidence, IntelligenceEvent, Snapshot } from "../../gateway/src/types"
++import type { CanonicalUnitResult } from "./canonical-units"
++import { APPROVED_THRESHOLDS } from "./config"
++import { gap, observed } from "./engine"
++import type { Metric } from "./engine"
++import { piorQualidade } from "./quality"
++import type { Quality } from "./quality"
++import { structuralId } from "./structural-id"
++
++export const RULE_ID = "rule.low_ticket_contract"
++/** SemVer. Muda quando a regra observável muda — nunca data nem hash. */
++export const RULE_VERSION = "1.0.0"
++
++const EVENT_TYPE = "low_ticket_contract"
++
++/** O piso aprovado. Uma fonte só para o predicado e para a fórmula publicada. */
++export const LOW_TICKET_FLOOR_CENTS = APPROVED_THRESHOLDS.low_ticket_floor_cents
++
++/** Estritamente menor. `149_999` não alerta. */
++export function isLowTicket(ticket_cents: number): boolean {
++  return ticket_cents < LOW_TICKET_FLOOR_CENTS
++}
++
++/** O texto que descreve `isLowTicket`, gerado da mesma constante. */
++export const FORMULA_LOW_TICKET = `ticket_cents < ${LOW_TICKET_FLOOR_CENTS}`
++
++// ─── Entrada ──────────────────────────────────────────────────────────────────
++
++export interface TicketRecord {
++  /** Pseudônimo estável. NUNCA nome, CPF, telefone ou e-mail. */
++  readonly subject_ref: string
++  /** Já canonicalizada por D13. A regra não executa heurística própria. */
++  readonly unit: CanonicalUnitResult
++  /**
++   * Ticket em centavos INTEIROS. Ausente = `null`, nunca zero por omissão.
++   *
++   * No schema `ceo`, `ticket_cents` é coluna gerada:
++   * `transfer_cents * installments_grau`, com `transfer_cents >= 0` e
++   * `installments_grau > 0`. Logo o domínio governado admite `0` (transferência
++   * zero) e **não** admite negativo.
++   */
++  readonly ticket_cents: number | null
++  readonly evidence_refs: readonly string[]
++  readonly snapshot_id: string
++}
++
++export interface LowTicketInput {
++  readonly detected_at: string
++  readonly period_start: string
++  readonly period_end: string
++  readonly contracts: readonly TicketRecord[]
++  /** Conjunto governado que sustenta os refs. Não é o store inteiro. */
++  readonly snapshots: readonly Snapshot[]
++  readonly evidence: readonly Evidence[]
++}
++
++// ─── Saída ────────────────────────────────────────────────────────────────────
++
++/**
++ * Veredito de um contrato. Conjunto FECHADO.
++ *
++ * `INVALID_TICKET` é separado de `BELOW_FLOOR` de propósito. Ver `avaliar`.
++ */
++export type TicketVerdict =
++  | "BELOW_FLOOR"
++  | "AT_OR_ABOVE_FLOOR"
++  | "TICKET_UNAVAILABLE"
++  | "INVALID_TICKET"
++
++/**
++ * Por que o fato não virou Event executivo.
++ *
++ * `SEVERITY_POLICY_UNRESOLVED` é o único motivo hoje, e é decisão registrada: o
++ * contrato do evento exige `severity` obrigatória, e não existe política aprovada
++ * de severidade para `low_ticket_contract`. Ver §9 abaixo.
++ */
++export type LowTicketNotEmittedReason = "NOT_BELOW_FLOOR" | "SEVERITY_POLICY_UNRESOLVED"
++
++export interface TicketAssessment {
++  readonly subject_ref: string
++  /** Nome de exibição do CATÁLOGO. Omitido quando D13 não resolveu. */
++  readonly unit?: string
++  readonly ticket_cents: Metric<number>
++  readonly verdict: TicketVerdict
++  /** Presente quando o veredito não permite decidir. */
++  readonly detail?: string
++  readonly evidence_refs: readonly string[]
++  /**
++   * O FATO: o ticket está abaixo do piso aprovado.
++   *
++   * Independente da emissão do Event. Um fato detectado não se perde porque a
++   * política de severidade ainda não existe.
++   */
++  readonly matched: boolean
++  /** O piso contra o qual foi comparado. */
++  readonly threshold_cents: number
++  /**
++   * Identidade lógica do fato, quando `matched`.
++   *
++   * Calculada mesmo sem Event: é o que permite correlacionar o mesmo fato entre
++   * execuções quando a política de severidade for aprovada.
++   */
++  readonly event_id: string | null
++  readonly emitted: boolean
++  readonly not_emitted_reason?: LowTicketNotEmittedReason
++}
++
++export interface LowTicketSummary {
++  readonly floor_cents: number
++  readonly total_records: number
++  readonly below_floor: number
++  /**
++   * Fatos detectados que NÃO viraram Event.
++   *
++   * Hoje é igual a `below_floor`: nenhum Event sai enquanto a severidade não for
++   * política aprovada.
++   */
++  readonly facts_not_emitted: number
++  readonly at_or_above_floor: number
++  readonly ticket_unavailable: number
++  readonly invalid_ticket: number
++  readonly quality_status: Quality
++}
++
++export interface LowTicketResult {
++  readonly events: readonly IntelligenceEvent[]
++  /** TODOS os contratos avaliados. Nada descartado em silêncio. */
++  readonly assessed: readonly TicketAssessment[]
++  readonly summary: LowTicketSummary
++}
++
++// ─── Precondições ─────────────────────────────────────────────────────────────
++
++interface EscopoGovernado {
++  readonly source_system: string
++  readonly dataset_id: string
++}
++
++/**
++ * Lastro por CONTRATO, não por lote.
++ *
++ * Cada alerta fala de um contrato específico, então cada um precisa de evidência
++ * sua: existir, pertencer ao snapshot declarado e localizar o dataset daquele
++ * snapshot. Aceitar evidência de outro contrato faria o alerta de A carregar a
++ * prova de B — o mesmo furo que os gates das Fases 2.4 e 2.5 encontraram.
++ *
++ * ─── Limitação declarada ──────────────────────────────────────────────────────
++ *
++ * `Evidence.locator` chega até `row_key`, e é isso que liga a evidência à LINHA.
++ * O contrato de evidência **não** carrega `subject_ref`, então a associação
++ * evidência↔pessoa não é verificável aqui — apenas evidência↔linha↔dataset. Não
++ * afirmo propriedade que o contrato não sustenta. Registrado em
++ * `FASE_2_6B_GOVERNED_CATALOG_AND_POLICY.md`.
++ */
++function assertPrecondicoes(input: LowTicketInput): Map<string, EscopoGovernado> {
++  const problemas: string[] = []
++  const snapshotPorId = new Map(input.snapshots.map((s) => [s.snapshot_id, s]))
++  const evidencePorId = new Map(input.evidence.map((e) => [e.evidence_id, e]))
++  const escopos = new Map<string, EscopoGovernado>()
++
++  for (const c of input.contracts) {
++    const onde = `contrato ${c.subject_ref}`
++
++    if (!/^subj_[a-f0-9]{16}$/.test(c.subject_ref)) {
++      problemas.push(`${onde}: subject_ref precisa ser pseudônimo estável`)
++    }
++
++    const snap = snapshotPorId.get(c.snapshot_id)
++    if (snap === undefined) {
++      problemas.push(`${onde}: snapshot inexistente no conjunto governado: ${c.snapshot_id}`)
++      continue
++    }
++
++    if (c.evidence_refs.length === 0) {
++      problemas.push(`${onde}: sem evidência — nenhum alerta individual sem lastro`)
++    }
++    for (const ref of c.evidence_refs) {
++      const ev = evidencePorId.get(ref)
++      if (ev === undefined) {
++        problemas.push(`${onde}: evidência inexistente: ${ref}`)
++        continue
++      }
++      if (ev.snapshot_id !== c.snapshot_id) {
++        problemas.push(
++          `${onde}: evidência ${ref} pertence ao snapshot ${ev.snapshot_id}, não a ${c.snapshot_id}`,
++        )
++        continue
++      }
++      if (ev.locator.dataset_id !== snap.dataset_id) {
++        problemas.push(
++          `${onde}: evidência ${ref} localiza o dataset "${ev.locator.dataset_id}" mas o snapshot é do dataset "${snap.dataset_id}"`,
++        )
++      }
++    }
++
++    escopos.set(c.snapshot_id, {
++      source_system: snap.source_system,
++      dataset_id: snap.dataset_id,
++    })
++  }
++
++  if (problemas.length > 0) {
++    throw new GatewayError("SCHEMA_INVALID", "Lastro insuficiente para alertar ticket baixo", problemas)
++  }
++
++  return escopos
++}
++
++// ─── Avaliação ────────────────────────────────────────────────────────────────
++
++/**
++ * O veredito de um contrato.
++ *
++ * ─── Por que ticket não positivo NÃO é "ticket baixo" ─────────────────────────
++ *
++ * Aritmeticamente `0 < 149_999`, então zero passaria pelo predicado. Mas o schema
++ * `ceo` define `ticket_cents` como coluna gerada de `transfer_cents *
++ * installments_grau`, com `transfer_cents >= 0` e `installments_grau > 0`:
++ *
++ *   negativo  → **impossível** no domínio governado. É corrupção de dado.
++ *   zero      → representável, mas nenhuma regra governada diz que uma venda de
++ *               valor zero é venda.
++ *
++ * Não existe lastro que autorize chamar qualquer dos dois de "contrato barato".
++ * Um contrato de R$ 0,00 provavelmente é linha incompleta, e alertar "ticket
++ * abaixo do piso" mandaria o time comercial olhar o preço quando o problema é de
++ * ingestão.
++ *
++ * Então: `INVALID_TICKET`, contado, visível na qualidade, e **decisão pendente**.
++ * Se o CEO decidir que ticket zero é alerta comercial, isso vira regra explícita.
++ */
++function avaliar(c: TicketRecord): {
++  readonly ticket: Metric<number>
++  readonly verdict: TicketVerdict
++  readonly detail?: string
++} {
++  if (c.ticket_cents === null) {
++    return {
++      ticket: gap<number>("DATA_NOT_AVAILABLE", "observed", "ticket ausente na fonte"),
++      verdict: "TICKET_UNAVAILABLE",
++      detail: "ticket ausente: nunca tratado como zero",
++    }
++  }
++
++  if (!Number.isSafeInteger(c.ticket_cents)) {
++    // Float ou fora da faixa exata. Dinheiro é inteiro em centavos, sempre.
++    return {
++      ticket: gap<number>("DATA_NOT_AVAILABLE", "observed", "ticket fora da faixa inteira exata"),
++      verdict: "INVALID_TICKET",
++      detail: "ticket não é inteiro seguro em centavos",
++    }
++  }
++
++  if (c.ticket_cents <= 0) {
++    return {
++      ticket: gap<number>(
++        "BUSINESS_RULE_PENDING",
++        "observed",
++        "ticket não positivo: o domínio governado não define venda de valor zero ou negativo",
++      ),
++      verdict: "INVALID_TICKET",
++      detail:
++        "ticket <= 0 não é 'ticket baixo': o schema ceo admite zero mas nenhuma regra o " +
++        "declara venda válida, e negativo é impossível. Decisão do CEO pendente.",
++    }
++  }
++
++  return {
++    ticket: observed(c.ticket_cents),
++    verdict: isLowTicket(c.ticket_cents) ? "BELOW_FLOOR" : "AT_OR_ABOVE_FLOOR",
++  }
++}
++
++// ─── Regra ────────────────────────────────────────────────────────────────────
++
++export function detectLowTicketContracts(input: LowTicketInput): LowTicketResult {
++  const escopos = assertPrecondicoes(input)
++
++  const assessed: TicketAssessment[] = input.contracts.map((c) => {
++    const { ticket, verdict, detail } = avaliar(c)
++    const abaixo = verdict === "BELOW_FLOOR"
++    return {
++      subject_ref: c.subject_ref,
++      ...(c.unit.status === "matched" ? { unit: c.unit.display_name } : {}),
++      ticket_cents: ticket,
++      verdict,
++      ...(detail === undefined ? {} : { detail }),
++      // CÓPIA. A referência do chamador não sobrevive no resultado congelado.
++      evidence_refs: [...c.evidence_refs],
++      matched: abaixo,
++      threshold_cents: LOW_TICKET_FLOOR_CENTS,
++      event_id: abaixo ? identidadeDoAlerta(input, escopoDoContrato(escopos, c), c.subject_ref) : null,
++      emitted: false,
++      not_emitted_reason: abaixo ? "SEVERITY_POLICY_UNRESOLVED" : "NOT_BELOW_FLOOR",
++    }
++  })
++
++  const quality = resolverQualidade(input, assessed)
++
++  // Nenhum Event: a severidade não tem política aprovada. Ver a nota acima.
++  const events: readonly IntelligenceEvent[] = []
++
++  return deepFreeze({
++    events,
++    assessed,
++    summary: {
++      floor_cents: LOW_TICKET_FLOOR_CENTS,
++      total_records: input.contracts.length,
++      below_floor: assessed.filter((a) => a.matched).length,
++      facts_not_emitted: assessed.filter((a) => a.matched && !a.emitted).length,
++      at_or_above_floor: assessed.filter((a) => a.verdict === "AT_OR_ABOVE_FLOOR").length,
++      ticket_unavailable: assessed.filter((a) => a.verdict === "TICKET_UNAVAILABLE").length,
++      invalid_ticket: assessed.filter((a) => a.verdict === "INVALID_TICKET").length,
++      quality_status: quality,
++    },
++  })
++}
++
++/**
++ * O escopo governado DESTE contrato.
++ *
++ * `assertPrecondicoes` já recusou contrato cujo snapshot não existe. Se chegou aqui
++ * sem escopo, a garantia foi contornada: falha fechada, nunca escopo de outro.
++ */
++function escopoDoContrato(
++  escopos: ReadonlyMap<string, EscopoGovernado>,
++  c: TicketRecord,
++): EscopoGovernado {
++  const e = escopos.get(c.snapshot_id)
++  if (e === undefined) {
++    throw new GatewayError("SCHEMA_INVALID", "Contrato sem escopo governado", [
++      `contrato ${c.subject_ref}: snapshot ${c.snapshot_id}`,
++    ])
++  }
++  return e
++}
++
++/** A qualidade é a dependência RELEVANTE mais fraca. Lattice compartilhado. */
++function resolverQualidade(
++  input: LowTicketInput,
++  assessed: readonly TicketAssessment[],
++): Quality {
++  const candidatas: Quality[] = ["ok"]
++
++  for (const s of input.snapshots) {
++    candidatas.push(s.quality_status)
++    if (s.conflicts.length > 0) candidatas.push("conflicted")
++    if (s.missing_fields.length > 0) candidatas.push("degraded")
++    if (s.rows_skipped > 0) candidatas.push("degraded")
++  }
++
++  // Ticket ausente ou inválido não pode ser escondido: sem ele a regra não
++  // decidiu nada sobre aquele contrato.
++  if (assessed.some((a) => a.verdict === "TICKET_UNAVAILABLE")) candidatas.push("degraded")
++  if (assessed.some((a) => a.verdict === "INVALID_TICKET")) candidatas.push("degraded")
++
++  for (const c of input.contracts) {
++    if (c.unit.status === "unknown") candidatas.push("degraded")
++    else if (c.unit.status === "ambiguous") candidatas.push("conflicted")
++  }
++
++  return piorQualidade(candidatas)
++}
++
++/**
++ * Identidade lógica do alerta.
++ *
++ * Composta pelo FATO governado: tipo da regra, dataset lógico, sujeito, período e
++ * versão da regra. `snapshot_id` fica FORA — reingerir o mesmo dataset lógico não
++ * cria um alerta novo, princípio herdado de B/C/D.
++ *
++ * `rule_version` entra porque mudar a regra observável muda o fato: um alerta sob
++ * piso diferente é outro alerta.
++ *
++ * Estruturada, nunca por gramática de delimitador.
++ */
++function identidadeDoAlerta(
++  input: LowTicketInput,
++  escopo: EscopoGovernado,
++  subject_ref: string,
++): string {
++  return structuralId(
++    "creditum:low_ticket_contract:v1",
++    {
++      event_type: EVENT_TYPE,
++      rule_id: RULE_ID,
++      rule_version: RULE_VERSION,
++      floor_cents: LOW_TICKET_FLOOR_CENTS,
++      period_start: input.period_start,
++      period_end: input.period_end,
++      subject_ref,
++      // O dataset LÓGICO deste contrato, e só dele. `snapshot_id` fica fora:
++      // reingerir o mesmo dataset lógico não cria fato novo.
++      logical_dataset: {
++        source_system: escopo.source_system,
++        dataset_id: escopo.dataset_id,
++      },
++    },
++    "evt",
++  )
++}
++
++/**
++ * ─── Por que NENHUM Event executivo é emitido hoje ─────────────────────────────
++ *
++ * O contrato do evento exige `severity` obrigatória, e não existe política
++ * aprovada de severidade para `low_ticket_contract`. A versão anterior desta regra
++ * usava `info` fixo — e `info` não foi aprovado: foi escolhido por mim.
++ *
++ * Um grau escolhido por engenheiro vira política da Creditum no dia em que alguém
++ * o encontra no código e assume que passou por aprovação. É o mesmo erro dos
++ * thresholds da Fase 2.1, e a resposta é a mesma: recusar em vez de preencher.
++ *
++ * Então: o FATO é detectado, contado, auditável e com identidade lógica calculada.
++ * O Event fica bloqueado com motivo tipado. Nenhum fallback para `info`, `low`,
++ * zero, nem severidade de outro detector.
++ *
++ * Quando a política existir, a única mudança é passar a emitir — o fato já está
++ * modelado.
++ */
+diff --git a/intelligence/detectors/tests/catalog-import.test.ts b/intelligence/detectors/tests/catalog-import.test.ts
+new file mode 100644
+index 0000000..2e2b4bb
+--- /dev/null
++++ b/intelligence/detectors/tests/catalog-import.test.ts
+@@ -0,0 +1,392 @@
++/**
++ * Importador XLSX → catálogo governado: fail-closed ATÔMICO.
++ *
++ * O que o gate da Fase 2.6c encontrou: a versão anterior descartava linha inválida,
++ * emitia aviso e escrevia o JSON com sucesso. Uma célula `Ativo` em branco fazia uma
++ * unidade governada desaparecer do catálogo de runtime, onde virava `unknown` a cada
++ * ingestão — e o validador de runtime não recupera o que o build step jogou fora.
++ *
++ * Estes testes exercitam o script REAL, num diretório temporário, com planilhas
++ * sintéticas geradas por `tools/make_test_xlsx.py`. Não dependem do arquivo do
++ * WhatsApp, que o app apaga.
++ */
++
++import { execFileSync } from "node:child_process"
++import { mkdtempSync, readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs"
++import { tmpdir } from "node:os"
++import { join } from "node:path"
++import { fileURLToPath } from "node:url"
++import { dirname, resolve } from "node:path"
++import { describe, expect, it } from "vitest"
++
++const AQUI = dirname(fileURLToPath(import.meta.url))
++const RAIZ = resolve(AQUI, "../..")
++const CONVERSOR = join(RAIZ, "tools/xlsx_to_catalog.py")
++const GERADOR = join(RAIZ, "tools/make_test_xlsx.py")
++
++type Linha = readonly (string | null)[]
++
++const CABECALHO: Linha = ["Unidade", "Apelido", "Ativo"]
++
++function planilha(linhas: readonly Linha[]): string {
++  const dir = mkdtempSync(join(tmpdir(), "cat-import-"))
++  const caminho = join(dir, "teste.xlsx")
++  execFileSync("python3", [GERADOR, caminho, JSON.stringify(linhas)], { encoding: "utf8" })
++  return caminho
++}
++
++interface Resultado {
++  readonly ok: boolean
++  readonly stderr: string
++  readonly destino: string
++  readonly dir: string
++}
++
++/** Roda o conversor real. Nunca lança — o veredito é o código de saída. */
++function converter(xlsx: string, destinoExistente?: string): Resultado {
++  const dir = mkdtempSync(join(tmpdir(), "cat-out-"))
++  const destino = destinoExistente ?? join(dir, "unidades.catalog.json")
++  try {
++    execFileSync("python3", [CONVERSOR, xlsx, destino], { encoding: "utf8", stdio: "pipe" })
++    return { ok: true, stderr: "", destino, dir }
++  } catch (e) {
++    const err = e as { stderr?: string }
++    return { ok: false, stderr: err.stderr ?? "", destino, dir }
++  }
++}
++
++const lerCatalogo = (
++  destino: string,
++): { units: { unit_id: string; canonical_name: string; aliases: string[]; status: string }[]; groups: { label: string; members: string[] }[]; warnings: string[] } =>
++  JSON.parse(readFileSync(destino, "utf8")) as never
++
++/** 48 linhas boas — o cenário do teste J. */
++const QUARENTA_E_OITO: readonly Linha[] = Array.from({ length: 48 }, (_, i) => [
++  `Unidade ${String(i + 1).padStart(2, "0")}`,
++  null,
++  i % 10 === 0 ? "Não" : "Sim",
++])
++
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("A — planilha válida gera catálogo completo", () => {
++  const r = converter(
++    planilha([
++      CABECALHO,
++      ["Santos", null, "Sim"],
++      ["Santo Amaro", null, "Sim"],
++      ["Vila Maria", null, "Não"],
++      ["Santa Cruz", "STA Cruz", "Sim"],
++      ["Carpina", "Carpina e Limoeiro", "Sim"],
++      ["Limoeiro", "Carpina e Limoeiro", "Sim"],
++    ]),
++  )
++
++  it("sai com sucesso", () => {
++    expect(r.ok).toBe(true)
++  })
++
++  it("todas as unidades entram — nenhuma descartada", () => {
++    const c = lerCatalogo(r.destino)
++    expect(c.units).toHaveLength(6)
++  })
++
++  it("ativo/inativo preservado", () => {
++    const c = lerCatalogo(r.destino)
++    expect(c.units.filter((u) => u.status === "active")).toHaveLength(5)
++    expect(c.units.filter((u) => u.status === "inactive")).toHaveLength(1)
++    expect(c.units.find((u) => u.unit_id === "vila_maria")?.status).toBe("inactive")
++  })
++
++  it("Unicode preservado no nome canônico", () => {
++    const c = converter(
++      planilha([CABECALHO, ["Maracanaú", null, "Sim"], ["Sumaré", null, "Sim"]]),
++    )
++    const cat = lerCatalogo(c.destino)
++    expect(cat.units.map((u) => u.canonical_name)).toEqual(["Maracanaú", "Sumaré"])
++  })
++
++  it("apelido em UMA unidade é alias", () => {
++    const c = lerCatalogo(r.destino)
++    expect(c.units.find((u) => u.unit_id === "santa_cruz")?.aliases).toEqual(["STA Cruz"])
++  })
++
++  it("apelido em DUAS unidades é agrupamento, não alias", () => {
++    const c = lerCatalogo(r.destino)
++    expect(c.groups).toEqual([{ label: "Carpina e Limoeiro", members: ["carpina", "limoeiro"] }])
++    expect(c.units.find((u) => u.unit_id === "carpina")?.aliases).toEqual([])
++    expect(c.units.find((u) => u.unit_id === "limoeiro")?.aliases).toEqual([])
++  })
++
++  it("linha completamente vazia no fim não é dado", () => {
++    const c = converter(planilha([CABECALHO, ["Santos", null, "Sim"], [null, null, null]]))
++    expect(c.ok).toBe(true)
++    expect(lerCatalogo(c.destino).units).toHaveLength(1)
++  })
++})
++
++describe("B/C/D — célula obrigatória ausente ou desconhecida é FATAL", () => {
++  const naoEscreveu = (r: Resultado): boolean =>
++    !r.ok && !existsSync(r.destino) && readdirSync(r.dir).length === 0
++
++  it("B — `Unidade` vazia: falha e nada é escrito", () => {
++    const r = converter(planilha([CABECALHO, ["Santos", null, "Sim"], [null, "Apelido Órfão", "Sim"]]))
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("`Unidade` vazia")
++    expect(naoEscreveu(r)).toBe(true)
++  })
++
++  it("C — `Ativo` vazia: falha — status não é presumido", () => {
++    const r = converter(planilha([CABECALHO, ["Santos", null, null]]))
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("`Ativo` vazia")
++    expect(naoEscreveu(r)).toBe(true)
++  })
++
++  it("D — `Ativo` fora do vocabulário: falha, sem converter para true/false", () => {
++    for (const ruim of ["S", "sim", "1", "Ativo", "TRUE", "Talvez"]) {
++      const r = converter(planilha([CABECALHO, ["Santos", null, ruim]]))
++      expect(r.ok, ruim).toBe(false)
++      expect(r.stderr, ruim).toContain("fora do vocabulário")
++    }
++  })
++
++  it("linha PARCIALMENTE preenchida é fatal, não ignorada", () => {
++    // Alguém escreveu algo e a conversão não sabe o quê. Ignorar perderia dado.
++    const r = converter(planilha([CABECALHO, ["Santos", null, "Sim"], [null, null, "Sim"]]))
++    expect(r.ok).toBe(false)
++  })
++
++  it("nome curto demais para gerar id válido é fatal", () => {
++    const r = converter(planilha([CABECALHO, ["X", null, "Sim"]]))
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("unit_id")
++  })
++})
++
++describe("E — cabeçalho ausente ou divergente é FATAL", () => {
++  it("sem cabeçalho", () => {
++    const r = converter(planilha([["Santos", null, "Sim"]]))
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("cabeçalho")
++  })
++
++  it("coluna renomeada — sem adivinhar nome alternativo", () => {
++    const r = converter(planilha([["Escola", "Apelido", "Ativo"], ["Santos", null, "Sim"]]))
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("Unidade")
++  })
++
++  it("coluna faltando", () => {
++    const r = converter(planilha([["Unidade", "Apelido"], ["Santos", null, "Sim"]]))
++    expect(r.ok).toBe(false)
++  })
++
++  it("colunas fora de posição", () => {
++    const r = converter(planilha([["Ativo", "Apelido", "Unidade"], ["Sim", null, "Santos"]]))
++    expect(r.ok).toBe(false)
++  })
++
++  it("planilha vazia", () => {
++    const r = converter(planilha([]))
++    expect(r.ok).toBe(false)
++  })
++
++  it("arquivo inexistente falha limpo, sem traceback", () => {
++    const r = converter(join(tmpdir(), "nao-existe-xyz.xlsx"))
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("não encontrado")
++    expect(r.stderr).not.toContain("Traceback")
++  })
++})
++
++describe("F/G/H/I — integridade global antes de escrever", () => {
++  it("F — alias conflitante entre duas unidades", () => {
++    // Não é agrupamento: são dois apelidos DIFERENTES que normalizam igual.
++    const r = converter(
++      planilha([
++        CABECALHO,
++        ["Unidade Alfa", "Compartilhado", "Sim"],
++        ["Unidade Beta", "compartilhado", "Sim"],
++      ]),
++    )
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("aponta para")
++  })
++
++  it("F — alias colidindo com o canônico de outra unidade", () => {
++    const r = converter(
++      planilha([CABECALHO, ["Santos", null, "Sim"], ["Santo Amaro", "Santos", "Sim"]]),
++    )
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("colide")
++  })
++
++  it("G — canônico duplicado", () => {
++    const r = converter(planilha([CABECALHO, ["Santos", null, "Sim"], ["Santos", null, "Sim"]]))
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toMatch(/duplicad/)
++  })
++
++  it("H — unit_id duplicado por normalização", () => {
++    // `Maracanaú` e `Maracanau` derivam o mesmo id.
++    const r = converter(
++      planilha([CABECALHO, ["Maracanaú", null, "Sim"], ["Maracanau", null, "Sim"]]),
++    )
++    expect(r.ok).toBe(false)
++    expect(r.stderr).toContain("duplicado")
++  })
++
++  it("G — status contraditório para a mesma unidade é pego como duplicidade", () => {
++    const r = converter(planilha([CABECALHO, ["Santos", null, "Sim"], ["Santos", null, "Não"]]))
++    expect(r.ok).toBe(false)
++  })
++
++  it("todos os problemas são reportados, não só o primeiro", () => {
++    const r = converter(
++      planilha([CABECALHO, [null, null, "Sim"], ["Santos", null, "?"], ["Outra", null, null]]),
++    )
++    expect(r.ok).toBe(false)
++    const linhas = r.stderr.split("\n").filter((l) => l.trim().startsWith("- "))
++    expect(linhas.length).toBeGreaterThanOrEqual(3)
++  })
++})
++
++describe("J — uma linha ruim entre 48 boas invalida TUDO", () => {
++  it("48 boas sozinhas convertem", () => {
++    const r = converter(planilha([CABECALHO, ...QUARENTA_E_OITO]))
++    expect(r.ok).toBe(true)
++    expect(lerCatalogo(r.destino).units).toHaveLength(48)
++  })
++
++  it("48 boas + 1 ruim: falha, e NÃO produz catálogo de 48", () => {
++    const r = converter(
++      planilha([CABECALHO, ...QUARENTA_E_OITO, ["Unidade Ruim", null, "Talvez"]]),
++    )
++    expect(r.ok).toBe(false)
++    expect(existsSync(r.destino)).toBe(false)
++  })
++
++  it("a linha ruim no MEIO também invalida tudo", () => {
++    const metade = Math.floor(QUARENTA_E_OITO.length / 2)
++    const r = converter(
++      planilha([
++        CABECALHO,
++        ...QUARENTA_E_OITO.slice(0, metade),
++        ["Unidade Ruim", null, null],
++        ...QUARENTA_E_OITO.slice(metade),
++      ]),
++    )
++    expect(r.ok).toBe(false)
++    expect(existsSync(r.destino)).toBe(false)
++  })
++})
++
++describe("K — artefato anterior permanece intacto numa conversão inválida", () => {
++  it("byte-identical após falha", () => {
++    const dir = mkdtempSync(join(tmpdir(), "cat-prev-"))
++    const destino = join(dir, "unidades.catalog.json")
++
++    // Artefato válido pré-existente.
++    const bom = converter(planilha([CABECALHO, ["Santos", null, "Sim"]]), destino)
++    expect(bom.ok).toBe(true)
++    const antes = readFileSync(destino)
++
++    // Conversão inválida sobre o MESMO destino.
++    const ruim = converter(planilha([CABECALHO, ["Outra", null, "Talvez"]]), destino)
++    expect(ruim.ok).toBe(false)
++
++    expect(readFileSync(destino).equals(antes)).toBe(true)
++  })
++
++  it("nenhum temporário fica para trás", () => {
++    const dir = mkdtempSync(join(tmpdir(), "cat-tmp-"))
++    const destino = join(dir, "unidades.catalog.json")
++    converter(planilha([CABECALHO, ["Santos", null, "Sim"]]), destino)
++    converter(planilha([CABECALHO, ["Outra", null, "?"]]), destino)
++    expect(readdirSync(dir).filter((f) => f.includes(".tmp"))).toEqual([])
++  })
++
++  it("um artefato corrompido não é 'consertado' por conversão inválida", () => {
++    const dir = mkdtempSync(join(tmpdir(), "cat-corr-"))
++    const destino = join(dir, "unidades.catalog.json")
++    writeFileSync(destino, "{ nao é json valido")
++    const r = converter(planilha([CABECALHO, ["Santos", null, "Talvez"]]), destino)
++    expect(r.ok).toBe(false)
++    // Continua corrompido — a conversão não tocou nele.
++    expect(readFileSync(destino, "utf8")).toBe("{ nao é json valido")
++  })
++})
++
++describe("L — saída determinística", () => {
++  it("mesmas entradas produzem bytes idênticos", () => {
++    const linhas: readonly Linha[] = [
++      CABECALHO,
++      ["Santos", null, "Sim"],
++      ["Maracanaú", "Maracanau ", "Sim"],
++      ["Carpina", "Carpina e Limoeiro", "Sim"],
++      ["Limoeiro", "Carpina e Limoeiro", "Sim"],
++      ["Vila Maria", null, "Não"],
++    ]
++    const a = converter(planilha(linhas))
++    const b = converter(planilha(linhas))
++    expect(a.ok && b.ok).toBe(true)
++    expect(readFileSync(b.destino, "utf8")).toBe(readFileSync(a.destino, "utf8"))
++  })
++
++  it("a ordem dos agrupamentos é estável", () => {
++    const r = converter(
++      planilha([
++        CABECALHO,
++        ["Zeta", "Zeta e Alfa", "Sim"],
++        ["Alfa", "Zeta e Alfa", "Sim"],
++        ["Beta", "Beta e Gama", "Sim"],
++        ["Gama", "Beta e Gama", "Sim"],
++      ]),
++    )
++    expect(lerCatalogo(r.destino).groups.map((g) => g.label)).toEqual([
++      "Beta e Gama",
++      "Zeta e Alfa",
++    ])
++  })
++})
++
++describe("avisos existem só para condição NÃO LOSSY", () => {
++  it("apelido idêntico ao canônico gera AVISO e converte", () => {
++    // Descartar essa redundância não perde forma nenhuma.
++    const r = converter(planilha([CABECALHO, ["Prudente", "Prudente", "Sim"]]))
++    expect(r.ok).toBe(true)
++    const c = lerCatalogo(r.destino)
++    expect(c.warnings).toHaveLength(1)
++    expect(c.warnings[0]).toContain("redundante")
++    expect(c.units[0]?.aliases).toEqual([])
++  })
++
++  it("nenhuma condição LOSSY vira aviso", () => {
++    // Toda condição que descartaria linha, status ou alias é erro. Provado pelos
++    // blocos B/C/D/F/G/H acima; aqui a asserção é que o caminho de sucesso não
++    // acumula avisos sobre dado perdido.
++    const r = converter(planilha([CABECALHO, ["Santos", null, "Sim"]]))
++    expect(lerCatalogo(r.destino).warnings).toEqual([])
++  })
++})
++
++describe("o artefato governado em uso continua fiel ao arquivo real", () => {
++  it("49 unidades, 44 ativas, 5 inativas, 2 agrupamentos", () => {
++    const c = lerCatalogo(join(RAIZ, "catalog/unidades.catalog.json"))
++    expect(c.units).toHaveLength(49)
++    expect(c.units.filter((u) => u.status === "active")).toHaveLength(44)
++    expect(c.units.filter((u) => u.status === "inactive")).toHaveLength(5)
++    expect(c.groups).toHaveLength(2)
++  })
++
++  it("as grafias reais da planilha NÃO foram corrigidas editorialmente", () => {
++    const c = lerCatalogo(join(RAIZ, "catalog/unidades.catalog.json"))
++    const nomes = c.units.map((u) => u.canonical_name)
++    // A planilha é autoridade de display até decisão humana.
++    expect(nomes).toContain("Sâo José do Rio Preto")
++    expect(nomes).toContain("Divinopólis")
++    expect(nomes).toContain("Mogi")
++    expect(nomes).toContain("Jd Angela")
++  })
++})
+diff --git a/intelligence/detectors/tests/low-ticket.test.ts b/intelligence/detectors/tests/low-ticket.test.ts
+new file mode 100644
+index 0000000..109dfc9
+--- /dev/null
++++ b/intelligence/detectors/tests/low-ticket.test.ts
+@@ -0,0 +1,845 @@
++/**
++ * Regra de ticket baixo — piso APROVADO de R$ 1.499,99.
++ *
++ * Diferente de A/B/C/D: aqui o número É política aprovada, não `TEST_CONFIG`
++ * sintética. `149_999` centavos vem da aprovação da Fase 2.6b, e a comparação é
++ * estritamente menor.
++ */
++
++import { describe, expect, it } from "vitest"
++import {
++  FORMULA_LOW_TICKET,
++  LOW_TICKET_FLOOR_CENTS,
++  RULE_ID,
++  RULE_VERSION,
++  detectLowTicketContracts,
++  isLowTicket,
++} from "../src/low-ticket"
++import type { LowTicketInput, TicketRecord } from "../src/low-ticket"
++import { APPROVED_THRESHOLDS } from "../src/config"
++import { isOk } from "../src/engine"
++import { GatewayError } from "../../gateway/src/errors"
++import type { CanonicalUnitResult } from "../src/canonical-units"
++import type { Evidence, Snapshot } from "../../gateway/src/types"
++import { rawEvidence, rawSnapshot } from "../../gateway/tests/helpers"
++
++const DETECTED_AT = "2026-08-16T09:05:00.000Z"
++
++const snapshots = [
++  rawSnapshot({ snapshot_id: "snap_vendas", source_system: "google_sheets", dataset_id: "ds_vendas" }),
++] as unknown as Snapshot[]
++
++const evidence = [
++  rawEvidence({
++    evidence_id: "ev_linha",
++    snapshot_id: "snap_vendas",
++    kind: "row",
++    locator: { dataset_id: "ds_vendas", sheet: "Vendas", row_key: "a".repeat(64) },
++  }),
++] as unknown as Evidence[]
++
++const MATCHED: CanonicalUnitResult = {
++  status: "matched",
++  unit_id: "mogi_das_cruzes",
++  display_name: "Mogi das Cruzes",
++}
++const UNKNOWN: CanonicalUnitResult = { status: "unknown", raw_fingerprint: "u".repeat(16) }
++const AMBIGUO: CanonicalUnitResult = {
++  status: "ambiguous",
++  candidates: ["carpina", "limoeiro"],
++  raw_fingerprint: "g".repeat(16),
++  reason: "GROUP_LABEL",
++}
++
++let seq = 0
++const subjectRef = (): string => {
++  seq += 1
++  return `subj_${seq.toString(16).padStart(16, "0")}`
++}
++
++function contrato(
++  ticket_cents: number | null,
++  unit: CanonicalUnitResult = MATCHED,
++): TicketRecord {
++  return {
++    subject_ref: subjectRef(),
++    unit,
++    ticket_cents,
++    evidence_refs: ["ev_linha"],
++    snapshot_id: "snap_vendas",
++  }
++}
++
++const entrada = (
++  contracts: readonly TicketRecord[],
++  extra: Partial<LowTicketInput> = {},
++): LowTicketInput => ({
++  detected_at: DETECTED_AT,
++  period_start: "2026-08-01",
++  period_end: "2026-08-31",
++  contracts,
++  snapshots,
++  evidence,
++  ...extra,
++})
++
++const detectar = (
++  contracts: readonly TicketRecord[],
++  extra: Partial<LowTicketInput> = {},
++): ReturnType<typeof detectLowTicketContracts> =>
++  detectLowTicketContracts(entrada(contracts, extra))
++
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("o piso é R$ 1.499,99 e a comparação é ESTRITAMENTE menor", () => {
++  it("o piso aprovado é 149_999 centavos", () => {
++    expect(LOW_TICKET_FLOOR_CENTS).toBe(149_999)
++    expect(APPROVED_THRESHOLDS.low_ticket_floor_cents).toBe(149_999)
++  })
++
++  // ── A / B / C ──
++  it("A — 149_998 alerta", () => {
++    expect(isLowTicket(149_998)).toBe(true)
++    expect(detectar([contrato(149_998)]).summary.below_floor).toBe(1)
++  })
++
++  it("B — 149_999 NÃO alerta", () => {
++    expect(isLowTicket(149_999)).toBe(false)
++    expect(detectar([contrato(149_999)]).summary.below_floor).toBe(0)
++  })
++
++  it("C — 150_000 NÃO alerta", () => {
++    expect(isLowTicket(150_000)).toBe(false)
++    expect(detectar([contrato(150_000)]).summary.below_floor).toBe(0)
++  })
++
++  it("Q — exatamente R$ 1.499,99 não alerta", () => {
++    const r = detectar([contrato(149_999)])
++    expect(r.events).toHaveLength(0)
++    expect(r.assessed[0]?.verdict).toBe("AT_OR_ABOVE_FLOOR")
++  })
++
++  it("boundary completo em volta do piso", () => {
++    for (const [valor, esperado] of [
++      [149_997, "BELOW_FLOOR"],
++      [149_998, "BELOW_FLOOR"],
++      [149_999, "AT_OR_ABOVE_FLOOR"],
++      [150_000, "AT_OR_ABOVE_FLOOR"],
++      [150_001, "AT_OR_ABOVE_FLOOR"],
++    ] as const) {
++      expect(detectar([contrato(valor)]).assessed[0]?.verdict, `${valor}`).toBe(esperado)
++    }
++  })
++
++  it("cálculo e fórmula publicada leem a MESMA constante", () => {
++    const match = /< (\d+)/.exec(FORMULA_LOW_TICKET)
++    const publicado = Number(match?.[1])
++    expect(publicado).toBe(LOW_TICKET_FLOOR_CENTS)
++    expect(isLowTicket(publicado - 1)).toBe(true)
++    expect(isLowTicket(publicado)).toBe(false)
++  })
++})
++
++// ── P ──
++describe("P — o piso de R$ 50 mil NÃO interfere no alerta de ticket baixo", () => {
++  it("são políticas independentes, com valores diferentes", () => {
++    expect(APPROVED_THRESHOLDS.material_amount_cents).toBe(5_000_000)
++    expect(APPROVED_THRESHOLDS.low_ticket_floor_cents).toBe(149_999)
++    expect(APPROVED_THRESHOLDS.material_amount_cents).not.toBe(
++      APPROVED_THRESHOLDS.low_ticket_floor_cents,
++    )
++  })
++
++  it("um contrato de R$ 40.000 NÃO é ticket baixo", () => {
++    // Está abaixo dos R$ 50 mil de materialidade agregada e muito acima do piso
++    // comercial. Se as duas políticas fossem trocadas, isto viraria alerta.
++    const r = detectar([contrato(4_000_000)])
++    expect(r.summary.below_floor).toBe(0)
++    expect(r.events).toHaveLength(0)
++  })
++
++  it("um contrato de R$ 1.000 É ticket baixo, mesmo longe dos R$ 50 mil", () => {
++    const r = detectar([contrato(100_000)])
++    expect(r.summary.below_floor).toBe(1)
++    expect(r.assessed[0]?.matched).toBe(true)
++  })
++
++  it("nenhum limiar de materialidade agregada aparece na saída", () => {
++    const texto = JSON.stringify(detectar([contrato(100_000)]))
++    expect(texto).not.toContain("5000000")
++  })
++})
++
++// ── D / E / F ──
++describe("D/E/F — dinheiro: ausente, inseguro e não positivo", () => {
++  it("D — ticket ausente é LACUNA, nunca zero", () => {
++    const r = detectar([contrato(null)])
++    expect(r.assessed[0]?.verdict).toBe("TICKET_UNAVAILABLE")
++    const t = r.assessed[0]?.ticket_cents
++    expect(t !== undefined && isOk(t)).toBe(false)
++    if (t !== undefined && !isOk(t)) expect(t.gap).toBe("DATA_NOT_AVAILABLE")
++    // E não vira alerta: zero passaria pelo predicado, ausência não.
++    expect(r.summary.below_floor).toBe(0)
++    expect(r.events).toHaveLength(0)
++  })
++
++  it("D — a ausência é contada e degrada a qualidade", () => {
++    const r = detectar([contrato(null), contrato(200_000)])
++    expect(r.summary.ticket_unavailable).toBe(1)
++    expect(r.summary.quality_status).not.toBe("ok")
++  })
++
++  it("E — inteiro inseguro falha fechado, sem número aproximado", () => {
++    for (const ruim of [Number.MAX_SAFE_INTEGER + 2, 1499.99, NaN, Infinity]) {
++      const r = detectar([contrato(ruim)])
++      expect(r.assessed[0]?.verdict, `${ruim}`).toBe("INVALID_TICKET")
++      expect(r.events, `${ruim}`).toHaveLength(0)
++    }
++  })
++
++  it("E — float em centavos é recusado: dinheiro é inteiro", () => {
++    const r = detectar([contrato(149_998.5)])
++    expect(r.assessed[0]?.verdict).toBe("INVALID_TICKET")
++  })
++
++  describe("F — ticket não positivo NÃO é 'ticket baixo'", () => {
++    /**
++     * Lastro governado: `ceo.sales.ticket_cents` é coluna gerada de
++     * `transfer_cents * installments_grau`, com `transfer_cents >= 0` e
++     * `installments_grau > 0`. Zero é representável; negativo é impossível.
++     * Nenhuma regra declara venda de valor zero como venda.
++     */
++    it("zero é INVALID_TICKET, não alerta comercial", () => {
++      const r = detectar([contrato(0)])
++      expect(r.assessed[0]?.verdict).toBe("INVALID_TICKET")
++      expect(r.summary.below_floor).toBe(0)
++      expect(r.events).toHaveLength(0)
++    })
++
++    it("negativo também", () => {
++      const r = detectar([contrato(-500_000)])
++      expect(r.assessed[0]?.verdict).toBe("INVALID_TICKET")
++      expect(r.events).toHaveLength(0)
++    })
++
++    it("a lacuna declara regra de negócio PENDENTE, não dado ausente", () => {
++      const t = detectar([contrato(0)]).assessed[0]?.ticket_cents
++      expect(t !== undefined && isOk(t)).toBe(false)
++      if (t !== undefined && !isOk(t)) expect(t.gap).toBe("BUSINESS_RULE_PENDING")
++    })
++
++    it("e o motivo é explícito e auditável", () => {
++      const d = detectar([contrato(0)]).assessed[0]?.detail
++      expect(d).toContain("não é 'ticket baixo'")
++      expect(d).toContain("pendente")
++    })
++
++    it("contado separadamente de ausente", () => {
++      const r = detectar([contrato(0), contrato(null), contrato(100_000)])
++      expect(r.summary.invalid_ticket).toBe(1)
++      expect(r.summary.ticket_unavailable).toBe(1)
++      expect(r.summary.below_floor).toBe(1)
++    })
++  })
++})
++
++// ── G / H / I ──
++describe("G/H/I — lastro falha fechado", () => {
++  it("G — evidência pendurada", () => {
++    const orfao: TicketRecord = { ...contrato(100_000), evidence_refs: ["ev_nada"] }
++    expect(() => detectar([orfao])).toThrowError(/evidência inexistente/)
++  })
++
++  it("G — contrato sem nenhuma evidência", () => {
++    const semLastro: TicketRecord = { ...contrato(100_000), evidence_refs: [] }
++    expect(() => detectar([semLastro])).toThrowError(/sem evidência/)
++  })
++
++  it("H — evidência de outro snapshot", () => {
++    const outro = rawSnapshot({
++      snapshot_id: "snap_outro",
++      source_system: "bitrix24",
++      dataset_id: "ds_outro",
++    }) as unknown as Snapshot
++    const ev = rawEvidence({
++      evidence_id: "ev_outro",
++      snapshot_id: "snap_outro",
++      kind: "row",
++      locator: { dataset_id: "ds_outro", sheet: "V", row_key: "b".repeat(64) },
++    }) as unknown as Evidence
++    const c: TicketRecord = { ...contrato(100_000), evidence_refs: ["ev_outro"] }
++    expect(() =>
++      detectar([c], { snapshots: [...snapshots, outro], evidence: [...evidence, ev] }),
++    ).toThrowError(/pertence ao snapshot/)
++  })
++
++  it("I — evidência localiza outro dataset", () => {
++    const ev = rawEvidence({
++      evidence_id: "ev_ds_errado",
++      snapshot_id: "snap_vendas",
++      kind: "row",
++      locator: { dataset_id: "ds_nao_usado", sheet: "V", row_key: "c".repeat(64) },
++    }) as unknown as Evidence
++    const c: TicketRecord = { ...contrato(100_000), evidence_refs: ["ev_ds_errado"] }
++    expect(() => detectar([c], { evidence: [...evidence, ev] })).toThrowError(/localiza o dataset/)
++  })
++
++  it("snapshot inexistente", () => {
++    const c: TicketRecord = { ...contrato(100_000), snapshot_id: "snap_fantasma" }
++    expect(() => detectar([c])).toThrowError(GatewayError)
++  })
++
++  it("subject_ref que não é pseudônimo", () => {
++    const c: TicketRecord = { ...contrato(100_000), subject_ref: "Maria Silva" }
++    expect(() => detectar([c])).toThrowError(/pseudônimo/)
++  })
++})
++
++// ── J / K ──
++describe("J/K — D13 e privacidade", () => {
++  it("J — unidade unknown não inventa identidade", () => {
++    const r = detectar([contrato(100_000, UNKNOWN)])
++    expect(r.assessed[0]?.unit).toBeUndefined()
++    expect(r.summary.quality_status).not.toBe("ok")
++  })
++
++  it("K — rótulo de agrupamento não escolhe um membro", () => {
++    const r = detectar([contrato(100_000, AMBIGUO)])
++    expect(r.assessed[0]?.unit).toBeUndefined()
++    const texto = JSON.stringify(r)
++    expect(texto).not.toContain("carpina")
++    expect(texto).not.toContain("limoeiro")
++  })
++
++  it("K — e a qualidade vai a conflicted", () => {
++    expect(detectar([contrato(100_000, AMBIGUO)]).summary.quality_status).toBe("conflicted")
++  })
++
++  it("unidade resolvida traz o display_name do CATÁLOGO", () => {
++    expect(detectar([contrato(100_000)]).assessed[0]?.unit).toBe("Mogi das Cruzes")
++  })
++
++  it("o output só carrega pseudônimo", () => {
++    const r = detectar([contrato(100_000)])
++    const texto = JSON.stringify(r)
++    expect(texto).not.toContain("Maria")
++    expect(texto).not.toMatch(/\d{3}\.\d{3}\.\d{3}-\d{2}/)
++    expect(r.assessed[0]?.subject_ref).toMatch(/^subj_[a-f0-9]{16}$/)
++  })
++})
++
++describe("§9 — o FATO é detectado; o Event fica bloqueado", () => {
++  const r = detectar([contrato(100_000)])
++
++  // ── A ──
++  it("A — matched=true NÃO implica Event enquanto a severidade estiver unresolved", () => {
++    expect(r.assessed[0]?.matched).toBe(true)
++    expect(r.assessed[0]?.emitted).toBe(false)
++    expect(r.events).toHaveLength(0)
++  })
++
++  it("A — o motivo é tipado", () => {
++    expect(r.assessed[0]?.not_emitted_reason).toBe("SEVERITY_POLICY_UNRESOLVED")
++  })
++
++  it("A — acima do piso o motivo é outro, e distinguível", () => {
++    const acima = detectar([contrato(500_000)])
++    expect(acima.assessed[0]?.matched).toBe(false)
++    expect(acima.assessed[0]?.not_emitted_reason).toBe("NOT_BELOW_FLOOR")
++  })
++
++  // ── B ──
++  it("B — nenhum `info` aparece na saída", () => {
++    expect(JSON.stringify(r)).not.toContain('"info"')
++  })
++
++  // ── C ──
++  it("C — nenhum fallback para low/medium/high/critical", () => {
++    const texto = JSON.stringify(r)
++    for (const grau of ["low", "medium", "high", "critical"]) {
++      expect(texto, grau).not.toContain(`"${grau}"`)
++    }
++  })
++
++  it("C — nem o campo `severity` existe no resultado", () => {
++    expect(JSON.stringify(r)).not.toContain("severity")
++  })
++
++  it("o fato continua contado e auditável", () => {
++    const misto = detectar([contrato(100_000), contrato(500_000), contrato(90_000)])
++    expect(misto.summary.below_floor).toBe(2)
++    expect(misto.summary.facts_not_emitted).toBe(2)
++    expect(misto.assessed).toHaveLength(3)
++  })
++
++  // ── E ──
++  it("E — evidência e piso permanecem intactos no fato", () => {
++    expect(r.assessed[0]?.evidence_refs).toEqual(["ev_linha"])
++    expect(r.assessed[0]?.threshold_cents).toBe(149_999)
++    expect(r.summary.floor_cents).toBe(149_999)
++  })
++
++  it("E — a identidade lógica do fato é calculada mesmo sem Event", () => {
++    expect(r.assessed[0]?.event_id).toMatch(/^evt_[a-f0-9]{16}$/)
++  })
++
++  it("o ticket observado segue exato", () => {
++    const t = r.assessed[0]?.ticket_cents
++    expect(t !== undefined && isOk(t) && t.value).toBe(100_000)
++  })
++
++  it("nenhum vocabulário de juízo aparece", () => {
++    const texto = JSON.stringify(r).toLowerCase()
++    for (const proibido of ["fraud", "fraude", "prejuizo", "risco", "inadimpl", "suspeit", "recomend"]) {
++      expect(texto, proibido).not.toContain(proibido)
++    }
++  })
++
++  it("nem inferência nem previsão", () => {
++    const texto = JSON.stringify(r)
++    expect(texto).not.toContain('"inferred"')
++    expect(texto).not.toContain('"forecast"')
++  })
++
++  it("§14 — o fato individual basta: sem população, sem participação", () => {
++    const um = detectar([contrato(1_000)])
++    expect(um.summary.total_records).toBe(1)
++    expect(um.assessed[0]?.matched).toBe(true)
++  })
++
++  it("a regra se identifica com id e versão próprios", () => {
++    expect(RULE_ID).toBe("rule.low_ticket_contract")
++    expect(RULE_VERSION).toMatch(/^\d+\.\d+\.\d+$/)
++  })
++
++  it("`low_ticket_contract` segue no enum do contrato, para quando a política existir", async () => {
++    const schema = (await import("../../contracts/event.schema.json")) as unknown as {
++      default: { properties: { event_type: { enum: string[] } } }
++    }
++    expect(schema.default.properties.event_type.enum).toContain("low_ticket_contract")
++  })
++})
++
++// ── L / M ──
++describe("L/M — determinismo e identidade", () => {
++  it("L — mesma entrada, config e detected_at: deep-equal", () => {
++    const c = [contrato(100_000), contrato(200_000)]
++    expect(structuredClone(detectar(c))).toEqual(structuredClone(detectar(c)))
++  })
++
++  it("M — ordem da coleção não altera a identidade de cada fato", () => {
++    const c = [contrato(100_000), contrato(50_000), contrato(300_000)]
++    const ids = (r: ReturnType<typeof detectar>): string[] =>
++      r.assessed.map((a) => a.event_id ?? "").sort()
++    expect(ids(detectar([...c].reverse()))).toEqual(ids(detectar(c)))
++  })
++
++  it("reingestão com outro snapshot_id mantém a identidade do alerta", () => {
++    const c = contrato(100_000)
++    const a = detectar([c]).assessed[0]?.event_id
++
++    const outro = rawSnapshot({
++      snapshot_id: "snap_reingerido",
++      source_system: "google_sheets",
++      dataset_id: "ds_vendas",
++    }) as unknown as Snapshot
++    const ev = rawEvidence({
++      evidence_id: "ev_linha",
++      snapshot_id: "snap_reingerido",
++      kind: "row",
++      locator: { dataset_id: "ds_vendas", sheet: "Vendas", row_key: "a".repeat(64) },
++    }) as unknown as Evidence
++    const b = detectar([{ ...c, snapshot_id: "snap_reingerido" }], {
++      snapshots: [outro],
++      evidence: [ev],
++    }).assessed[0]?.event_id
++
++    expect(b).toBe(a)
++  })
++
++  it("dataset lógico diferente muda a identidade", () => {
++    const c = contrato(100_000)
++    const a = detectar([c]).assessed[0]?.event_id
++
++    const outro = rawSnapshot({
++      snapshot_id: "snap_outro_ds",
++      source_system: "google_sheets",
++      dataset_id: "ds_outro",
++    }) as unknown as Snapshot
++    const ev = rawEvidence({
++      evidence_id: "ev_linha",
++      snapshot_id: "snap_outro_ds",
++      kind: "row",
++      locator: { dataset_id: "ds_outro", sheet: "Vendas", row_key: "a".repeat(64) },
++    }) as unknown as Evidence
++    const b = detectar([{ ...c, snapshot_id: "snap_outro_ds" }], {
++      snapshots: [outro],
++      evidence: [ev],
++    }).assessed[0]?.event_id
++
++    expect(b).not.toBe(a)
++  })
++
++  it("sujeitos diferentes produzem fatos com identidades diferentes", () => {
++    const r = detectar([contrato(100_000), contrato(90_000)])
++    expect(new Set(r.assessed.map((a) => a.event_id)).size).toBe(2)
++  })
++
++  it("o id casa com o padrão do contrato", () => {
++    expect(detectar([contrato(100_000)]).assessed[0]?.event_id).toMatch(/^evt_[a-f0-9]{16}$/)
++  })
++
++  it("contrato acima do piso não recebe event_id", () => {
++    expect(detectar([contrato(200_000)]).assessed[0]?.event_id).toBeNull()
++  })
++})
++
++describe("qualidade: a fonte atravessa até o alerta", () => {
++  const comSnapshot = (campos: Record<string, unknown>): Snapshot[] =>
++    [{ ...(snapshots[0] as unknown as Record<string, unknown>), ...campos }] as unknown as Snapshot[]
++
++  it("snapshot conflicted: o resultado nunca é ok", () => {
++    const r = detectar([contrato(100_000)], { snapshots: comSnapshot({ quality_status: "conflicted" }) })
++    expect(r.summary.quality_status).toBe("conflicted")
++  })
++
++  it("snapshot degraded também propaga", () => {
++    const r = detectar([contrato(100_000)], { snapshots: comSnapshot({ quality_status: "degraded" }) })
++    expect(r.summary.quality_status).not.toBe("ok")
++  })
++
++  it("rows_skipped degradam", () => {
++    const r = detectar([contrato(100_000)], { snapshots: comSnapshot({ rows_skipped: 2 }) })
++    expect(r.summary.quality_status).not.toBe("ok")
++  })
++
++  it("com fonte limpa e ticket presente, ok é alcançável", () => {
++    expect(detectar([contrato(100_000)]).summary.quality_status).toBe("ok")
++  })
++})
++
++// ── N / O ──
++describe("N/O — imutabilidade e ownership", () => {
++  const inputMutavel = (): LowTicketInput => {
++    const contracts: TicketRecord[] = [100_000, 200_000].map((t) => ({
++      subject_ref: subjectRef(),
++      unit: MATCHED,
++      ticket_cents: t,
++      evidence_refs: ["ev_linha"],
++      snapshot_id: "snap_vendas",
++    }))
++    return {
++      detected_at: DETECTED_AT,
++      period_start: "2026-08-01",
++      period_end: "2026-08-31",
++      contracts,
++      snapshots,
++      evidence,
++    }
++  }
++
++  it("O — evidence_refs do output não é a referência do input", () => {
++    const input = inputMutavel()
++    const r = detectLowTicketContracts(input)
++    for (const a of r.assessed) {
++      for (const c of input.contracts) {
++        expect(a.evidence_refs).not.toBe(c.evidence_refs)
++      }
++    }
++  })
++
++  it("O — nenhum objeto do input é alcançável a partir do output", () => {
++    const input = inputMutavel()
++    const r = detectLowTicketContracts(input)
++    const doInput = new Set<unknown>([
++      input.contracts,
++      ...input.contracts,
++      ...input.contracts.map((c) => c.evidence_refs),
++      ...input.contracts.map((c) => c.unit),
++      input.snapshots,
++      input.evidence,
++    ])
++    const visto = new WeakSet<object>()
++    const percorrer = (v: unknown): void => {
++      if (v === null || typeof v !== "object") return
++      if (visto.has(v)) return
++      visto.add(v)
++      expect(doInput.has(v)).toBe(false)
++      for (const filho of Object.values(v)) percorrer(filho)
++    }
++    percorrer(r)
++  })
++
++  describe("O — mutar o input depois não altera o resultado", () => {
++    const input = inputMutavel()
++    const r1 = detectLowTicketContracts(input)
++    const antes = structuredClone(r1) as unknown
++
++    it("o input É mutável e recebe a forja", () => {
++      ;(input.contracts[0]?.evidence_refs as string[]).push("forged")
++      expect(input.contracts[0]?.evidence_refs).toContain("forged")
++    })
++
++    it("e o resultado anterior segue idêntico", () => {
++      expect(structuredClone(r1)).toEqual(antes)
++      expect(JSON.stringify(r1)).not.toContain("forged")
++    })
++  })
++
++  it("O — o input não é congelado como efeito colateral", () => {
++    const input = inputMutavel()
++    detectLowTicketContracts(input)
++    expect(Object.isFrozen(input)).toBe(false)
++    expect(Object.isFrozen(input.contracts)).toBe(false)
++    expect(Object.isFrozen(input.contracts[0]?.evidence_refs)).toBe(false)
++  })
++
++  const r = detectar([contrato(100_000), contrato(200_000)])
++
++  it("N — Object.isFrozen em cada nível", () => {
++    const alvos: readonly [string, unknown][] = [
++      ["result", r],
++      ["events", r.events],
++      ["assessed", r.assessed],
++      ["assessed[0]", r.assessed[0]],
++      ["assessed[0].ticket_cents", r.assessed[0]?.ticket_cents],
++      ["assessed[0].evidence_refs", r.assessed[0]?.evidence_refs],
++      ["summary", r.summary],
++    ]
++    for (const [nome, alvo] of alvos) {
++      expect(alvo, `${nome} deveria existir`).toBeDefined()
++      expect(Object.isFrozen(alvo), `${nome} deveria estar congelado`).toBe(true)
++    }
++  })
++
++  it("N — cada mutação aninhada lança e o estado não muda", () => {
++    const antes = structuredClone(r) as unknown
++    const tentativas: readonly [string, () => void][] = [
++      ["summary.below_floor", () => ((r.summary as { below_floor: number }).below_floor = 99)],
++      ["assessed[0].verdict", () => ((r.assessed[0] as { verdict: string }).verdict = "x")],
++      ["ticket value", () => ((r.assessed[0]?.ticket_cents as { value: number }).value = 0)],
++      ["events.push", () => (r.events as unknown[]).push({ forged: true })],
++      ["assessed.push", () => (r.assessed as unknown[]).push({ forged: true })],
++      ["assessed evidence_refs.push", () => (r.assessed[0]?.evidence_refs as string[]).push("forged")],
++      ["matched", () => ((r.assessed[0] as { matched: boolean }).matched = false)],
++      ["root", () => ((r as unknown as { events: null }).events = null)],
++    ]
++    for (const [nome, mutar] of tentativas) {
++      expect(mutar, nome).toThrowError(TypeError)
++    }
++    expect(structuredClone(r)).toEqual(antes)
++  })
++
++  it("N — resultado sem fato também é congelado por inteiro", () => {
++    const r0 = detectar([contrato(500_000)])
++    expect(r0.summary.below_floor).toBe(0)
++    expect(Object.isFrozen(r0)).toBe(true)
++    expect(Object.isFrozen(r0.assessed)).toBe(true)
++    expect(() => ((r0.summary as { below_floor: number }).below_floor = 1)).toThrowError(TypeError)
++  })
++})
++
++describe("resultado auditável: nada descartado", () => {
++  it("todos os contratos aparecem, alertados ou não", () => {
++    const r = detectar([contrato(100_000), contrato(200_000), contrato(null), contrato(0)])
++    expect(r.assessed).toHaveLength(4)
++    expect(r.summary.total_records).toBe(4)
++  })
++
++  it("os quatro vereditos são distinguíveis", () => {
++    const r = detectar([contrato(100_000), contrato(200_000), contrato(null), contrato(0)])
++    expect(new Set(r.assessed.map((a) => a.verdict))).toEqual(
++      new Set(["BELOW_FLOOR", "AT_OR_ABOVE_FLOOR", "TICKET_UNAVAILABLE", "INVALID_TICKET"]),
++    )
++  })
++
++  it("o piso usado fica registrado no resumo", () => {
++    expect(detectar([contrato(100_000)]).summary.floor_cents).toBe(149_999)
++  })
++
++  it("população vazia não é erro nem alerta", () => {
++    const r = detectar([])
++    expect(r.summary.total_records).toBe(0)
++    expect(r.events).toHaveLength(0)
++    expect(r.summary.quality_status).toBe("ok")
++  })
++})
++
++// ═════════════════════════════════════════════════════════════════════════════
++// §11/§12 — a identidade do alerta pertence ao CONTRATO, não ao lote
++//
++// O gate encontrou isto: `identidadeDoAlerta` hasheava o conjunto de TODOS os
++// escopos governados do lote. Um contrato low-ticket idêntico recebia `event_id`
++// diferente só porque outro registro, sem relação alguma, veio de outro dataset
++// no mesmo lote — e a deduplicação por identidade quebrava com isso.
++//
++// Lote misto é legítimo aqui porque cada fato low-ticket é individual. Não
++// confundir com A/C/D, onde agregação multi-dataset continua fail-closed.
++
++const snapshotsMistos = [
++  rawSnapshot({ snapshot_id: "snap_vendas", source_system: "google_sheets", dataset_id: "ds_vendas" }),
++  rawSnapshot({ snapshot_id: "snap_crm", source_system: "bitrix", dataset_id: "ds_crm" }),
++] as unknown as Snapshot[]
++
++const evidenciaMista = [
++  rawEvidence({
++    evidence_id: "ev_linha",
++    snapshot_id: "snap_vendas",
++    kind: "row",
++    locator: { dataset_id: "ds_vendas", sheet: "Vendas", row_key: "a".repeat(64) },
++  }),
++  rawEvidence({
++    evidence_id: "ev_crm",
++    snapshot_id: "snap_crm",
++    kind: "row",
++    locator: { dataset_id: "ds_crm", sheet: "Negocios", row_key: "b".repeat(64) },
++  }),
++] as unknown as Evidence[]
++
++/** Mesmo contrato em toda invocação — `subjectRef()` incrementa, então é fixo aqui. */
++const ALVO: TicketRecord = {
++  subject_ref: "subj_00000000000000ff",
++  unit: MATCHED,
++  ticket_cents: 100_000,
++  evidence_refs: ["ev_linha"],
++  snapshot_id: "snap_vendas",
++}
++
++const NAO_RELACIONADO_CRM: TicketRecord = {
++  subject_ref: "subj_00000000000000ee",
++  unit: MATCHED,
++  ticket_cents: 900_000, // acima do piso: nem sequer é low-ticket
++  evidence_refs: ["ev_crm"],
++  snapshot_id: "snap_crm",
++}
++
++const NAO_RELACIONADO_VENDAS: TicketRecord = {
++  subject_ref: "subj_00000000000000dd",
++  unit: MATCHED,
++  ticket_cents: 80_000,
++  evidence_refs: ["ev_linha"],
++  snapshot_id: "snap_vendas",
++}
++
++const misto = (
++  contracts: readonly TicketRecord[],
++  extra: Partial<LowTicketInput> = {},
++): ReturnType<typeof detectLowTicketContracts> =>
++  detectLowTicketContracts(
++    entrada(contracts, { snapshots: snapshotsMistos, evidence: evidenciaMista, ...extra }),
++  )
++
++const idDoAlvo = (r: ReturnType<typeof detectLowTicketContracts>): string => {
++  const alvo = r.assessed.find((a) => a.subject_ref === ALVO.subject_ref)
++  if (alvo === undefined) throw new Error("alvo ausente do resultado")
++  // `event_id` é nulo quando o ticket não está abaixo do piso. ALVO está.
++  if (alvo.event_id === null) throw new Error("alvo deveria ter identidade de alerta")
++  return alvo.event_id
++}
++
++describe("§11 — registro não relacionado no lote não muda o event_id", () => {
++  const sozinho = idDoAlvo(misto([ALVO]))
++
++  it("A — lote 2 acrescenta registro de OUTRO dataset: identidade preservada", () => {
++    expect(idDoAlvo(misto([ALVO, NAO_RELACIONADO_CRM]))).toBe(sozinho)
++  })
++
++  it("B — registro não relacionado no MESMO dataset: identidade preservada", () => {
++    expect(idDoAlvo(misto([ALVO, NAO_RELACIONADO_VENDAS]))).toBe(sozinho)
++  })
++
++  it("C — ordem dos registros no lote não importa", () => {
++    expect(idDoAlvo(misto([NAO_RELACIONADO_CRM, ALVO, NAO_RELACIONADO_VENDAS]))).toBe(sozinho)
++  })
++
++  it("reingestão: outro snapshot_id do MESMO dataset lógico preserva a identidade", () => {
++    const reingerido = [
++      ...snapshotsMistos,
++      rawSnapshot({
++        snapshot_id: "snap_vendas_v2",
++        source_system: "google_sheets",
++        dataset_id: "ds_vendas",
++      }),
++    ] as unknown as Snapshot[]
++    const comEvidencia = [
++      ...evidenciaMista,
++      rawEvidence({
++        evidence_id: "ev_linha_v2",
++        snapshot_id: "snap_vendas_v2",
++        kind: "row",
++        locator: { dataset_id: "ds_vendas", sheet: "Vendas", row_key: "c".repeat(64) },
++      }),
++    ] as unknown as Evidence[]
++
++    const r = misto(
++      [{ ...ALVO, snapshot_id: "snap_vendas_v2", evidence_refs: ["ev_linha_v2"] }],
++      { snapshots: reingerido, evidence: comEvidencia },
++    )
++    expect(idDoAlvo(r)).toBe(sozinho)
++  })
++
++  it("cada contrato do lote tem identidade própria", () => {
++    const r = misto([ALVO, NAO_RELACIONADO_VENDAS])
++    const ids = r.assessed.map((a) => a.event_id)
++    expect(new Set(ids).size).toBe(ids.length)
++  })
++})
++
++describe("§12 — o que É do contrato muda o event_id", () => {
++  const sozinho = idDoAlvo(misto([ALVO]))
++
++  it("D — subject_ref diferente", () => {
++    const outro = misto([{ ...ALVO, subject_ref: "subj_00000000000000aa" }])
++    expect(outro.assessed[0]?.event_id).not.toBe(sozinho)
++  })
++
++  it("E — dataset lógico DO PRÓPRIO contrato diferente", () => {
++    const r = misto([{ ...ALVO, snapshot_id: "snap_crm", evidence_refs: ["ev_crm"] }])
++    expect(idDoAlvo(r)).not.toBe(sozinho)
++  })
++
++  it("E — mesmo dataset_id em outro source_system é outra identidade lógica", () => {
++    const outraFonte = [
++      rawSnapshot({ snapshot_id: "snap_x", source_system: "omie", dataset_id: "ds_vendas" }),
++    ] as unknown as Snapshot[]
++    const ev = [
++      rawEvidence({
++        evidence_id: "ev_x",
++        snapshot_id: "snap_x",
++        kind: "row",
++        locator: { dataset_id: "ds_vendas", sheet: "Vendas", row_key: "d".repeat(64) },
++      }),
++    ] as unknown as Evidence[]
++    const r = misto([{ ...ALVO, snapshot_id: "snap_x", evidence_refs: ["ev_x"] }], {
++      snapshots: outraFonte,
++      evidence: ev,
++    })
++    expect(idDoAlvo(r)).not.toBe(sozinho)
++  })
++
++  it("F — período diferente", () => {
++    const r = misto([ALVO], { period_start: "2026-09-01", period_end: "2026-09-30" })
++    expect(idDoAlvo(r)).not.toBe(sozinho)
++  })
++
++  it("G — a identidade é estrutural, não gramática de delimitador", () => {
++    expect(sozinho).toMatch(/^evt_[a-f0-9]{16}$/)
++    expect(sozinho).not.toContain(ALVO.subject_ref)
++    expect(sozinho).not.toContain("ds_vendas")
++    expect(sozinho).not.toContain(String(APPROVED_THRESHOLDS.low_ticket_floor_cents))
++  })
++
++  it("G — o piso declarado no resultado é o aprovado, e entra na identidade", () => {
++    const r = misto([ALVO])
++    expect(r.assessed[0]?.threshold_cents).toBe(APPROVED_THRESHOLDS.low_ticket_floor_cents)
++  })
++
++  it("detected_at não entra na identidade — o fato é o mesmo", () => {
++    const r = misto([ALVO], { detected_at: "2026-08-16T23:59:59.000Z" })
++    expect(idDoAlvo(r)).toBe(sozinho)
++  })
++
++  it("contrato sem escopo governado falha fechado, sem identidade inventada", () => {
++    expect(() => misto([{ ...ALVO, snapshot_id: "snap_inexistente" }])).toThrow(GatewayError)
++  })
++})
+diff --git a/intelligence/docs/FASE_2_6B_GOVERNED_CATALOG_AND_POLICY.md b/intelligence/docs/FASE_2_6B_GOVERNED_CATALOG_AND_POLICY.md
+new file mode 100644
+index 0000000..132c1f6
+--- /dev/null
++++ b/intelligence/docs/FASE_2_6B_GOVERNED_CATALOG_AND_POLICY.md
+@@ -0,0 +1,714 @@
++# Fase 2.6b — Catálogo governado, política aprovada e regra de ticket baixo
++
++**Data:** 2026-08-17
++**Estado:** D13 parcialmente desbloqueado. Hermes não instalada, Fase 3 não iniciada.
++
++---
++
++> **ATUALIZADO PELA FASE 2.6c.** `UNIDADES.xlsx` chegou e o catálogo COMPLETO foi
++> importado: 49 unidades (44 ativas, 5 inativas), 5 aliases, 2 agrupamentos. O seed
++> parcial de 18 unidades foi **removido**. A severidade `info` do low-ticket foi
++> **removida** — não era política aprovada. Ver §13 no fim deste documento.
++
++## 1. `UNIDADES.xlsx` não estava disponível *(resolvido na 2.6c)*
++
++Procurei em `~/Desktop`, `~/Downloads`, `~/Documents`, `~/Desktop/claude` e no
++repositório. O único resultado foi `supabase/migrations/20260611_unidades.sql`, que
++já era conhecido.
++
++Conforme §1 do briefing: **não inventei as linhas ausentes.** O que foi entregue:
++
++| Entregue | Estado |
++|---|---|
++| Estrutura do catálogo governado (`UnitCatalogEntry`, `UnitGroupLabel`) | **READY** |
++| Importador validado (`importUnitCatalog`) | **READY** |
++| Projeção para o índice de canonicalização (`toUnitCatalog`) | **READY** |
++| Resolução com agrupamentos (`canonicalizeWithGroups`) | **READY** |
++| Seed das decisões aprovadas por escrito | **READY** — 18 unidades, 2 agrupamentos |
++| Seed COMPLETO (~40 unidades com status) | **BLOCKED** — depende do arquivo |
++
++O importador aceita linhas na forma `UnitCatalogRow`. Ele **não** abre `.xlsx`: quem
++extrai entrega linhas, e a validação acontece no importador. Isso evita escolher
++biblioteca de planilha e adivinhar nome de coluna antes de ver o arquivo.
++
++---
++
++## 2. `UnitId` é dado, não código — decisão registrada
++
++`UnitId` permanece `string` validada por `/^[a-z][a-z0-9_]{1,63}$/`. O catálogo entra
++como dado.
++
++### Documentos superseded
++
++| Documento | O que dizia | Estado |
++|---|---|---|
++| `FASE_2_1_SCHEMA_V2_PROPOSAL.md` §6 | `unit_id` como união literal compilada | **SUPERSEDED** pela Fase 2.6b |
++| `D13_CATALOG_VALIDATION.md` §8 | *"o `UnitId` passa a ser união literal em vez de `string` validada"* | **SUPERSEDED** pela Fase 2.6b |
++
++**Motivo:** com ~40 unidades e crescendo, a união literal faria a abertura de uma
++escola virar deploy de TypeScript. O dia em que a operação abre uma unidade não pode
++ser o dia em que alguém compila o POC.
++
++O histórico não foi apagado — os documentos seguem no repositório e esta seção
++registra a substituição.
++
++**Consequência para o bloqueio B1:** deixa de depender de enum compilado. Passa a
++depender só do **conteúdo** governado do catálogo.
++
++---
++
++## 3. Decisões D13 aplicadas
++
++Todas vieram por escrito na aprovação da fase. Nenhum nome canônico foi escolhido
++por mim.
++
++### 3.1 Grafias
++
++| A fonte escreve | Canônico | Teste |
++|---|---|---|
++| `BelfordRoxo` | **Belford Roxo** | ✓ |
++| `Maracanau` | **Maracanaú** | ✓ |
++
++### 3.2 Jardim Ângela — uma unidade, três grafias
++
++`Jd Angela` · `Jardim Angela` · `Jardim Ângela` → **`jd_angela`** *(id corrigido na 2.6c: o canônico da planilha é `Jd Angela`)*
++
++Confirmado por teste: as três resolvem para **a mesma** identidade, e existe **uma**
++entrada no catálogo, não três. A unidade está **inativa** conforme a planilha atual.
++
++### 3.3 Abreviação
++
++| A fonte escreve | Canônico | Como |
++|---|---|---|
++| `Presidente P.` | **Prudente** | alias **governado** no catálogo — não escolha de similaridade em runtime |
++
++Teste dedicado verifica que o alias está na entrada, não que a similaridade acertou.
++
++### 3.4 Unidades próprias
++
++`Rio Centro` · `Bezerra` · `Santa Cruz` · `Zona Norte - RN` · `Madureira` — cinco
++unidades **distintas**. *(2.6c: a planilha grafa `Zona Norte - RN`; ver §13.5.)* `STA Cruz` é alias governado de Santa Cruz.
++
++`Rio Centro` ≠ `Zona Norte` ≠ `Madureira`: testado, três `unit_id` diferentes.
++
++### 3.5 Marabá
++
++`Grau Marabá` / `Grau Maraba` → **`maraba`**, uma única unidade. Não foi criada
++unidade extra para a forma com prefixo.
++
++Era o achado mais importante do `D13_CATALOG_VALIDATION.md`: a fonte reportava e o
++catálogo não conhecia. **Resolvido.**
++
++---
++
++## 4. Agrupamentos comerciais — o achado desta fase
++
++Dois textos que a fonte escreve **não são unidades e não são aliases**:
++
++| Rótulo | Membros |
++|---|---|
++| `Carpina e Limoeiro` | `carpina`, `limoeiro` |
++| `Limeira, Sumaré & JD Ângela` | `jd_angela`, `limeira`, `sumare` |
++
++### 4.1 O que o sistema faz
++
++Resultado: `ambiguous` com `reason: "GROUP_LABEL"` e `candidates` = exatamente os
++membros.
++
++- **Não** escolhe um membro.
++- **Não** duplica o valor para todos.
++- **Não** divide o valor entre eles.
++- **Não** vaza o texto cru do rótulo.
++
++Testado explicitamente que `Carpina e Limoeiro` ≠ `Carpina` e ≠ `Limoeiro`, e que
++`Limeira, Sumaré & JD Ângela` não resolve para nenhum dos três.
++
++### 4.2 A ordem importa
++
++O rótulo é conferido **antes** da similaridade, por igualdade de chave comparável.
++`Carpina e Limoeiro` contém `Carpina`, e qualquer caminho de similaridade poderia se
++agarrar a um membro.
++
++### 4.3 Compromisso registrado: por que `ambiguous` e não um status novo
++
++O briefing §4 preferia um status fechado `GROUPED_SOURCE_IDENTITY`, com permissão de
++usar `unresolved` + reason se a alteração fosse excessiva.
++
++Escolhi `ambiguous` + `reason`. **Motivo técnico concreto:** os Detectores A, C e D
++ramificam com `if (status === "unknown") ... else if (status === "ambiguous")`, sem
++exaustividade que o compilador cubra. Um quarto valor passaria silenciosamente por
++esses `else if` e **a qualidade deixaria de degradar** — o pior resultado possível
++num código já aprovado, e o TypeScript não apontaria.
++
++Reaproveitar `ambiguous` herda o comportamento já testado nos quatro detectores:
++nunca promovido a identidade, qualidade vai a `conflicted`, nome cru não atravessa. O
++`reason` preserva a distinção entre *"não sei qual das duas"* (`SIMILARITY`) e *"sei
++exatamente o que é, e não é uma escola"* (`GROUP_LABEL`).
++
++O campo é opcional e aditivo: nenhum código existente mudou.
++
++### 4.4 Separador de aliases: `;` e `|`, nunca vírgula
++
++`Limeira, Sumaré & JD Ângela` contém vírgula. Usá-la como separador de aliases
++partiria o rótulo ao meio. Testado.
++
++---
++
++## 5. Unidade inativa ≠ desconhecida
++
++| Situação | Comportamento |
++|---|---|
++| Unidade inativa aparece na fonte | identidade **resolvida**, status `inactive` preservado |
++| Nome fora do catálogo | `unknown` |
++
++Uma unidade desativada continua tendo identidade canônica conhecida. O que ela
++deixou de ser é *esperada* — e isso é cobertura, não canonicalização. Confundir os
++dois faria toda linha histórica de uma unidade fechada virar `unknown`
++retroativamente.
++
++`Jardim Ângela` é o caso real: inativa, e `Jd Angela` resolve.
++
++### 5.1 Limitação registrada: sem vigência temporal
++
++`UnitCatalogEntry` não tem `effective_from` / `effective_to`, porque `ceo.schools`
++hoje só tem `active` booleano. Consequência: o status é o de **hoje**, e um período
++anterior a uma desativação não é reconstituível. Decisão de governança pendente.
++
++---
++
++## 6. Catálogo ≠ `expected_units`
++
++Preservado sem alteração:
++
++```
++unidades ativas no catálogo   ≠   unidades esperadas no período
++```
++
++O port `ExpectedUnitsProvider` (`integration/src/ports.ts`) devolve
++`number | null`; `null` é **lacuna de governança**, nunca 100%. Nenhuma unidade ativa
++foi promovida automaticamente a denominador de cobertura.
++
++**`expected_units` continua OPEN GOVERNANCE DECISION.**
++
++---
++
++## 7. Política aprovada
++
++Registrada em `APPROVED_THRESHOLDS`:
++
++| Política | Valor | Nota |
++|---|---|---|
++| Participação relevante | **10%** = `1000` bp | número único; refinamento por detector é possível depois |
++| Valor financeiro relevante | **R$ 50.000** = `5_000_000` cents | **approved initial / calibratable** |
++| Quantidade relevante | **5 casos** | |
++| População mínima | **10 contratos** | abaixo disto o detector não afirma concentração |
++| Piso de ticket | **R$ 1.499,99** = `149_999` cents | comparação estritamente menor |
++
++Mais os dois anteriores: `installment_threshold = 19` e similaridade `0,80`.
++
++**"Calibratable" não autoriza o sistema a alterar nada.** Calibragem é decisão humana
++registrada, como esta.
++
++---
++
++## 8. O que permanece UNRESOLVED
++
++| Grupo | Campos | Consequência |
++|---|---|---|
++| Dimensão de severidade | `severity_dimension` em A, C, D | **config recusada** |
++| Escala de severidade | `severity_scale` em A, C, D; `severity_by_relative_bp` e `structural_severity` em B | **config recusada** |
++| Cobertura | `minimum_coverage_bp`, `coverage.degraded_below_bp`, `coverage.emit_event_below_bp` | **config recusada** |
++| Tolerância entre fontes | `material_relative_difference_bp`, `material_absolute_basis_points`, `structural_fields` (B) | **config recusada** |
++| Janela do Detector C | `window` | **config recusada** |
++| Agregadores do Detector D | `supported_metrics` | **config recusada** |
++| Seleção de caso contribuinte | `contributing_case_rule` (A) | **config recusada** |
++
++Os valores aprovados na §7 **não foram propagados automaticamente** para os campos de
++`DetectorConfig`. Eles vivem em `APPROVED_THRESHOLDS` como referência; a configuração
++de produção continua tendo de declará-los explicitamente, e continua **FAIL CLOSED**
++enquanto os campos acima faltarem.
++
++`TEST_CONFIG` segue em `tests/` com `config_version: "0.0.0"`. Nenhum
++`DEFAULT_CONFIG` foi criado — há teste que verifica a ausência.
++
++---
++
++## 9. Regra de ticket baixo
++
++### 9.1 O que ela afirma
++
++```
++"o ticket deste contrato está abaixo do piso aprovado"
++```
++
++E nada além. Não afirma fraude, erro, prejuízo, mau negócio, risco de inadimplência,
++causa, nem recomenda ação. Severidade `info` **fixa**: graduar exigiria uma escala
++sobre "quão abaixo do piso", e essa escala não foi aprovada.
++
++Um teste varre a saída contra `fraud`, `erro`, `prejuízo`, `risco`, `inadimpl`,
++`suspeit`, `irregular`, `caus` e `recomend`.
++
++### 9.2 O boundary
++
++| Ticket | Resultado |
++|---|---|
++| `149_997` | alerta |
++| `149_998` | **alerta** |
++| `149_999` | **não alerta** |
++| `150_000` | **não alerta** |
++| `150_001` | não alerta |
++
++Predicado e fórmula publicada leem a **mesma** constante, e há teste que extrai o
++número da fórmula e confere o boundary — a lição do gate da Fase 2.3.
++
++### 9.3 Independência dos R$ 50.000
++
++As duas são dinheiro, as duas em centavos, e é exatamente por isso que o risco de
++trocá-las existe:
++
++| Política | Pergunta |
++|---|---|
++| R$ 50.000 | um **agregado** é grande o bastante para merecer atenção? |
++| R$ 1.499,99 | um **contrato** é pequeno o bastante para merecer conferência? |
++
++Testes dedicados: um contrato de **R$ 40.000 não é** ticket baixo; um de **R$ 1.000
++é**, mesmo longe dos R$ 50 mil. O mutante que troca uma constante pela outra mata
++**12 testes**.
++
++### 9.4 Materialidade individual
++
++A regra **não exige** 10%, R$ 50 mil, 5 casos nem população de 10. O fato individual
++basta: um contrato só, abaixo do piso, gera alerta. Testado.
++
++Se depois houver agregação (*"quantos tickets baixos existem?"*), a materialidade
++desse agregado é decisão separada. Não inventada.
++
++### 9.5 Ticket não positivo — decisão pendente
++
++Lastro governado encontrado: `ceo.sales.ticket_cents` é coluna gerada de
++`transfer_cents * installments_grau`, com `transfer_cents >= 0` e
++`installments_grau > 0`. Logo:
++
++| Valor | No domínio | Tratamento |
++|---|---|---|
++| negativo | **impossível** | `INVALID_TICKET` — corrupção de dado |
++| zero | representável | `INVALID_TICKET` — **decisão pendente** |
++
++Aritmeticamente `0 < 149_999`, então zero passaria pelo predicado. Mas nenhuma regra
++governada declara venda de valor zero como venda. Um contrato de R$ 0,00
++provavelmente é linha incompleta, e alertar "ticket abaixo do piso" mandaria o
++comercial olhar o preço quando o problema é de ingestão.
++
++Então: `INVALID_TICKET`, contado, visível na qualidade, com lacuna
++`BUSINESS_RULE_PENDING`. **Se o CEO decidir que ticket zero é alerta comercial, isso
++vira regra explícita.**
++
++### 9.6 Ausente e inseguro
++
++| Situação | Tratamento |
++|---|---|
++| `null` | `TICKET_UNAVAILABLE`, lacuna `DATA_NOT_AVAILABLE` — **nunca zero** |
++| float (`1499.99`) | `INVALID_TICKET` — dinheiro é inteiro em centavos |
++| `NaN` / `Infinity` / fora da faixa | `INVALID_TICKET` |
++
++### 9.7 Evidência — limitação declarada
++
++Validado por contrato: snapshot existe, evidência existe, `evidence.snapshot_id`
++corresponde, `evidence.locator.dataset_id` corresponde ao dataset do snapshot.
++
++**Limitação:** `Evidence.locator` chega até `row_key`, o que liga a evidência à
++**linha**. O contrato **não** carrega `subject_ref`, então a associação
++evidência↔pessoa não é verificável — apenas evidência↔linha↔dataset. Não afirmo
++propriedade que o contrato não sustenta.
++
++### 9.8 Identidade
++
++`structuralId` sobre `{ event_type, rule_id, rule_version, floor_cents, período,
++subject_ref, datasets }`. `snapshot_id` fica **fora** — reingerir o mesmo dataset
++lógico não cria alerta novo. `rule_version` entra porque mudar a regra observável
++muda o fato.
++
++### 9.9 Extensão de contrato
++
++`event.schema.json`: `event_type` ganhou **`low_ticket_contract`**. Extensão fechada
++e mínima — o enum continua allowlist, nenhuma string arbitrária é aceita. Nenhum
++outro campo do schema mudou.
++
++---
++
++## 10. Testes
++
++| Suíte | Testes |
++|---|---|
++| `intelligence/` total | **1.238** (24 arquivos) |
++| Catálogo governado + D13 (novo) | **41** |
++| Ticket baixo (novo) | **62** |
++| Harness end-to-end | **43** (era 31) |
++| Detector A | 164 |
++| Detector B | 74 |
++| Detector C | 196 |
++| Detector D | 147 |
++| Portal / Motor | 182 cada |
++
++### 10.1 Mutation tests
++
++| Mutante | Falhas |
++|---|---|
++| piso vira `<=` em vez de `<` | **4** |
++| reutiliza R$ 50 mil no lugar do piso de ticket | **12** |
++| ticket não positivo vira "ticket baixo" normal | **6** |
++| agrupamento resolve por similaridade | **6** |
++
++Nenhum mutante permanece no código.
++
++### 10.2 O harness provou algo novo
++
++Com o catálogo **governado** (não o sintético), `Grau Marabá` passou a resolver e o
++Detector A deixou de degradar por identidade desconhecida — `quality_status` vai a
++`ok`. É a demonstração direta de que fechar D13 melhora a qualidade dos quatro
++detectores.
++
++---
++
++## 11. Blockers restantes para a Fase 3
++
++| # | Critério | Antes | Agora |
++|---|---|---|---|
++| 1 | Catálogo D13 governado | BLOCKED | **PARTIAL** — 18 unidades + 2 agrupamentos aprovados; seed completo depende de `UNIDADES.xlsx` |
++| 2 | Fonte de `expected_units` | BLOCKED | **BLOCKED** |
++| 3 | Thresholds aprovados | BLOCKED | **PARTIAL** — 5 políticas aprovadas; 7 grupos seguem unresolved |
++| 4 | Contrato Leonardo/Supabase | BLOCKED | **BLOCKED** |
++| 5 | Contrato pasta do Lucas | BLOCKED | **BLOCKED** |
++| 6 | Provenance ownership | READY | READY |
++| 7 | Harness de integração | READY | READY — 43 testes |
++| 8 | Briefing determinístico | BLOCKED | BLOCKED |
++| 9 | Read-model da Hermes | BLOCKED | BLOCKED |
++| 10 | Separação de credenciais | READY | READY |
++| 11 | Sem PII / nome cru | READY | READY |
++| 12 | A/B/C/D SHIP | READY | READY |
++| 13 | Gate adversarial | PENDING | PENDING |
++
++**De 7 blockers para 5**, com dois convertidos em PARTIAL.
++
++### 11.1 O que falta em cada PARTIAL
++
++**#1 catálogo:** `UNIDADES.xlsx` no workspace. O importador está pronto — é ler as
++linhas e chamar `importUnitCatalog`. As decisões já aprovadas não precisam ser
++revisitadas.
++
++**#3 thresholds:** os 7 grupos de `FASE_2_6_BUSINESS_DECISIONS.md` §3 que sobraram —
++dimensão de severidade, escala de severidade, cobertura, tolerância entre fontes,
++janela do C, agregadores do D, seleção de caso contribuinte.
++
++---
++
++## 12. O que esta fase não fez
++
++- Não instalou Hermes, não iniciou a Fase 3.
++- Não conectou Supabase nem acessou pasta.
++- Não inventou nenhuma linha ausente de `UNIDADES.xlsx`.
++- Não inventou `expected_units`.
++- Não preencheu nenhum threshold não aprovado.
++- Não propagou os valores aprovados para `DetectorConfig` — eles são referência, e a
++  config de produção continua fail-closed.
++- Nada commitado, nada empurrado.
++
++---
++
++# Fase 2.6c — Catálogo completo e severidade removida
++
++**Data:** 2026-08-17
++
++## 13.1 O arquivo
++
++| Item | Valor |
++|---|---|
++| Caminho | `~/Library/Containers/net.whatsapp.WhatsApp/Data/tmp/documents/CC55DF75-8B8C-4351-ACD8-053E0875D91F/UNIDADES.xlsx` |
++| Aba | `Planilha1` (única) |
++| Colunas REAIS | `Unidade` · `Apelido` · `Ativo` |
++| Linhas | 50 (1 cabeçalho + **49 de dados**) |
++
++Nenhuma outra coluna existe. Nada foi inferido.
++
++## 13.2 Totais derivados do arquivo
++
++| Métrica | Valor |
++|---|---|
++| Unidades | **49** |
++| Ativas (`Ativo = Sim`) | **44** |
++| Inativas (`Ativo = Não`) | **5** |
++| Aliases | **5** |
++| Agrupamentos | **2** |
++
++As cinco inativas: `Duque de Caxias`, `Guarulhos`, `Jd Angela`, `São Gonçalo`,
++`Vila Maria`.
++
++Os cinco aliases da planilha:
++
++- `Curitiba` ← 'Curitiba/Centro'
++- `Fortaleza - Centro` ← 'Centro FZA'
++- `Santa Cruz` ← 'STA Cruz'
++- `São João de Meriti` ← 'S.J de Meriti'
++- `Zona Norte - RN` ← 'Natal Zona Norte'
++
++## 13.3 A regra que a planilha codifica
++
++Um `Apelido` em **uma** unidade é alias dela. Um `Apelido` em **duas ou mais** é
++AGRUPAMENTO comercial.
++
++Não é interpretação minha:
++
++| Apelido | Aparece em |
++|---|---|
++| `Carpina e Limoeiro` | `Carpina`, `Limoeiro` |
++| `Limeira, Sumaré & JD Ângela` | `Jd Angela`, `Limeira`, `Sumaré` |
++
++A planilha e a decisão do CEO dizem a mesma coisa. O segundo tem **3** membros, não
++quatro — `Jd Angela` é uma unidade só.
++
++Tratá-los como alias faria um texto apontar para duas unidades, que é exatamente o
++que o importador recusa.
++
++## 13.4 Pipeline: build step, não runtime
++
++```
++UNIDADES.xlsx
++  → tools/xlsx_to_catalog.py     (build step, stdlib: zipfile + xml.etree)
++  → catalog/unidades.catalog.json (artefato governado, versionado)
++  → detectors/src/unit-catalog.ts (runtime: importa JSON, zero dependência de Excel)
++```
++
++`openpyxl` não foi adicionado — um `.xlsx` é zip com XML, e a stdlib basta para
++converter 10 KB uma vez por mudança de catálogo.
++
++## 13.5 Achados de qualidade — reportados, não corrigidos
++
++A planilha é a autoridade. Não silenciei nada:
++
++| Achado | Observação |
++|---|---|
++| `Sâo José do Rio Preto` | grafia com circunflexo em vez de til. A normalização remove acento, então a identidade funciona; o `display_name` sai como está no arquivo |
++| `Jd Angela` como canônico | abreviação usada como nome canônico. A regra `jd → jardim` faz as três formas casarem |
++| `Divinopólis` | acento em posição incomum (`Divinópolis` seria o usual) |
++| `Zona Norte - RN` | **`Zona Norte` sozinho NÃO resolve.** Se as planilhas de venda escreverem a forma curta, precisa de alias governado. Teste dedicado registra isso |
++| `Prudente` com Apelido `Prudente` | alias igual ao canônico; descartado como redundância |
++| `Mogi` como canônico | não `Mogi das Cruzes`. Os aliases `Mogi`/`Grau Mogi` casam por regra de prefixo |
++
++## 13.6 Overrides governados
++
++Três formas que as planilhas de venda usam e o catálogo de unidades não lista:
++
++| Alias | Unidade | Lastro |
++|---|---|---|
++| `Presidente P.` | `prudente` | decisão da Fase 2.6b — `P.` não é expansível |
++| `BelfordRoxo` | `belford_roxo` | decisão da Fase 2.6b — normalização não insere espaço |
++| `Rio Preto` | `sao_jose_do_rio_preto` | decisão D13 anterior |
++
++`Grau Marabá` e `STA Cruz` **não** precisaram de override: o primeiro resolve pela
++regra de remoção do prefixo `Grau`, o segundo já está no Apelido da planilha.
++
++## 13.7 Duplicidades: nenhuma
++
++Verificado por teste: nenhum `canonical_name` duplicado, nenhum `unit_id` duplicado,
++nenhum alias apontando para duas unidades, nenhum alias colidindo com o canônico de
++outra unidade, nenhum status contraditório.
++
++## 13.8 Seed parcial removido
++
++`APPROVED_UNIT_CATALOG` e `APPROVED_UNIT_ROWS` **não existem mais** — há teste que
++verifica a ausência dos dois nos exports. Fonte única: `GOVERNED_UNIT_CATALOG`,
++construído do artefato.
++
++## 13.9 Severidade `info` removida
++
++`severity = "info"` **não era política aprovada** — foi escolhida por mim na 2.6b.
++
++Agora:
++
++| Antes | Agora |
++|---|---|
++| Event com `severity: "info"` | **nenhum Event** |
++| — | `matched: true`, `threshold_cents`, `event_id`, evidência, qualidade |
++| — | `emitted: false`, `not_emitted_reason: "SEVERITY_POLICY_UNRESOLVED"` |
++
++O **fato** continua detectado, contado e auditável, com identidade lógica calculada.
++`construirEvento` foi removido — nenhum código morto.
++
++Testado: nenhum `"info"`, `"low"`, `"medium"`, `"high"` ou `"critical"` aparece na
++saída, e o campo `severity` não existe no resultado.
++
++`low_ticket_contract` permanece no enum de `event.schema.json` para quando a política
++existir — a única mudança será passar a emitir.
++
++## 13.10 Estado dos dois itens
++
++| Item | Estado |
++|---|---|
++| Piso de ticket R$ 1.499,99 | **APPROVED** |
++| Severidade do low-ticket | **UNRESOLVED** — bloqueia emissão |
++| Catálogo D13 | **READY** — 49 unidades carregadas e validadas |
++
++**O Event executivo de low-ticket NÃO está production-ready** enquanto a severidade
++não for definida.
++
++## 13.11 Testes
++
++| Suíte | Testes |
++|---|---|
++| `intelligence/` total | **1.282** (24 arquivos) |
++| Catálogo governado + D13 | **76** (era 41) |
++| Ticket baixo | **69** (era 62) |
++| Harness end-to-end | **45** (era 43) |
++
++## 13.12 Blockers restantes
++
++| # | Critério | Estado |
++|---|---|---|
++| 1 | Catálogo D13 | **READY** ✅ |
++| 2 | `expected_units` | BLOCKED |
++| 3 | Thresholds | **PARTIAL** — 5 aprovados; 7 grupos + severidade do low-ticket |
++| 4 | Leonardo/Supabase | BLOCKED |
++| 5 | Pasta do Lucas | BLOCKED |
++| 8 | Briefing determinístico | BLOCKED |
++| 9 | Read-model da Hermes | BLOCKED |
++
++**4 blockers** (era 5). O catálogo saiu da lista.
++
++---
++
++# 14. Fase 2.6c — correção dos dois HIGH do gate adversarial
++
++O gate de 2.6c saiu **NO-SHIP** com dois HIGH. Ambos corrigidos aqui. Nenhum
++threshold novo foi inventado, nenhuma política de severidade foi decidida.
++
++## 14.1 HIGH 1 — o importador perdia dado em silêncio
++
++**O defeito.** O conversor tratava linha inválida como aviso: registrava a
++mensagem, descartava a linha com `continue` e escrevia o JSON com código de
++saída zero. Uma célula `Ativo` em branco fazia uma unidade governada sumir do
++catálogo de runtime. Lá ela virava `unknown` a cada ingestão — e o validador de
++runtime não recupera o que o build step jogou fora. Um catálogo de 48 unidades
++saído de uma planilha de 49 é indistinguível, no artefato, de um catálogo
++correto de 48.
++
++**A correção.** O pipeline agora é atômico e fecha fechado:
++
++```
++ler zip  →  validar cabeçalho  →  validar TODAS as linhas
++         →  validar integridade global  →  montar em memória
++         →  só então escrever, atomicamente
++```
++
++Nada é escrito antes de o conjunto inteiro estar válido. Em erro: cada problema
++vai para `stderr`, o processo sai com código 1, e **o artefato governado
++anterior não é tocado**.
++
++### Condições FATAIS (a conversão inteira é recusada)
++
++| Condição | Por quê |
++| --- | --- |
++| Cabeçalho ausente, renomeado, incompleto ou fora de posição | Nomes alternativos não são adivinhados |
++| `Unidade` vazia | Não há identidade a governar |
++| `Ativo` vazia | Status não é presumido |
++| `Ativo` fora de `{Sim, Não}` | Sem conversão implícita para booleano |
++| Linha parcialmente preenchida | Alguém escreveu algo e a conversão não sabe o quê |
++| Nome curto demais para gerar `unit_id` válido | O id não pode ser sintetizado |
++| `unit_id` duplicado (inclusive por normalização) | Escolher o primeiro ou o último é decisão de negócio |
++| Identidade canônica duplicada | idem |
++| Status contraditório para a mesma unidade | idem |
++| Apelido apontando para unidades diferentes | Ambiguidade de origem |
++| Apelido colidindo com o canônico de outra unidade | Ambiguidade de origem |
++| Membro de agrupamento inexistente | Referência quebrada |
++| Agrupamento com menos de duas unidades | Não é agrupamento |
++| Arquivo inexistente ou zip inválido | Falha limpa, sem traceback |
++
++Uma linha completamente em branco no fim **não é dado** e é ignorada. Uma linha
++parcialmente preenchida é fatal.
++
++### O único aviso que sobrou
++
++`Apelido` idêntico ao nome canônico: descartar essa redundância não perde forma
++nenhuma. É a definição operacional do critério — **avisa-se só o que não é
++lossy**. Toda condição que descartaria linha, status ou apelido é erro.
++
++### Escrita atômica
++
++`tempfile.mkstemp` no mesmo diretório do destino, `flush` + `fsync`, e
++`os.replace`. Como o temporário nasce no mesmo sistema de arquivos, o
++`os.replace` é uma troca atômica: o leitor vê o artefato antigo inteiro ou o
++novo inteiro, nunca um JSON truncado. Em erro o temporário é removido e o
++destino permanece byte a byte igual.
++
++Isso foi observado na prática nesta sessão: uma execução falha contra um caminho
++inexistente deixou `catalog/unidades.catalog.json` **byte-identical**.
++
++### O que o importador NÃO faz
++
++Não corrige grafia. `Sâo José do Rio Preto`, `Divinopólis`, `Mogi` e `Jd Angela`
++entram no artefato exatamente como estão na planilha. A planilha continua sendo
++autoridade de display até decisão humana. Os testes afirmam isso explicitamente,
++para que uma "limpeza" futura quebre o build em vez de passar despercebida.
++
++## 14.2 HIGH 2 — a identidade low-ticket dependia do lote
++
++**O defeito.** `identidadeDoAlerta` hasheava o conjunto de **todos** os escopos
++governados presentes no lote. Um contrato low-ticket idêntico recebia `event_id`
++diferente só porque outro registro, sem relação nenhuma com ele, veio de outro
++dataset na mesma execução. Deduplicação por identidade quebra com isso.
++
++**A correção.** A identidade usa apenas o escopo do próprio contrato:
++
++```ts
++identidadeDoAlerta(input, escopoDoContrato(escopos, c), c.subject_ref)
++```
++
++Material da identidade, sem gramática de delimitador:
++
++```
++event_type, rule_id, rule_version,
++floor_cents,
++period_start, period_end,
++subject_ref,
++logical_dataset: { source_system, dataset_id }   ← do contrato, e só dele
++```
++
++`snapshot_id` fica **fora**: reingerir o mesmo dataset lógico não cria fato novo.
++`detected_at` também fica fora, pelo mesmo motivo. Um contrato sem escopo
++governado no lote levanta `GatewayError`; nenhuma identidade é inventada.
++
++**Por que lote misto é legítimo aqui.** Cada fato low-ticket é individual: o
++alerta descreve um contrato, não uma agregação. Não confundir com A/C/D, onde
++agregação sobre múltiplos datasets continua fail-closed — lá o denominador
++misturaria universos diferentes.
++
++## 14.3 Testes
++
++| Suíte | Antes | Depois |
++| --- | --- | --- |
++| `catalog-import.test.ts` (novo) | — | 36 |
++| `low-ticket.test.ts` | 69 | 82 |
++| A / B / C / D | 164 / 74 / 196 / 147 | inalterados |
++
++Os testes do importador usam planilhas `.xlsx` sintéticas geradas em memória por
++`tools/make_test_xlsx.py`. Não dependem do arquivo original — que veio por
++WhatsApp e já foi apagado pelo app. O artefato governado em uso continua sendo o
++derivado dele, e um teste afirma sua forma (49 unidades, 44 ativas, 5 inativas,
++2 agrupamentos) e as grafias originais.
++
++**Mutação (obrigatória no briefing).** Ambos os mutantes morreram:
++
++| Mutante | Testes que falharam |
++| --- | --- |
++| `invalid row -> warning + continue` | 15 |
++| identity com todos os escopos do lote | 2 (§11-A e §11-C) |
++
++## 14.4 O que continua sem decisão
++
++A correção é de engenharia. Nada aqui aprova política:
++
++- **severidade low-ticket:** UNRESOLVED. `event = null`, `emitted = false`,
++  `not_emitted_reason = "SEVERITY_POLICY_UNRESOLVED"`. O fato sobrevive; o Event
++  executivo não. Low-ticket **não** é production-ready como alerta executivo.
++- **piso low-ticket:** APPROVED em 149.999 centavos, estritamente menor,
++  independente do piso de materialidade de R$ 50.000.
++- **`expected_units`:** ainda sem fonte.
+diff --git a/intelligence/tools/make_test_xlsx.py b/intelligence/tools/make_test_xlsx.py
+new file mode 100644
+index 0000000..3adec6a
+--- /dev/null
++++ b/intelligence/tools/make_test_xlsx.py
+@@ -0,0 +1,73 @@
++#!/usr/bin/env python3
++"""
++Gera um `.xlsx` mínimo para os testes do importador. NÃO é código de produção.
++
++Existe para que os testes do build step não dependam de um arquivo real numa pasta
++temporária do WhatsApp — que o app apaga. As linhas vêm como JSON em argv.
++
++Uso:
++    python3 tools/make_test_xlsx.py saida.xlsx '[["Unidade","Apelido","Ativo"],["Santos","","Sim"]]'
++
++Célula `null` ou `""` é OMITIDA do XML — é assim que uma célula vazia de verdade
++aparece numa planilha, e é isso que o importador precisa enxergar.
++"""
++import json
++import sys
++import zipfile
++from xml.sax.saxutils import escape
++
++def coluna(i):
++    letras = ""
++    while True:
++        letras = chr(ord("A") + i % 26) + letras
++        i = i // 26 - 1
++        if i < 0:
++            return letras
++
++def sheet_xml(linhas):
++    out = ['<?xml version="1.0" encoding="UTF-8"?>',
++           '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>']
++    for r, linha in enumerate(linhas, start=1):
++        celulas = []
++        for c, valor in enumerate(linha):
++            if valor is None or valor == "":
++                continue
++            ref = f"{coluna(c)}{r}"
++            celulas.append(f'<c r="{ref}" t="inlineStr"><is><t>{escape(str(valor))}</t></is></c>')
++        out.append(f'<row r="{r}">{"".join(celulas)}</row>')
++    out.append("</sheetData></worksheet>")
++    return "".join(out)
++
++CONTENT_TYPES = '''<?xml version="1.0" encoding="UTF-8"?>
++<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
++<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
++<Default Extension="xml" ContentType="application/xml"/>
++<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
++<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
++</Types>'''
++
++RELS = '''<?xml version="1.0" encoding="UTF-8"?>
++<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
++<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
++</Relationships>'''
++
++WORKBOOK = '''<?xml version="1.0" encoding="UTF-8"?>
++<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
++ xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
++<sheets><sheet name="Planilha1" sheetId="1" r:id="rId1"/></sheets></workbook>'''
++
++WB_RELS = '''<?xml version="1.0" encoding="UTF-8"?>
++<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
++<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
++</Relationships>'''
++
++if __name__ == "__main__":
++    destino, linhas_json = sys.argv[1], sys.argv[2]
++    linhas = json.loads(linhas_json)
++    with zipfile.ZipFile(destino, "w", zipfile.ZIP_DEFLATED) as z:
++        z.writestr("[Content_Types].xml", CONTENT_TYPES)
++        z.writestr("_rels/.rels", RELS)
++        z.writestr("xl/workbook.xml", WORKBOOK)
++        z.writestr("xl/_rels/workbook.xml.rels", WB_RELS)
++        z.writestr("xl/worksheets/sheet1.xml", sheet_xml(linhas))
++    print(destino)
+diff --git a/intelligence/tools/xlsx_to_catalog.py b/intelligence/tools/xlsx_to_catalog.py
+new file mode 100644
+index 0000000..445431c
+--- /dev/null
++++ b/intelligence/tools/xlsx_to_catalog.py
+@@ -0,0 +1,344 @@
++#!/usr/bin/env python3
++"""
++Converte UNIDADES.xlsx no artefato governado de catálogo.
++
++É BUILD STEP, não runtime. O D13 em produção consome o JSON gerado; nada em
++`detectors/src` abre planilha, e nenhuma dependência de Excel entra no runtime.
++
++─── Por que stdlib ───────────────────────────────────────────────────────────
++
++`openpyxl` não está instalado e adicioná-lo criaria dependência para converter um
++arquivo de 10 KB uma vez por mudança de catálogo. Um `.xlsx` é um zip com XML, e
++`zipfile` + `xml.etree` da stdlib bastam.
++
++─── Colunas REAIS do arquivo ─────────────────────────────────────────────────
++
++    Unidade   nome canônico
++    Apelido   forma alternativa que a fonte escreve
++    Ativo     "Sim" | "Não"
++
++Nenhuma outra coluna existe. Nada foi inferido.
++
++─── A regra que a própria planilha codifica ──────────────────────────────────
++
++Um `Apelido` que aparece em UMA unidade é alias dela.
++Um `Apelido` que aparece em DUAS OU MAIS unidades é AGRUPAMENTO comercial.
++
++Isto não é interpretação minha: `Carpina e Limoeiro` está no Apelido de `Carpina`
++e de `Limoeiro`; `Limeira, Sumaré & JD Ângela` está no de `Jd Angela`, `Limeira` e
++`Sumaré`. O CEO confirmou que os dois são agrupamentos. A planilha e a decisão
++humana dizem a mesma coisa, e a regra derivada é exatamente essa.
++
++Tratá-los como alias faria um texto apontar para duas unidades — que é justamente
++o que o importador recusa.
++
++─── Fail-closed ATÔMICO ──────────────────────────────────────────────────────
++
++Qualquer linha de dados que não converta inequivocamente torna a conversão INTEIRA
++inválida: saída não-zero, nenhum artefato escrito, artefato anterior intacto.
++
++Motivo: uma linha descartada aqui vira `unknown` em runtime todo mês, e o validador
++de runtime não recupera o que o build step jogou fora. 48 unidades de 49 não é um
++catálogo parcialmente bom — é um catálogo errado.
++
++`AVISO` existe só para condição NÃO LOSSY: hoje, apenas `Apelido` idêntico ao nome
++canônico, cujo descarte não perde forma alguma.
++
++Uso:
++    python3 tools/xlsx_to_catalog.py <caminho.xlsx> catalog/unidades.catalog.json
++
++Saída: 0 em sucesso, 1 em recusa.
++"""
++
++import json
++import os
++import sys
++import tempfile
++import unicodedata
++import xml.etree.ElementTree as ET
++import zipfile
++from collections import defaultdict
++
++NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
++CATALOG_VERSION = "1.0.0"
++
++
++def ler_planilha(caminho):
++    """Linhas como dicionário coluna→valor. Célula vazia é ausente, não string vazia."""
++    z = zipfile.ZipFile(caminho)
++
++    compartilhadas = []
++    try:
++        ss = ET.fromstring(z.read("xl/sharedStrings.xml"))
++        for si in ss.iter(NS + "si"):
++            compartilhadas.append("".join(t.text or "" for t in si.iter(NS + "t")))
++    except KeyError:
++        pass
++
++    folha = ET.fromstring(z.read("xl/worksheets/sheet1.xml"))
++    linhas = []
++    for row in folha.iter(NS + "row"):
++        celulas = {}
++        for c in row.iter(NS + "c"):
++            ref = c.attrib.get("r", "")
++            coluna = "".join(x for x in ref if x.isalpha())
++            tipo = c.attrib.get("t")
++            v = c.find(NS + "v")
++            inline = c.find(NS + "is")
++            if tipo == "s" and v is not None:
++                valor = compartilhadas[int(v.text)]
++            elif tipo == "inlineStr" and inline is not None:
++                valor = "".join(x.text or "" for x in inline.iter(NS + "t"))
++            elif v is not None:
++                valor = v.text
++            else:
++                valor = None
++            if valor is not None and str(valor).strip() != "":
++                celulas[coluna] = str(valor).strip()
++        if celulas:
++            linhas.append(celulas)
++    return linhas
++
++
++def unit_id(nome):
++    """Mesma derivação de `unitIdFromCanonicalName` em `unit-catalog.ts`."""
++    sem_acento = "".join(
++        ch for ch in unicodedata.normalize("NFD", nome) if unicodedata.category(ch) != "Mn"
++    )
++    saida = []
++    for ch in sem_acento.lower():
++        saida.append(ch if ch.isascii() and (ch.isalnum()) else "_")
++    juntado = "".join(saida)
++    while "__" in juntado:
++        juntado = juntado.replace("__", "_")
++    return juntado.strip("_")[:64]
++
++
++class ErroDeConversao(Exception):
++    """Conversão inválida. Nenhum artefato é escrito."""
++
++    def __init__(self, problemas):
++        self.problemas = problemas
++        super().__init__(f"{len(problemas)} problema(s) na conversão")
++
++
++VOCABULARIO_ATIVO = {"Sim": "active", "Não": "inactive"}
++
++
++def converter(caminho_xlsx):
++    """
++    Constrói o catálogo em memória. Levanta `ErroDeConversao` em qualquer problema.
++
++    ─── Por que TODA linha inválida é fatal ──────────────────────────────────────
++
++    A versão anterior descartava linha inválida, emitia aviso e escrevia o JSON com
++    sucesso. Uma célula `Ativo` em branco, um typo, um schema drift — e uma unidade
++    governada desaparecia do catálogo de runtime, onde virava `unknown` a cada
++    ingestão. O validador de runtime não recupera linha que o build step jogou fora.
++
++    Então: nada é descartado. Ou o catálogo representa a planilha inteira, ou não
++    existe catálogo novo.
++    """
++    linhas = ler_planilha(caminho_xlsx)
++    problemas = []
++
++    if not linhas:
++        raise ErroDeConversao(["planilha vazia"])
++
++    # ── Cabeçalho: colunas governadas, sem adivinhação de nome alternativo ──
++    cabecalho = linhas[0]
++    esperado = {"A": "Unidade", "B": "Apelido", "C": "Ativo"}
++    if cabecalho != esperado:
++        faltando = [v for k, v in esperado.items() if cabecalho.get(k) != v]
++        extras = [v for k, v in cabecalho.items() if esperado.get(k) != v]
++        raise ErroDeConversao(
++            [
++                f"cabeçalho: colunas governadas ausentes ou fora de posição: {faltando}"
++                + (f"; encontrado: {extras}" if extras else "")
++            ]
++        )
++
++    dados = linhas[1:]
++
++    # Quantas unidades cada Apelido cobre. É isto que separa alias de agrupamento.
++    cobertura = defaultdict(list)
++    for r in dados:
++        apelido = r.get("B")
++        nome = r.get("A")
++        if apelido and nome:
++            cobertura[apelido].append(unit_id(nome))
++
++    unidades = []
++    grupos = {}
++    avisos = []
++    por_id = {}
++    canonicos = {}
++    dono_do_alias = {}
++
++    for i, r in enumerate(dados, start=2):
++        nome = r.get("A")
++        ativo = r.get("C")
++        apelido = r.get("B")
++
++        # Linha COMPLETAMENTE vazia no fim da planilha não é dado. Parcialmente
++        # preenchida é: alguém escreveu algo e a conversão não sabe o quê.
++        if nome is None and ativo is None and apelido is None:
++            continue
++
++        if nome is None:
++            problemas.append(f"linha {i}: `Unidade` vazia (Apelido={apelido!r}, Ativo={ativo!r})")
++            continue
++
++        if ativo is None:
++            problemas.append(f"linha {i} ({nome}): `Ativo` vazia — status não é presumido")
++            continue
++
++        if ativo not in VOCABULARIO_ATIVO:
++            problemas.append(
++                f"linha {i} ({nome}): `Ativo` = {ativo!r} fora do vocabulário "
++                f"{sorted(VOCABULARIO_ATIVO)}"
++            )
++            continue
++
++        status = VOCABULARIO_ATIVO[ativo]
++        uid = unit_id(nome)
++
++        if not uid or len(uid) < 2:
++            problemas.append(f"linha {i} ({nome}): nome curto demais para gerar unit_id válido")
++            continue
++
++        if uid in por_id:
++            anterior = por_id[uid]
++            problemas.append(
++                f"linha {i} ({nome}): unit_id {uid!r} duplicado — já usado na linha "
++                f"{anterior['linha']} ({anterior['nome']})"
++            )
++            continue
++
++        chave_canonica = nome.strip().lower()
++        if chave_canonica in canonicos:
++            problemas.append(
++                f"linha {i} ({nome}): identidade canônica duplicada da linha "
++                f"{canonicos[chave_canonica]}"
++            )
++            continue
++
++        aliases = []
++        if apelido:
++            membros = sorted(set(cobertura[apelido]))
++            if len(membros) >= 2:
++                # AGRUPAMENTO. Não é alias de nenhum dos membros.
++                grupos[apelido] = membros
++            elif apelido == nome:
++                # Redundância inofensiva e NÃO LOSSY: o alias é igual ao canônico,
++                # então descartá-lo não perde forma nenhuma. Único aviso permitido.
++                avisos.append(f"linha {i} ({nome}): Apelido igual ao canônico — redundante")
++            else:
++                aliases.append(apelido)
++
++        por_id[uid] = {"linha": i, "nome": nome}
++        canonicos[chave_canonica] = i
++        unidades.append(
++            {
++                "unit_id": uid,
++                "canonical_name": nome,
++                "aliases": aliases,
++                "status": status,
++            }
++        )
++
++    # ── Integridade global, antes de qualquer escrita ──
++    for u in unidades:
++        for a in u["aliases"]:
++            chave = a.lower()
++            dono = dono_do_alias.get(chave)
++            if dono is not None and dono != u["unit_id"]:
++                problemas.append(
++                    f"alias {a!r} aponta para {dono!r} e para {u['unit_id']!r}"
++                )
++                continue
++            dono_do_alias[chave] = u["unit_id"]
++
++    for u in unidades:
++        for a in u["aliases"]:
++            colide = canonicos.get(a.strip().lower())
++            if colide is not None and unit_id(a) != u["unit_id"]:
++                problemas.append(
++                    f"alias {a!r} de {u['unit_id']!r} colide com o canônico da linha {colide}"
++                )
++
++    ids = {u["unit_id"] for u in unidades}
++    for rotulo, membros in sorted(grupos.items()):
++        ausentes = [m for m in membros if m not in ids]
++        if ausentes:
++            problemas.append(f"agrupamento {rotulo!r}: membros inexistentes: {ausentes}")
++        if len(membros) < 2:
++            problemas.append(f"agrupamento {rotulo!r}: precisa de ao menos duas unidades")
++
++    if problemas:
++        raise ErroDeConversao(problemas)
++
++    return {
++        "catalog_version": CATALOG_VERSION,
++        "source_file": "UNIDADES.xlsx",
++        "columns": ["Unidade", "Apelido", "Ativo"],
++        "units": unidades,
++        "groups": [{"label": k, "members": v} for k, v in sorted(grupos.items())],
++        "warnings": avisos,
++    }
++
++
++def escrever_atomico(caminho, catalogo):
++    """
++    Escreve num temporário do MESMO filesystem e substitui atomicamente.
++
++    `os.replace` é atômico dentro do mesmo filesystem: ou o artefato antigo continua
++    inteiro, ou o novo está inteiro. Nunca um JSON truncado no meio — que seria pior
++    que a versão anterior do bug, porque o runtime falharia ao carregar.
++    """
++    destino = os.path.abspath(caminho)
++    pasta = os.path.dirname(destino)
++    os.makedirs(pasta, exist_ok=True)
++
++    fd, temp = tempfile.mkstemp(dir=pasta, prefix=".catalog-", suffix=".json.tmp")
++    try:
++        with os.fdopen(fd, "w", encoding="utf-8") as f:
++            json.dump(catalogo, f, ensure_ascii=False, indent=2, sort_keys=False)
++            f.write("\n")
++            f.flush()
++            os.fsync(f.fileno())
++        os.replace(temp, destino)
++    except BaseException:
++        if os.path.exists(temp):
++            os.unlink(temp)
++        raise
++
++
++if __name__ == "__main__":
++    if len(sys.argv) != 3:
++        raise SystemExit(__doc__)
++
++    if not os.path.isfile(sys.argv[1]):
++        print(f"CONVERSÃO RECUSADA — arquivo não encontrado: {sys.argv[1]}", file=sys.stderr)
++        raise SystemExit(1)
++
++    try:
++        catalogo = converter(sys.argv[1])
++    except (ErroDeConversao, zipfile.BadZipFile) as e:
++        print("CONVERSÃO RECUSADA — nenhum artefato foi escrito:", file=sys.stderr)
++        for p in getattr(e, "problemas", [str(e)]):
++            print(f"  - {p}", file=sys.stderr)
++        # O artefato governado anterior permanece intacto.
++        raise SystemExit(1) from None
++
++    escrever_atomico(sys.argv[2], catalogo)
++
++    ativas = sum(1 for u in catalogo["units"] if u["status"] == "active")
++    inativas = sum(1 for u in catalogo["units"] if u["status"] == "inactive")
++    print(f"unidades: {len(catalogo['units'])} (ativas {ativas}, inativas {inativas})")
++    print(f"aliases:  {sum(len(u['aliases']) for u in catalogo['units'])}")
++    print(f"grupos:   {len(catalogo['groups'])}")
++    for g in catalogo["groups"]:
++        print(f"  {g['label']!r} → {g['members']}")
++    for a in catalogo["warnings"]:
++        print(f"AVISO (não lossy): {a}")

@@ -1,0 +1,34 @@
+{
+  "event_id": "evt_b_conflito_vendas_agosto",
+  "event_type": "data_quality_conflict",
+  "detector_id": "det.cross_source_conflict",
+  "detector_version": "1.0.0",
+  "snapshot_ids": ["snap_2026_08_pipeline", "snap_2026_08_sales"],
+  "period_start": "2026-08-01",
+  "period_end": "2026-08-31",
+  "detected_at": "2026-08-16T09:05:00.000Z",
+  "severity": "critical",
+  "materiality": {
+    "basis": "count",
+    "count": 6,
+    "share_of_total_bp": 4286
+  },
+  "observed_metric": {
+    "name": "vendas_sem_contrapartida_no_pipeline",
+    "data_class": "observed",
+    "unit": "count",
+    "value": 6
+  },
+  "reference_metric": {
+    "name": "vendas_conciliadas",
+    "data_class": "gap",
+    "gap_reason": "DATA_CONFLICT"
+  },
+  "evidence_refs": ["ev_b_pipeline_vendas", "ev_b_financeiro_vendas"],
+  "data_quality": {
+    "quality_status": "conflicted",
+    "conflict_ids": ["conf_vendas_pipeline_vs_financeiro", "conf_data_venda_divergente"],
+    "missing_fields": ["contract_value", "revenue_value"],
+    "coverage_ratio_bp": 9500
+  }
+}

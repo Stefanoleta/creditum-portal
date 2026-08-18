@@ -149,7 +149,10 @@ export function gap<T = never>(
   detail?: string,
   p: Provenance = {},
 ): Metric<T> {
-  return { ok: false, dataClass, gap: reason, detail, ...p }
+  // `detail` OMITIDO quando ausente, não escrito como `undefined`. São coisas
+  // diferentes: `{ detail: undefined }` declara a chave presente sem valor, e o
+  // consumidor que faz `"detail" in m` passa a ver uma explicação que não existe.
+  return { ok: false, dataClass, gap: reason, ...(detail === undefined ? {} : { detail }), ...p }
 }
 
 export function notAvailable<T = never>(detail?: string, p: Provenance = {}): Metric<T> {
@@ -208,8 +211,22 @@ export function unwrapOr<T>(m: Metric<T>, fallback: T): T {
   return m.ok ? m.value : fallback
 }
 
+/**
+ * Monta procedência OMITINDO o que não existe.
+ *
+ * `{ sources: undefined }` e `{}` não são a mesma coisa: o primeiro declara a
+ * chave presente com valor ausente, e quem serializa para JSON ou testa
+ * presença de campo passa a ver procedência onde não há.
+ */
+function provenance(sources: string[] | undefined, asOf: string | undefined): Provenance {
+  return {
+    ...(sources === undefined ? {} : { sources }),
+    ...(asOf === undefined ? {} : { asOf }),
+  }
+}
+
 function pick(m: Metric<unknown>): Provenance {
-  return { sources: m.sources, asOf: m.asOf }
+  return provenance(m.sources, m.asOf)
 }
 
 const CLASS_RANK: Record<DataClass, number> = {
@@ -261,7 +278,7 @@ function resolveStrict<R>(
   formula: string,
 ): Metric<R> {
   const firstGap = inputs.find((m): m is MetricGap => !m.ok)
-  const prov: Provenance = { sources: mergeSources(inputs), asOf: oldestAsOf(inputs) }
+  const prov: Provenance = provenance(mergeSources(inputs), oldestAsOf(inputs))
   if (firstGap) {
     return gap<R>(firstGap.gap, resultClass(inputs), firstGap.detail, prov)
   }
@@ -360,7 +377,7 @@ export function aggregate<T, R>(
   formula: string,
   policy: AggregationPolicy = STRICT,
 ): Metric<Aggregated<R>> {
-  const prov: Provenance = { sources: mergeSources(metrics), asOf: oldestAsOf(metrics) }
+  const prov: Provenance = provenance(mergeSources(metrics), oldestAsOf(metrics))
   const missing = metrics.filter((m): m is MetricGap => !m.ok)
   const present = metrics.filter(isOk)
   const expected = metrics.length
@@ -369,12 +386,15 @@ export function aggregate<T, R>(
     return gap<Aggregated<R>>("EMPTY_DENOMINATOR", "calculated", "nada para agregar", prov)
   }
 
-  if (policy.mode === "strict" && missing.length > 0) {
+  // `missing[0] !== undefined` é equivalente a `missing.length > 0`, e é a
+  // forma que o compilador consegue provar — sem asserção.
+  const primeiraFalta = missing[0]
+  if (policy.mode === "strict" && primeiraFalta !== undefined) {
     const detalhe =
       missing.length === 1
-        ? missing[0].detail
+        ? primeiraFalta.detail
         : `${missing.length} de ${expected} contribuições indisponíveis`
-    return gap<Aggregated<R>>(missing[0].gap, resultClass(metrics), detalhe, prov)
+    return gap<Aggregated<R>>(primeiraFalta.gap, resultClass(metrics), detalhe, prov)
   }
 
   if (present.length === 0) {
@@ -463,10 +483,10 @@ export function ratio(
   denominator: Metric<number>,
   formula: string,
 ): Metric<Ratio> {
-  const prov: Provenance = {
-    sources: mergeSources([numerator, denominator]),
-    asOf: oldestAsOf([numerator, denominator]),
-  }
+  const prov: Provenance = provenance(
+    mergeSources([numerator, denominator]),
+    oldestAsOf([numerator, denominator]),
+  )
 
   if (!numerator.ok) return gap<Ratio>(numerator.gap, numerator.dataClass, numerator.detail, prov)
   if (!denominator.ok) {

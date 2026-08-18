@@ -1,0 +1,3161 @@
+diff --git a/intelligence/detectors/src/config.ts b/intelligence/detectors/src/config.ts
+new file mode 100644
+index 0000000..a9ee5ea
+--- /dev/null
++++ b/intelligence/detectors/src/config.ts
+@@ -0,0 +1,613 @@
++/**
++ * Configuração dos detectores — validada, fail-closed, sem default inventado.
++ *
++ * A regra que governa este arquivo: **não existe valor de produção que não tenha
++ * lastro documentado no projeto**. Dois têm. Os demais não, e por isso não há
++ * `DEFAULT_CONFIG` exportado — uma configuração incompleta não cai para um
++ * padrão razoável, ela é recusada.
++ *
++ * O motivo é o de sempre: um threshold plausível inventado por engenheiro vira
++ * política da Creditum no dia em que alguém o encontra num arquivo e assume que
++ * foi aprovado. Fica sem padrão até o arquiteto decidir.
++ */
++
++import { GatewayError } from "../../gateway/src/errors"
++
++// ─── Valores COM lastro no projeto ────────────────────────────────────────────
++
++/**
++ * Os únicos dois números aprovados.
++ *
++ * Não são default: são referência. A configuração continua tendo que declará-los
++ * explicitamente — para que a revisão veja o valor, não a ausência dele.
++ */
++export const APPROVED_THRESHOLDS = Object.freeze({
++  /** Briefing do Bloco 1, §14 Caso A: "contratos com mais de 19 parcelas". */
++  installment_threshold: 19,
++  /**
++   * `SUGGESTION_THRESHOLD` de `src/lib/ceo/normalize.ts`, em basis points.
++   * Calibrado contra unidades reais: alecrim/alecrin = 8600 (sugere),
++   * limeira/limoeiro = 7500 (não sugere).
++   */
++  similarity_threshold_bp: 8000,
++})
++
++/** Fuso da operação. Decisão do arquiteto na Fase 2.1. */
++export const BUSINESS_TIMEZONE = "America/Sao_Paulo"
++
++// ─── Tipos ────────────────────────────────────────────────────────────────────
++
++export type Severity = "info" | "low" | "medium" | "high" | "critical"
++
++/** Faixa de severidade: a partir de `at_least`, vale `severity`. */
++export interface SeverityBand {
++  readonly at_least: number
++  readonly severity: Severity
++}
++
++export type SeverityScale = readonly SeverityBand[]
++
++/**
++ * Dimensão sobre a qual a severidade do Detector A é classificada.
++ *
++ * Precisa ser explícita: participação em QUANTIDADE e participação em VALOR
++ * respondem a perguntas diferentes, e misturá-las em silêncio faria "poucos
++ * contratos grandes" e "muitos contratos pequenos" receberem a mesma leitura.
++ */
++export type ConcentrationSeverityDimension = "share_count_bp" | "share_amount_bp"
++
++export interface InstallmentConcentrationConfig {
++  /** Único threshold de negócio aprovado deste detector. Comparação é `> 19`. */
++  readonly installment_threshold: number
++  /** Abaixo disto a amostra é pequena demais para afirmar concentração. */
++  readonly minimum_sample_size: number
++
++  // ── Materialidade: três dimensões distintas, nenhuma serve de sinônimo ──
++  /** Contagem ABSOLUTA de contratos acima do limiar. */
++  readonly material_count_above: number
++  /** Participação em QUANTIDADE: contratos acima ÷ contratos elegíveis. */
++  readonly material_share_count_bp: number
++  /** Participação em VALOR: volume da faixa ÷ volume elegível. */
++  readonly material_share_amount_bp: number
++  /** Volume ABSOLUTO da faixa, em centavos. */
++  readonly material_amount_cents: number
++
++  readonly contributing_case_rule: ContributingCaseRule
++
++  /** Qual das duas participações governa a severidade. Sem default. */
++  readonly severity_dimension: ConcentrationSeverityDimension
++  readonly severity_scale: SeverityScale
++
++  /** Abaixo desta cobertura de unidades, a amostra não sustenta o consolidado. */
++  readonly minimum_coverage_bp: number
++}
++
++export type ContributingCaseRule =
++  | { readonly mode: "top_n"; readonly n: number }
++  | { readonly mode: "until_share_bp"; readonly share_bp: number }
++  | { readonly mode: "min_individual_share_bp"; readonly share_bp: number }
++
++/**
++ * Materialidade de conflito — três dimensões DISTINTAS.
++ *
++ * A versão anterior usava um único `material_share_bp` para duas grandezas
++ * diferentes, e isso é erro dimensional, não de nomenclatura:
++ *
++ *   `1000 bp` vs `2500 bp` tem **diferença absoluta** de 1500 bp e **divergência
++ *   relativa** de 6000 bp. Comparar a primeira contra um limiar pensado para a
++ *   segunda esconde o conflito; comparar `0` vs `2000` contra o mesmo limiar o
++ *   torna material por coincidência numérica.
++ *
++ * Cada dimensão tem agora seu campo, e nenhum serve de sinônimo do outro.
++ */
++export interface CrossSourceConflictConfig {
++  /** (A) Diferença ABSOLUTA, na unidade da métrica. */
++  readonly material_absolute_count: number
++  readonly material_amount_cents: number
++  /** Diferença absoluta entre métricas cuja UNIDADE já é basis points. */
++  readonly material_absolute_basis_points: number
++
++  /**
++   * (B) Divergência RELATIVA entre as versões: amplitude ÷ maior versão.
++   * Mede "quanto as fontes discordam entre si".
++   */
++  readonly material_relative_difference_bp: number
++
++  /**
++   * (C) Participação da amplitude num TOTAL real do período.
++   * Só existe quando a disputa declara `total_for_share`. Mede "quanto a
++   * divergência pesa no consolidado" — pergunta diferente de (B).
++   */
++  readonly material_share_bp: number
++
++  /**
++   * Campos onde qualquer divergência é material, independentemente do tamanho.
++   * Data de venda e identidade não têm "diferença pequena": ou batem ou não.
++   */
++  readonly structural_fields: readonly string[]
++
++  /**
++   * Escala de severidade sobre uma medida RELATIVA em basis points.
++   *
++   * Classifica `share_of_total_bp` quando existe total real, senão
++   * `relative_difference_bp`. As duas são relativas e em bp — mesma dimensão,
++   * então a mesma escala é legítima. Diferença absoluta NÃO entra aqui.
++   */
++  readonly severity_by_relative_bp: SeverityScale
++
++  /**
++   * Severidade de conflito estrutural (data, identidade).
++   *
++   * Existe porque a escala acima é relativa, e divergência de data não tem
++   * denominador — a diferença é em dias, não em proporção. Sem este campo o
++   * detector teria que inventar uma conversão.
++   */
++  readonly structural_severity: Severity
++}
++
++/**
++ * Alvo de concentração. Conjunto FECHADO — nenhuma heurística de "semana crítica".
++ *
++ * `same_day`      o dia isolado mais concentrado. Não precisa de referência.
++ * `calendar_month` o mês calendário deslocado a partir da data de referência.
++ * `next_n_days`   os próximos N dias corridos, referência inclusive.
++ *
++ * As duas últimas exigem `reference_date` explícita na entrada: `Date.now` faria
++ * o mesmo dado produzir eventos diferentes conforme a hora da execução.
++ *
++ * Dias ÚTEIS não estão aqui de propósito: exigiriam calendário de feriados
++ * governado, que não existe.
++ */
++export type DueWindow =
++  | { readonly mode: "same_day" }
++  | { readonly mode: "calendar_month"; readonly months_ahead: number }
++  | { readonly mode: "next_n_days"; readonly days: number }
++
++/**
++ * Dimensão sobre a qual a severidade do Detector C é classificada.
++ *
++ * Participação em QUANTIDADE e em VALOR respondem a perguntas diferentes: uma
++ * data com muitos contratos pequenos e uma data com poucos contratos grandes
++ * produzem leituras opostas. Escolher em silêncio faria uma se passar pela outra.
++ */
++export type FirstDueSeverityDimension = "share_count_bp" | "share_amount_bp"
++
++export interface FirstDueConcentrationConfig {
++  readonly window: DueWindow
++
++  // ── Materialidade: quatro dimensões distintas, nenhuma é sinônimo ──
++  /** Contagem ABSOLUTA de contratos vencendo no alvo. */
++  readonly material_count: number
++  /** Participação em QUANTIDADE: contratos no alvo ÷ elegíveis. */
++  readonly material_share_count_bp: number
++  /** Valor ABSOLUTO exposto no alvo, em centavos. */
++  readonly material_amount_cents: number
++  /** Participação em VALOR: valor no alvo ÷ valor elegível. */
++  readonly material_share_amount_bp: number
++
++  /** Qual participação governa a severidade. Sem default. */
++  readonly severity_dimension: FirstDueSeverityDimension
++  readonly severity_scale: SeverityScale
++
++  /** Abaixo disto a amostra é pequena demais para afirmar concentração. */
++  readonly minimum_sample_size: number
++}
++
++/**
++ * Métrica agregada sobre a qual o impacto de um caso é medido. Conjunto FECHADO.
++ *
++ * Não existe mecanismo genérico por nome de campo: cada métrica traz uma
++ * semântica própria de participação e de qualidade, e um `Record<string,
++ * unknown>` esconderia justamente isso.
++ */
++export type SingleCaseMetric = "amount_sum_cents" | "amount_mean_cents" | "case_count"
++
++/**
++ * Dimensão sobre a qual a severidade do Detector D é classificada.
++ *
++ * `relative_delta_bp` e `share_of_total_bp` são coisas diferentes, ainda que as
++ * duas se expressem em basis points:
++ *
++ *   relative_delta_bp   quanto o agregado MUDA se o caso sair (base: sem o caso)
++ *   share_of_total_bp   quanto o caso REPRESENTA do total (base: com o caso)
++ *
++ * Um caso que dobra a média tem `relative_delta_bp = 10000` e pode ter
++ * participação pequena. Um caso que é metade do volume tem
++ * `share_of_total_bp = 5000` e pode mover pouco o agregado se o resto for
++ * homogêneo. Escolher em silêncio faria as duas leituras se passarem uma pela
++ * outra.
++ */
++export type SingleCaseSeverityDimension = "relative_delta_bp" | "share_of_total_bp"
++
++export interface MaterialSingleCaseConfig {
++  /**
++   * Métricas que este detector aceita analisar. Precisa ser não-vazia, e a
++   * métrica pedida na entrada tem de estar aqui — pedir uma métrica fora da
++   * lista é recusa, não escolha silenciosa de outra.
++   */
++  readonly supported_metrics: readonly SingleCaseMetric[]
++
++  /**
++   * Mínimo de casos que a população precisa manter DEPOIS da remoção.
++   *
++   * Remover o único caso deixa população vazia: média de nada não é zero, é
++   * `EMPTY_DENOMINATOR`. A primitive contrafactual já impõe isso; este número
++   * define quão pequena a população pode ficar e ainda sustentar a afirmação.
++   */
++  readonly min_population_after_removal: number
++
++  // ── Materialidade: três dimensões distintas, nenhuma é sinônimo da outra ──
++  /**
++   * Delta ABSOLUTO das métricas MONETÁRIAS, em centavos.
++   *
++   * Não serve para contagem: comparar "1 caso" contra um limiar em centavos
++   * trataria um caso como um centavo, e a política monetária decidiria se um
++   * evento de contagem sai. Unidades diferentes, limiares diferentes.
++   */
++  readonly material_absolute_delta_cents: number
++  /** Delta ABSOLUTO da métrica de CONTAGEM, em casos. Nunca convertido em dinheiro. */
++  readonly material_count_delta: number
++  /** Mudança RELATIVA do agregado, em basis points. Pode ser negativa ou >10000. */
++  readonly material_relative_delta_bp: number
++  /** PARTICIPAÇÃO do caso no total, em basis points. Só existe se for parte-do-todo. */
++  readonly material_share_of_total_bp: number
++
++  /** Qual das duas dimensões governa a severidade. Sem default. */
++  readonly severity_dimension: SingleCaseSeverityDimension
++  readonly severity_scale: SeverityScale
++}
++
++export interface CoverageConfig {
++  readonly degraded_below_bp: number
++  readonly emit_event_below_bp: number
++}
++
++export interface DetectorConfig {
++  readonly config_version: string
++  /** IANA. Nunca o fuso da máquina. */
++  readonly businessTimezone: string
++  readonly similarity_threshold_bp: number
++  readonly installmentConcentration: InstallmentConcentrationConfig
++  readonly crossSourceConflict: CrossSourceConflictConfig
++  readonly firstDueConcentration: FirstDueConcentrationConfig
++  readonly materialSingleCase: MaterialSingleCaseConfig
++  readonly coverage: CoverageConfig
++}
++
++// ─── Validação ────────────────────────────────────────────────────────────────
++
++const SEVERITIES: readonly Severity[] = ["info", "low", "medium", "high", "critical"]
++const SEMVER = /^\d+\.\d+\.\d+$/
++
++function isPlainObject(v: unknown): v is Record<string, unknown> {
++  return typeof v === "object" && v !== null && !Array.isArray(v)
++}
++
++class ConfigIssues {
++  readonly list: string[] = []
++
++  add(path: string, message: string): void {
++    this.list.push(`${path}: ${message}`)
++  }
++
++  requirePositiveInt(value: unknown, path: string, min = 0): number | null {
++    if (typeof value !== "number" || !Number.isSafeInteger(value)) {
++      this.add(path, "obrigatório e precisa ser inteiro exato")
++      return null
++    }
++    if (value < min) {
++      this.add(path, `precisa ser >= ${min}`)
++      return null
++    }
++    return value
++  }
++
++  requireBp(value: unknown, path: string): number | null {
++    const n = this.requirePositiveInt(value, path)
++    if (n === null) return null
++    if (n > 10000) {
++      this.add(path, "basis points não podem passar de 10000")
++      return null
++    }
++    return n
++  }
++}
++
++/**
++ * Fuso horário: precisa ser IANA reconhecido pelo runtime.
++ *
++ * `Intl.DateTimeFormat` lança `RangeError` para zona desconhecida — é a única
++ * verificação confiável, e ela não depende do fuso da máquina.
++ */
++export function isValidTimezone(tz: unknown): tz is string {
++  if (typeof tz !== "string" || tz.length === 0) return false
++  try {
++    new Intl.DateTimeFormat("en-US", { timeZone: tz })
++    return true
++  } catch {
++    return false
++  }
++}
++
++function validateSeverityScale(raw: unknown, path: string, issues: ConfigIssues): void {
++  if (!Array.isArray(raw) || raw.length === 0) {
++    issues.add(path, "escala de severidade obrigatória e não vazia")
++    return
++  }
++
++  // `Array.isArray` sobre `unknown` narrowa para `any[]`. Reafirmar como
++  // `unknown[]` mantém a checagem ligada dentro do laço.
++  const value: readonly unknown[] = raw
++
++  let anterior: number | null = null
++  value.forEach((banda, i) => {
++    const p = `${path}[${i}]`
++    if (!isPlainObject(banda)) {
++      issues.add(p, "banda precisa ser objeto")
++      return
++    }
++    const at = issues.requirePositiveInt(banda["at_least"], `${p}.at_least`)
++    if (!SEVERITIES.includes(banda["severity"] as Severity)) {
++      issues.add(`${p}.severity`, `precisa ser uma de ${SEVERITIES.join(", ")}`)
++    }
++    // Escala não monotônica é ambígua: dois valores poderiam classificar o mesmo
++    // número de formas diferentes conforme a ordem de avaliação.
++    if (at !== null && anterior !== null && at <= anterior) {
++      issues.add(p, "as bandas precisam ser estritamente crescentes por at_least")
++    }
++    if (at !== null) anterior = at
++  })
++
++  const primeira = value[0]
++  if (isPlainObject(primeira) && primeira["at_least"] !== 0) {
++    issues.add(`${path}[0].at_least`, "a primeira banda precisa começar em 0 para cobrir todo o domínio")
++  }
++}
++
++const SINGLE_CASE_METRICS: readonly SingleCaseMetric[] = [
++  "amount_sum_cents",
++  "amount_mean_cents",
++  "case_count",
++]
++
++/** Lista fechada e não-vazia. Métrica fora dela é recusa, não fallback. */
++function validateSupportedMetrics(value: unknown, path: string, issues: ConfigIssues): void {
++  if (!Array.isArray(value) || value.length === 0) {
++    issues.add(path, "lista não-vazia de métricas suportadas")
++    return
++  }
++  for (const [i, m] of value.entries()) {
++    if (!SINGLE_CASE_METRICS.includes(m as SingleCaseMetric)) {
++      issues.add(`${path}[${i}]`, `métrica desconhecida: ${String(m)}`)
++    }
++  }
++}
++
++function validateContributingCaseRule(value: unknown, path: string, issues: ConfigIssues): void {
++  if (!isPlainObject(value)) {
++    issues.add(path, "regra de caso contribuinte obrigatória")
++    return
++  }
++  const mode = value["mode"]
++  if (mode === "top_n") {
++    issues.requirePositiveInt(value["n"], `${path}.n`, 1)
++  } else if (mode === "until_share_bp" || mode === "min_individual_share_bp") {
++    issues.requireBp(value["share_bp"], `${path}.share_bp`)
++  } else {
++    issues.add(`${path}.mode`, "precisa ser top_n, until_share_bp ou min_individual_share_bp")
++  }
++}
++
++function validateWindow(value: unknown, path: string, issues: ConfigIssues): void {
++  if (!isPlainObject(value)) {
++    issues.add(path, "janela obrigatória")
++    return
++  }
++  const mode = value["mode"]
++  if (mode === "same_day") {
++    // Não tem parâmetro: o alvo é o dia isolado mais concentrado.
++    return
++  }
++  if (mode === "calendar_month") {
++    // `months_ahead: 0` é o mês da própria referência — legítimo, então o mínimo
++    // é zero e não um.
++    if (!Number.isSafeInteger(value["months_ahead"]) || (value["months_ahead"] as number) < 0) {
++      issues.add(`${path}.months_ahead`, "inteiro exato >= 0")
++    }
++    return
++  }
++  if (mode === "next_n_days") {
++    issues.requirePositiveInt(value["days"], `${path}.days`, 1)
++    return
++  }
++  issues.add(`${path}.mode`, "precisa ser same_day, calendar_month ou next_n_days")
++}
++
++/**
++ * Valida e devolve a configuração, ou aborta.
++ *
++ * Não há caminho parcial: uma configuração com metade dos campos não roda com a
++ * outra metade em default.
++ */
++export function validateDetectorConfig(raw: unknown): DetectorConfig {
++  const issues = new ConfigIssues()
++
++  if (!isPlainObject(raw)) {
++    throw new GatewayError("NOT_ALLOWED", "Configuração de detectores recusada", [
++      "$: configuração precisa ser um objeto",
++    ])
++  }
++
++  if (typeof raw["config_version"] !== "string" || !SEMVER.test(raw["config_version"])) {
++    issues.add("config_version", "obrigatório, formato x.y.z")
++  }
++
++  if (!isValidTimezone(raw["businessTimezone"])) {
++    issues.add("businessTimezone", "fuso IANA obrigatório e reconhecido pelo runtime")
++  }
++
++  issues.requireBp(raw["similarity_threshold_bp"], "similarity_threshold_bp")
++
++  // ── installmentConcentration ──
++  const inst = raw["installmentConcentration"]
++  if (!isPlainObject(inst)) {
++    issues.add("installmentConcentration", "obrigatório")
++  } else {
++    // O limiar de parcelas é INVARIANTE GOVERNADA, não parâmetro.
++    //
++    // `19` vem do briefing do Bloco 1 §14 Caso A e é a única regra de faixa
++    // aprovada. Aceitar 20 aqui deixaria a config suprimir concentração real —
++    // e o detector publicaria uma fórmula contradizendo o próprio número.
++    // Enquanto não houver nova decisão de negócio, qualquer outro valor é
++    // recusado. Isto NÃO é default: config sem o campo também é recusada.
++    if (inst["installment_threshold"] !== APPROVED_THRESHOLDS.installment_threshold) {
++      issues.add(
++        "installmentConcentration.installment_threshold",
++        `precisa ser exatamente ${APPROVED_THRESHOLDS.installment_threshold} — regra de negócio aprovada, não parâmetro configurável`,
++      )
++    }
++    issues.requirePositiveInt(inst["minimum_sample_size"], "installmentConcentration.minimum_sample_size", 1)
++    issues.requirePositiveInt(inst["material_count_above"], "installmentConcentration.material_count_above")
++    issues.requireBp(inst["material_share_count_bp"], "installmentConcentration.material_share_count_bp")
++    issues.requireBp(inst["material_share_amount_bp"], "installmentConcentration.material_share_amount_bp")
++    issues.requirePositiveInt(inst["material_amount_cents"], "installmentConcentration.material_amount_cents")
++    issues.requireBp(inst["minimum_coverage_bp"], "installmentConcentration.minimum_coverage_bp")
++    if (inst["severity_dimension"] !== "share_count_bp" && inst["severity_dimension"] !== "share_amount_bp") {
++      issues.add(
++        "installmentConcentration.severity_dimension",
++        "precisa ser share_count_bp ou share_amount_bp — a política não pode ficar implícita",
++      )
++    }
++    validateContributingCaseRule(
++      inst["contributing_case_rule"],
++      "installmentConcentration.contributing_case_rule",
++      issues,
++    )
++    validateSeverityScale(
++      inst["severity_scale"],
++      "installmentConcentration.severity_scale",
++      issues,
++    )
++  }
++
++  // ── crossSourceConflict ──
++  const conf = raw["crossSourceConflict"]
++  if (!isPlainObject(conf)) {
++    issues.add("crossSourceConflict", "obrigatório")
++  } else {
++    issues.requirePositiveInt(conf["material_absolute_count"], "crossSourceConflict.material_absolute_count")
++    issues.requirePositiveInt(conf["material_amount_cents"], "crossSourceConflict.material_amount_cents")
++    issues.requireBp(
++      conf["material_absolute_basis_points"],
++      "crossSourceConflict.material_absolute_basis_points",
++    )
++    issues.requireBp(
++      conf["material_relative_difference_bp"],
++      "crossSourceConflict.material_relative_difference_bp",
++    )
++    issues.requireBp(conf["material_share_bp"], "crossSourceConflict.material_share_bp")
++    if (!Array.isArray(conf["structural_fields"])) {
++      issues.add("crossSourceConflict.structural_fields", "obrigatório (pode ser lista vazia)")
++    }
++    if (!SEVERITIES.includes(conf["structural_severity"] as Severity)) {
++      issues.add("crossSourceConflict.structural_severity", `precisa ser uma de ${SEVERITIES.join(", ")}`)
++    }
++    validateSeverityScale(conf["severity_by_relative_bp"], "crossSourceConflict.severity_by_relative_bp", issues)
++  }
++
++  // ── firstDueConcentration ──
++  const due = raw["firstDueConcentration"]
++  if (!isPlainObject(due)) {
++    issues.add("firstDueConcentration", "obrigatório")
++  } else {
++    validateWindow(due["window"], "firstDueConcentration.window", issues)
++    issues.requirePositiveInt(due["material_count"], "firstDueConcentration.material_count")
++    issues.requireBp(due["material_share_count_bp"], "firstDueConcentration.material_share_count_bp")
++    issues.requirePositiveInt(
++      due["material_amount_cents"],
++      "firstDueConcentration.material_amount_cents",
++    )
++    issues.requireBp(due["material_share_amount_bp"], "firstDueConcentration.material_share_amount_bp")
++    issues.requirePositiveInt(due["minimum_sample_size"], "firstDueConcentration.minimum_sample_size", 1)
++    if (
++      due["severity_dimension"] !== "share_count_bp" &&
++      due["severity_dimension"] !== "share_amount_bp"
++    ) {
++      issues.add(
++        "firstDueConcentration.severity_dimension",
++        "precisa ser share_count_bp ou share_amount_bp — a política não pode ficar implícita",
++      )
++    }
++    validateSeverityScale(due["severity_scale"], "firstDueConcentration.severity_scale", issues)
++  }
++
++  // ── materialSingleCase ──
++  const single = raw["materialSingleCase"]
++  if (!isPlainObject(single)) {
++    issues.add("materialSingleCase", "obrigatório")
++  } else {
++    issues.requirePositiveInt(
++      single["min_population_after_removal"],
++      "materialSingleCase.min_population_after_removal",
++      1,
++    )
++    issues.requirePositiveInt(
++      single["material_absolute_delta_cents"],
++      "materialSingleCase.material_absolute_delta_cents",
++    )
++    // Obrigatório de forma independente: se `case_count` está habilitado e este
++    // limiar falta, a config é recusada. Sem default, sem conversão de unidade.
++    issues.requirePositiveInt(
++      single["material_count_delta"],
++      "materialSingleCase.material_count_delta",
++      1,
++    )
++    // Mudança RELATIVA não é participação: pode ser negativa (remover um estorno
++    // levanta o agregado) e pode passar de 10000 bp (um caso que triplica a
++    // média). Validar como basis_points — 0..10000 — recusaria limiares
++    // legítimos, que é o defeito dimensional que o stub da Fase 2.1 tinha.
++    if (!Number.isSafeInteger(single["material_relative_delta_bp"])) {
++      issues.add(
++        "materialSingleCase.material_relative_delta_bp",
++        "inteiro exato em basis points; pode ser negativo ou maior que 10000 — é mudança relativa, não participação",
++      )
++    }
++    // Participação, por outro lado, é 0..10000 por construção.
++    issues.requireBp(
++      single["material_share_of_total_bp"],
++      "materialSingleCase.material_share_of_total_bp",
++    )
++    validateSupportedMetrics(single["supported_metrics"], "materialSingleCase.supported_metrics", issues)
++    if (
++      single["severity_dimension"] !== "relative_delta_bp" &&
++      single["severity_dimension"] !== "share_of_total_bp"
++    ) {
++      issues.add(
++        "materialSingleCase.severity_dimension",
++        "precisa ser relative_delta_bp ou share_of_total_bp — a política não pode ficar implícita",
++      )
++    }
++    validateSeverityScale(single["severity_scale"], "materialSingleCase.severity_scale", issues)
++  }
++
++  // ── coverage ──
++  const cov = raw["coverage"]
++  if (!isPlainObject(cov)) {
++    issues.add("coverage", "obrigatório")
++  } else {
++    const degraded = issues.requireBp(cov["degraded_below_bp"], "coverage.degraded_below_bp")
++    const emit = issues.requireBp(cov["emit_event_below_bp"], "coverage.emit_event_below_bp")
++    if (degraded !== null && emit !== null && emit > degraded) {
++      issues.add(
++        "coverage.emit_event_below_bp",
++        "emitir evento com cobertura MAIOR do que a que já degrada é incoerente",
++      )
++    }
++  }
++
++  if (issues.list.length > 0) {
++    throw new GatewayError("NOT_ALLOWED", "Configuração de detectores recusada", issues.list)
++  }
++
++  return Object.freeze(raw as unknown as DetectorConfig)
++}
+diff --git a/intelligence/detectors/src/first-due-date-concentration.ts b/intelligence/detectors/src/first-due-date-concentration.ts
+new file mode 100644
+index 0000000..995c793
+--- /dev/null
++++ b/intelligence/detectors/src/first-due-date-concentration.ts
+@@ -0,0 +1,848 @@
++/**
++ * Detector C — concentração de primeira data de vencimento.
++ *
++ * Mede a DISTRIBUIÇÃO OBSERVADA das primeiras datas de vencimento e aponta o
++ * alvo mais concentrado.
++ *
++ * ─── O que este detector NÃO faz ──────────────────────────────────────────────
++ *
++ * Não mede inadimplência futura. Não estima probabilidade de atraso. Não afirma
++ * que uma data causará default, nem que os contratos daquele dia vão deixar de
++ * pagar. Não produz `forecast`, `confidence_bp` nem faixa projetada.
++ *
++ * A distinção não é retórica. "Nove contratos vencem em 04/09, 75% da carteira
++ * elegível" é verificável por contagem — qualquer pessoa reconta e confere.
++ * "Esses contratos têm 12% de chance de atrasar" é um modelo, e não existe modelo
++ * governado na Creditum. A fixture original do Caso C trazia uma
++ * `inadimplencia_projetada_primeira_parcela`; era lacuna, então nenhum número
++ * falso saiu, mas o nome afirmava uma projeção que o detector não sustenta.
++ *
++ * Concentração de vencimento é um fato de CAIXA e de OPERAÇÃO: no dia 04/09 a
++ * régua de cobrança recebe nove contratos em vez de dois. Isso já é acionável sem
++ * nenhuma previsão.
++ *
++ * ─── Quatro grandezas que não se substituem ───────────────────────────────────
++ *
++ *   contract_count      contratos vencendo no alvo                  (QUANTIDADE)
++ *   share_count_bp      contratos no alvo ÷ elegíveis               (PARTE, qtd)
++ *   amount_cents        valor exposto no alvo                       (VALOR)
++ *   share_amount_bp     valor no alvo ÷ valor elegível              (PARTE, valor)
++ *
++ * Muitos contratos pequenos e poucos contratos grandes produzem leituras opostas
++ * nas participações. Qual governa a severidade é decisão de configuração.
++ *
++ * Função pura: sem rede, disco, env, relógio implícito, aleatoriedade ou mutação.
++ * Só `observed`, `calculated` e `gap` — nenhuma inferência, nenhuma previsão.
++ */
++
++import { GatewayError } from "../../gateway/src/errors"
++import { toEvent } from "../../gateway/src/factory"
++import { deepFreeze } from "../../gateway/src/immutability"
++import type { Evidence, IntelligenceEvent, Snapshot } from "../../gateway/src/types"
++import type { CanonicalUnitResult } from "./canonical-units"
++import type { DetectorConfig, DueWindow, FirstDueSeverityDimension, Severity } from "./config"
++import { calendarMonthWindow, isWithinWindow, nextNDaysWindow } from "./dates"
++import type { BusinessDate, DateWindow } from "./dates"
++import { gap, isOk, observed, parseDateISO, ratio, sumCents } from "./engine"
++import type { Metric } from "./engine"
++import { isPartOfWhole } from "./part-of-whole"
++import { classifySeverity } from "./severity"
++import { compareCodeUnits, structuralId } from "./structural-id"
++
++export const DETECTOR_ID = "det.first_due_concentration"
++/** SemVer. Muda quando a regra observável muda — nunca data nem hash. */
++export const DETECTOR_VERSION = "1.0.0"
++
++const EVENT_TYPE = "first_due_date_concentration"
++
++// ─── Entrada ──────────────────────────────────────────────────────────────────
++
++export interface DueContractRecord {
++  /** Pseudônimo estável. NUNCA nome, CPF, telefone ou e-mail. */
++  readonly subject_ref: string
++  /** Já canonicalizada por D13. O detector não executa heurística própria. */
++  readonly unit: CanonicalUnitResult
++  /**
++   * Primeira data de vencimento, como veio da fonte governada.
++   *
++   * `unknown` de propósito: `04/08/2026` e `2026-08-04` são a mesma data e as
++   * duas formas existem na planilha real. A canonicalização é do detector, via
++   * `parseDateISO` — determinística, calendário real, sem `new Date(string)`.
++   * Ausente = `null`, e ausência nunca vira hoje nem fim do mês.
++   */
++  readonly first_due_date_raw: unknown
++  readonly amount_cents: number | null
++  readonly evidence_refs: readonly string[]
++  readonly snapshot_id: string
++}
++
++export interface UnitCoverage {
++  readonly expected_units: number
++  readonly reporting_units: number
++  readonly ratio_bp: number
++}
++
++export interface FirstDueDetectorInput {
++  readonly detected_at: string
++  readonly period_start: string
++  readonly period_end: string
++  readonly contracts: readonly DueContractRecord[]
++  /** Conjunto governado que sustenta os refs. Não é o store inteiro. */
++  readonly snapshots: readonly Snapshot[]
++  readonly evidence: readonly Evidence[]
++  /** Evidência `computed`/`aggregate` que sustenta os agregados. Obrigatória. */
++  readonly aggregate_evidence_ref: string
++  /**
++   * Data de referência das janelas relativas. EXPLÍCITA.
++   *
++   * Obrigatória para `calendar_month` e `next_n_days`; ignorada em `same_day`.
++   * Sem ela, `Date.now` faria o mesmo dado produzir eventos diferentes conforme
++   * a hora da execução — e o `event_id` deixaria de ser estável.
++   */
++  readonly reference_date?: BusinessDate
++  readonly unit_coverage?: UnitCoverage
++}
++
++// ─── Saída ────────────────────────────────────────────────────────────────────
++
++/** Por que um contrato saiu do denominador. Nenhum vira hoje, zero ou fim do mês. */
++export type DueExclusionReason = "MISSING_DUE_DATE" | "INVALID_DUE_DATE"
++
++export interface DuePopulation {
++  readonly total_records: number
++  readonly eligible_contracts: number
++  readonly excluded: Readonly<Record<DueExclusionReason, number>>
++  /** Elegíveis ÷ total, em basis points. Dimensão distinta da cobertura de unidades. */
++  readonly eligibility_ratio_bp: Metric<number>
++}
++
++/** Um dia canônico e o que vence nele. */
++export interface DueBucket {
++  readonly date: BusinessDate
++  readonly contract_count: number
++  readonly share_count_bp: Metric<number>
++  readonly amount_cents: Metric<number>
++  readonly share_amount_bp: Metric<number>
++  readonly subject_refs: readonly string[]
++  readonly evidence_refs: readonly string[]
++}
++
++/** O alvo de concentração — um dia ou uma janela de dias. */
++export interface ConcentrationTarget
++  extends Omit<DueBucket, "date"> {
++  readonly window: DateWindow
++  /** Os dias canônicos que o alvo cobre. Vazio quando nada vence na janela. */
++  readonly dates: readonly BusinessDate[]
++}
++
++export type NotEmittedReason =
++  | "NOT_MATERIAL"
++  | "SEVERITY_DIMENSION_UNAVAILABLE"
++  | "DATA_NOT_AVAILABLE"
++  | "EMPTY_DENOMINATOR"
++  | "INSUFFICIENT_SAMPLE"
++
++export interface FirstDueSummary {
++  readonly event_id: string
++  readonly population: DuePopulation
++  /** Todos os dias com vencimento, em ordem canônica. Nada descartado. */
++  readonly buckets: readonly DueBucket[]
++  /** O alvo escolhido pela janela configurada. `null` sem elegíveis. */
++  readonly target: ConcentrationTarget | null
++  /**
++   * Como o empate foi resolvido, quando houve. Regra TÉCNICA de determinismo,
++   * não política de materialidade.
++   */
++  readonly tie_break?: string
++  readonly severity: Severity | null
++  readonly severity_dimension: FirstDueSeverityDimension
++  readonly severity_gap?: string
++  readonly quality_status: "ok" | "degraded" | "conflicted" | "insufficient"
++  readonly material: boolean
++  readonly non_material_reason?: string
++  readonly emitted: boolean
++  readonly not_emitted_reason?: NotEmittedReason
++}
++
++export interface FirstDueResult {
++  readonly event: IntelligenceEvent | null
++  readonly summary: FirstDueSummary
++}
++
++// ─── Fórmulas ─────────────────────────────────────────────────────────────────
++//
++// Descrevem a operação executada, e nada além. Sem linguagem causal ou futura.
++
++const FORMULA_SHARE_COUNT =
++  "count(elegiveis where first_due_date in target) / count(elegiveis)"
++const FORMULA_COUNT = "count(elegiveis where first_due_date in target)"
++const FORMULA_AMOUNT = "sum(amount_cents where first_due_date in target)"
++const FORMULA_SHARE_AMOUNT =
++  "sum(amount_cents where first_due_date in target) / sum(amount_cents elegiveis)"
++const FORMULA_ELIGIBILITY = "count(elegiveis) / count(registros)"
++
++// ─── Precondições ─────────────────────────────────────────────────────────────
++
++interface EscopoGovernado {
++  readonly source_system: string
++  readonly dataset_id: string
++}
++
++function assertPrecondicoes(
++  input: FirstDueDetectorInput,
++  janela: DueWindow,
++): Map<string, EscopoGovernado> {
++  const problemas: string[] = []
++  const snapshotPorId = new Map(input.snapshots.map((s) => [s.snapshot_id, s]))
++  const evidencePorId = new Map(input.evidence.map((e) => [e.evidence_id, e]))
++  const escopos = new Map<string, EscopoGovernado>()
++
++  for (const c of input.contracts) {
++    const onde = `contrato ${c.subject_ref}`
++
++    if (!/^subj_[a-f0-9]{16}$/.test(c.subject_ref)) {
++      problemas.push(`${onde}: subject_ref precisa ser pseudônimo estável`)
++    }
++
++    const snap = snapshotPorId.get(c.snapshot_id)
++    if (snap === undefined) {
++      problemas.push(`${onde}: snapshot inexistente no conjunto governado: ${c.snapshot_id}`)
++      continue
++    }
++
++    if (c.evidence_refs.length === 0) {
++      problemas.push(`${onde}: sem evidência — nenhum número individual sem lastro`)
++    }
++    for (const ref of c.evidence_refs) {
++      const ev = evidencePorId.get(ref)
++      if (ev === undefined) {
++        problemas.push(`${onde}: evidência inexistente: ${ref}`)
++        continue
++      }
++      if (ev.snapshot_id !== c.snapshot_id) {
++        problemas.push(
++          `${onde}: evidência ${ref} pertence ao snapshot ${ev.snapshot_id}, não a ${c.snapshot_id}`,
++        )
++        continue
++      }
++      if (ev.locator.dataset_id !== snap.dataset_id) {
++        problemas.push(
++          `${onde}: evidência ${ref} localiza o dataset "${ev.locator.dataset_id}" mas o snapshot é do dataset "${snap.dataset_id}"`,
++        )
++      }
++    }
++
++    escopos.set(c.snapshot_id, {
++      source_system: snap.source_system,
++      dataset_id: snap.dataset_id,
++    })
++  }
++
++  conferirEvidenciaAgregada(input.aggregate_evidence_ref, evidencePorId, escopos, problemas)
++
++  // Janela relativa sem referência explícita é recusa, não `Date.now`.
++  if (janela.mode !== "same_day" && input.reference_date === undefined) {
++    problemas.push(
++      "janela: reference_date obrigatória para janelas relativas — o relógio do processo não é entrada governada",
++    )
++  }
++
++  if (problemas.length > 0) {
++    throw new GatewayError(
++      "SCHEMA_INVALID",
++      "Lastro insuficiente para medir concentração de vencimento",
++      problemas,
++    )
++  }
++
++  return escopos
++}
++
++function conferirEvidenciaAgregada(
++  ref: string,
++  evidencePorId: ReadonlyMap<string, Evidence>,
++  escopos: ReadonlyMap<string, EscopoGovernado>,
++  problemas: string[],
++): void {
++  const ev = evidencePorId.get(ref)
++  if (ev === undefined) {
++    problemas.push(`agregados: evidência inexistente: ${ref}`)
++    return
++  }
++  if (ev.kind !== "computed" && ev.kind !== "aggregate") {
++    problemas.push(
++      `agregados: evidência ${ref} é do tipo "${ev.kind}"; agregado exige computed ou aggregate`,
++    )
++    return
++  }
++  if (ev.kind === "computed" && ev.formula === undefined) {
++    problemas.push(`agregados: evidência computed sem fórmula`)
++    return
++  }
++
++  const alvos = [...escopos.entries()]
++  if (alvos.length > 1) {
++    // FALHA FECHADA, e não escolha arbitrária — mesma lição de A e D.
++    //
++    // `Evidence.locator` carrega UM `dataset_id`. Um agregado que atravessa dois
++    // datasets não é sustentado por uma evidência que aponta para um deles.
++    //
++    // LIMITAÇÃO REGISTRADA: agregação multi-dataset exige contrato de evidência
++    // com escopo composto. Decisão de arquitetura pendente.
++    const legivel = alvos
++      .map(([snap, e]) => `${snap}/${e.dataset_id}`)
++      .sort(compareCodeUnits)
++      .join(", ")
++    problemas.push(
++      `agregados: os contratos cobrem ${alvos.length} escopos governados (${legivel}), ` +
++        `mas o localizador de evidência expressa um único dataset_id. Falha fechada.`,
++    )
++    return
++  }
++
++  const [unico] = alvos
++  if (unico === undefined) return // sem contratos: nenhum agregado é afirmado
++
++  const [snapshotDaAgregacao, escopo] = unico
++  if (ev.snapshot_id !== snapshotDaAgregacao) {
++    problemas.push(
++      `agregados: evidência ${ref} pertence ao snapshot ${ev.snapshot_id}, mas o agregado é do snapshot ${snapshotDaAgregacao}`,
++    )
++  }
++  if (ev.locator.dataset_id !== escopo.dataset_id) {
++    problemas.push(
++      `agregados: evidência ${ref} localiza o dataset "${ev.locator.dataset_id}", mas o agregado é do dataset "${escopo.dataset_id}"`,
++    )
++  }
++}
++
++// ─── População ────────────────────────────────────────────────────────────────
++
++interface Elegivel {
++  readonly contrato: DueContractRecord
++  readonly date: BusinessDate
++}
++
++interface Particao {
++  readonly elegiveis: readonly Elegivel[]
++  readonly population: DuePopulation
++}
++
++/**
++ * Canonicaliza e particiona.
++ *
++ * `parseDateISO` valida o calendário de verdade: `31/02/2026` é inválido, não
++ * `03/03`. Data ausente e data inválida são exclusões DIFERENTES — a primeira é
++ * dado que não veio, a segunda é dado que veio errado, e confundi-las esconderia
++ * um problema de ingestão atrás de um problema de cobertura.
++ */
++function particionar(input: FirstDueDetectorInput): Particao {
++  const elegiveis: Elegivel[] = []
++  let ausente = 0
++  let invalida = 0
++
++  for (const c of input.contracts) {
++    if (c.first_due_date_raw === null || c.first_due_date_raw === undefined) {
++      ausente += 1
++      continue
++    }
++    const canonica = parseDateISO(c.first_due_date_raw)
++    if (canonica === null) {
++      // NUNCA corrigir heuristicamente. Sem "provavelmente era isto".
++      invalida += 1
++      continue
++    }
++    elegiveis.push({ contrato: c, date: canonica })
++  }
++
++  const total = input.contracts.length
++  const eligibilityRatio =
++    total === 0
++      ? gap<number>("EMPTY_DENOMINATOR", "calculated", "nenhum registro para avaliar")
++      : toBp(ratio(observed(elegiveis.length), observed(total), FORMULA_ELIGIBILITY))
++
++  return {
++    elegiveis,
++    population: {
++      total_records: total,
++      eligible_contracts: elegiveis.length,
++      excluded: { MISSING_DUE_DATE: ausente, INVALID_DUE_DATE: invalida },
++      eligibility_ratio_bp: eligibilityRatio,
++    },
++  }
++}
++
++function toBp(m: Metric<{ bps: number }>): Metric<number> {
++  return isOk(m) ? observed(m.value.bps) : m
++}
++
++/** Soma exata; ausência em QUALQUER parcela torna o total lacuna, não zero. */
++function somarValores(itens: readonly Elegivel[], detalhe: string): Metric<number> {
++  if (itens.some((i) => i.contrato.amount_cents === null)) {
++    return gap<number>("DATA_NOT_AVAILABLE", "calculated", detalhe)
++  }
++  const total = sumCents(itens.map((i) => i.contrato.amount_cents ?? 0))
++  return total === null
++    ? gap<number>("DATA_NOT_AVAILABLE", "calculated", "soma fora da faixa exata")
++    : observed(total)
++}
++
++// ─── Buckets ──────────────────────────────────────────────────────────────────
++
++/**
++ * Um bucket por dia canônico, em ordem de data.
++ *
++ * A ordenação é por unidade de código sobre ISO normalizado — `localeCompare`
++ * dependeria do locale do runtime e tornaria a saída dependente da máquina.
++ */
++function agrupar(p: Particao): DueBucket[] {
++  const porData = new Map<BusinessDate, Elegivel[]>()
++  for (const e of p.elegiveis) {
++    const lista = porData.get(e.date) ?? []
++    lista.push(e)
++    porData.set(e.date, lista)
++  }
++
++  const totalElegivel = somarValores(p.elegiveis, "valor ausente em ao menos um elegível")
++
++  return [...porData.entries()]
++    .sort(([a], [b]) => compareCodeUnits(a, b))
++    .map(([date, itens]) => ({ date, ...medir(itens, p, totalElegivel) }))
++}
++
++/** As quatro grandezas de um conjunto de elegíveis. */
++function medir(
++  itens: readonly Elegivel[],
++  p: Particao,
++  totalElegivel: Metric<number>,
++): Omit<DueBucket, "date"> {
++  const shareCount =
++    p.elegiveis.length === 0
++      ? gap<number>("EMPTY_DENOMINATOR", "calculated", "nenhum contrato elegível")
++      : toBp(ratio(observed(itens.length), observed(p.elegiveis.length), FORMULA_SHARE_COUNT))
++
++  const valor = somarValores(itens, "valor ausente em ao menos um contrato do alvo")
++
++  return {
++    contract_count: itens.length,
++    share_count_bp: shareCount,
++    amount_cents: valor,
++    share_amount_bp: participacaoEmValor(valor, totalElegivel),
++    subject_refs: itens.map((i) => i.contrato.subject_ref).sort(compareCodeUnits),
++    evidence_refs: [...new Set(itens.flatMap((i) => [...i.contrato.evidence_refs]))].sort(
++      compareCodeUnits,
++    ),
++  }
++}
++
++/**
++ * Participação em VALOR — quando ela existe.
++ *
++ * Estorno é dado legítimo e quebra parte-do-todo: um alvo com valor líquido
++ * negativo, ou maior que o total elegível, não tem participação. `isPartOfWhole`
++ * é a mesma regra que os Detectores A e D usam.
++ *
++ * Não clampar: 10000 bp num alvo que vale três vezes o total seria um número
++ * inventado. Omitida a participação, o valor absoluto continua exato.
++ */
++function participacaoEmValor(alvo: Metric<number>, total: Metric<number>): Metric<number> {
++  if (!isOk(alvo) || !isOk(total)) {
++    return gap<number>("DATA_NOT_AVAILABLE", "calculated", "volume indisponível")
++  }
++  if (total.value === 0) {
++    return gap<number>("EMPTY_DENOMINATOR", "calculated", "volume elegível zero")
++  }
++  if (!isPartOfWhole(alvo.value, total.value)) {
++    return gap<number>(
++      "BUSINESS_RULE_PENDING",
++      "calculated",
++      "volume com sinal misto (estorno): participação em valor exige regra do CEO",
++    )
++  }
++  return toBp(ratio(observed(alvo.value), observed(total.value), FORMULA_SHARE_AMOUNT))
++}
++
++// ─── Alvo de concentração ─────────────────────────────────────────────────────
++
++interface AlvoEscolhido {
++  readonly target: ConcentrationTarget
++  readonly tie_break?: string
++}
++
++/**
++ * Escolhe o alvo de forma determinística.
++ *
++ * Para `same_day`, compara os dias entre si. Para janelas relativas, o alvo é a
++ * janela inteira — não há o que comparar, então não há empate.
++ *
++ * ─── O desempate é técnico, não política ──────────────────────────────────────
++ *
++ * Empate de concentração é comum: duas datas com o mesmo número de contratos.
++ * Alguma regra precisa existir, senão a saída dependeria da ordem de entrada e o
++ * `event_id` mudaria a cada execução com os mesmos dados.
++ *
++ * A ordem usada é: maior participação em quantidade → maior valor absoluto → data
++ * canônica ascendente. A última é pura convenção de determinismo. NENHUMA delas é
++ * política de materialidade da Creditum: qual data "merece atenção primeiro"
++ * quando duas empatam é decisão do CEO, e o campo `tie_break` registra que a
++ * escolha foi mecânica.
++ */
++function escolherAlvo(
++  buckets: readonly DueBucket[],
++  p: Particao,
++  janela: DueWindow,
++  referencia: BusinessDate | undefined,
++): AlvoEscolhido | null {
++  if (p.elegiveis.length === 0) return null
++
++  if (janela.mode !== "same_day") {
++    const window =
++      janela.mode === "calendar_month"
++        ? calendarMonthWindow(exigirReferencia(referencia), janela.months_ahead)
++        : nextNDaysWindow(exigirReferencia(referencia), janela.days)
++
++    const dentro = p.elegiveis.filter((e) => isWithinWindow(e.date, window))
++    const totalElegivel = somarValores(p.elegiveis, "valor ausente em ao menos um elegível")
++    return {
++      target: {
++        window,
++        dates: [...new Set(dentro.map((e) => e.date))].sort(compareCodeUnits),
++        ...medir(dentro, p, totalElegivel),
++      },
++    }
++  }
++
++  const ordenados = [...buckets].sort(compararConcentracao)
++
++  const vencedor = ordenados[0]
++  if (vencedor === undefined) return null
++
++  const empatados = ordenados.filter(
++    (b) =>
++      b.contract_count === vencedor.contract_count &&
++      valorComparavel(b) === valorComparavel(vencedor),
++  )
++
++  const { date, ...resto } = vencedor
++  return {
++    target: { window: { start: date, end: date }, dates: [date], ...resto },
++    ...(empatados.length > 1
++      ? {
++          tie_break:
++            `${empatados.length} datas empatadas em contagem e valor; ` +
++            `escolhida a data canônica mais antiga (${date}). ` +
++            `Regra técnica de determinismo, não política de materialidade.`,
++        }
++      : {}),
++  }
++}
++
++/**
++ * Ordem de concentração — TOTAL, nunca dependente da ordem de entrada.
++ *
++ * Exportada porque a garantia precisa ser testável diretamente. Os buckets
++ * chegam ordenados por data e `Array.prototype.sort` é estável no V8, então a
++ * data mais antiga venceria um empate mesmo sem a última comparação — por
++ * acidente do runtime, não por regra. Um comparador exportado permite provar a
++ * ordem contra entrada embaralhada, sem depender de detalhe de implementação do
++ * motor JS.
++ *
++ * A ordem é: maior participação em quantidade → maior valor absoluto → data
++ * canônica ascendente. As três são regras TÉCNICAS de determinismo. Nenhuma é
++ * política de materialidade: qual data merece atenção primeiro quando duas
++ * empatam é decisão do CEO.
++ */
++export function compararConcentracao(a: DueBucket, b: DueBucket): number {
++  const sa = isOk(a.share_count_bp) ? a.share_count_bp.value : -1
++  const sb = isOk(b.share_count_bp) ? b.share_count_bp.value : -1
++  if (sa !== sb) return sb - sa
++  const va = isOk(a.amount_cents) ? a.amount_cents.value : Number.NEGATIVE_INFINITY
++  const vb = isOk(b.amount_cents) ? b.amount_cents.value : Number.NEGATIVE_INFINITY
++  if (va !== vb) return vb - va
++  return compareCodeUnits(a.date, b.date)
++}
++
++function valorComparavel(b: DueBucket): number | null {
++  return isOk(b.amount_cents) ? b.amount_cents.value : null
++}
++
++function exigirReferencia(referencia: BusinessDate | undefined): BusinessDate {
++  if (referencia === undefined) {
++    // `assertPrecondicoes` já recusou. Se chegou aqui, a garantia foi
++    // contornada: falha fechada, nunca `?? hoje`.
++    throw new GatewayError("SCHEMA_INVALID", "Janela relativa sem reference_date", [
++      "reference_date",
++    ])
++  }
++  return referencia
++}
++
++// ─── Detector ─────────────────────────────────────────────────────────────────
++
++export function detectFirstDueDateConcentration(
++  input: FirstDueDetectorInput,
++  config: DetectorConfig,
++): FirstDueResult {
++  const cfg = config.firstDueConcentration
++
++  const escopos = assertPrecondicoes(input, cfg.window)
++
++  const particao = particionar(input)
++  const buckets = agrupar(particao)
++  const escolhido = escolherAlvo(buckets, particao, cfg.window, input.reference_date)
++  const target = escolhido?.target ?? null
++
++  const quality = resolverQualidade(input, particao, target, config)
++
++  // ── Severidade ─────────────────────────────────────────────────────────────
++  //
++  // Sobre a dimensão que a CONFIGURAÇÃO escolheu. Se ela é lacuna,
++  // `classifySeverity` NÃO é chamada: nem 0, nem `info`, nem o valor da outra
++  // dimensão. Participação inexistente não tem grau.
++  const dimensao: Metric<number> | null =
++    target === null
++      ? null
++      : cfg.severity_dimension === "share_count_bp"
++        ? target.share_count_bp
++        : target.share_amount_bp
++
++  const graduavel = dimensao !== null && isOk(dimensao) && escalaCobre(cfg, dimensao.value)
++  const severity =
++    graduavel && dimensao !== null && isOk(dimensao)
++      ? classifySeverity(cfg.severity_scale, dimensao.value)
++      : null
++  const severityGap = graduavel
++    ? undefined
++    : dimensao === null
++      ? `${cfg.severity_dimension}: sem alvo`
++      : isOk(dimensao)
++        ? `${cfg.severity_dimension}: ${dimensao.value} bp fora do domínio da escala configurada`
++        : `${cfg.severity_dimension}: ${dimensao.gap}`
++
++  const naoMaterial = motivoNaoMaterial(particao, target, cfg.minimum_sample_size)
++  const material = naoMaterial === undefined && target !== null && atingeMaterialidade(target, cfg)
++
++  const emitted = material && severity !== null
++  const notEmitted: NotEmittedReason | undefined = emitted
++    ? undefined
++    : particao.elegiveis.length === 0
++      ? "EMPTY_DENOMINATOR"
++      : material
++        ? "SEVERITY_DIMENSION_UNAVAILABLE"
++        : naoMaterial === MOTIVO_AMOSTRA
++          ? "INSUFFICIENT_SAMPLE"
++          : "NOT_MATERIAL"
++
++  const summary: FirstDueSummary = {
++    event_id: identidadeDoEvento(input, escopos, cfg.window, target),
++    population: particao.population,
++    buckets,
++    target,
++    ...(escolhido?.tie_break === undefined ? {} : { tie_break: escolhido.tie_break }),
++    severity,
++    severity_dimension: cfg.severity_dimension,
++    ...(severityGap === undefined ? {} : { severity_gap: severityGap }),
++    quality_status: quality,
++    material,
++    ...(material ? {} : { non_material_reason: naoMaterial ?? "abaixo de todos os limiares configurados" }),
++    emitted,
++    ...(notEmitted === undefined ? {} : { not_emitted_reason: notEmitted }),
++  }
++
++  // BUILD → VALIDATE → FREEZE → RETURN. `toEvent` valida e devolve a MESMA
++  // referência, então o grafo congelado é o grafo validado.
++  const event =
++    emitted && severity !== null && target !== null
++      ? construirEvento(input, escopos, summary, target, severity, quality)
++      : null
++
++  return deepFreeze({ event, summary })
++}
++
++const MOTIVO_AMOSTRA = "amostra abaixo do mínimo configurado"
++
++function motivoNaoMaterial(
++  p: Particao,
++  target: ConcentrationTarget | null,
++  minimo: number,
++): string | undefined {
++  if (p.elegiveis.length === 0) return "nenhum contrato elegível"
++  if (p.elegiveis.length < minimo) return MOTIVO_AMOSTRA
++  if (target === null) return "nenhum alvo de concentração"
++  if (target.contract_count === 0) return "nenhum contrato vencendo no alvo"
++  return undefined
++}
++
++/** Qualquer uma das quatro dimensões basta — cada uma compara o que é dela. */
++function atingeMaterialidade(
++  t: ConcentrationTarget,
++  cfg: DetectorConfig["firstDueConcentration"],
++): boolean {
++  const contagem = t.contract_count >= cfg.material_count
++  const parteContagem = isOk(t.share_count_bp) && t.share_count_bp.value >= cfg.material_share_count_bp
++  const valor = isOk(t.amount_cents) && t.amount_cents.value >= cfg.material_amount_cents
++  const parteValor =
++    isOk(t.share_amount_bp) && t.share_amount_bp.value >= cfg.material_share_amount_bp
++  return contagem || parteContagem || valor || parteValor
++}
++
++/**
++ * A escala cobre este valor?
++ *
++ * `classifySeverity` lança abaixo da primeira banda — correto para ela, mas aqui
++ * abortaria a análise inteira. Valor fora do domínio da escala é política
++ * ausente, não erro e não `info`.
++ */
++function escalaCobre(cfg: DetectorConfig["firstDueConcentration"], valor: number): boolean {
++  const primeira = cfg.severity_scale[0]
++  if (primeira === undefined) return false
++  return valor >= primeira.at_least
++}
++
++/**
++ * A qualidade é a dependência RELEVANTE mais fraca.
++ *
++ * Relevante importa: uma lacuna de participação em VALOR não invalida a
++ * concentração em QUANTIDADE, que continua exata. O que degrada é data ausente,
++ * data inválida, identidade não resolvida e cobertura insuficiente.
++ */
++function resolverQualidade(
++  input: FirstDueDetectorInput,
++  p: Particao,
++  target: ConcentrationTarget | null,
++  config: DetectorConfig,
++): "ok" | "degraded" | "conflicted" | "insufficient" {
++  if (
++    input.unit_coverage !== undefined &&
++    input.unit_coverage.ratio_bp < config.coverage.emit_event_below_bp
++  ) {
++    return "insufficient"
++  }
++  if (p.elegiveis.length === 0) return "insufficient"
++  if (target !== null && !isOk(target.share_count_bp)) return "insufficient"
++  if (p.population.excluded.INVALID_DUE_DATE > 0) return "degraded"
++  if (p.population.excluded.MISSING_DUE_DATE > 0) return "degraded"
++  if (input.contracts.some((c) => c.unit.status !== "matched")) return "degraded"
++  if (
++    input.unit_coverage !== undefined &&
++    input.unit_coverage.ratio_bp < config.coverage.degraded_below_bp
++  ) {
++    return "degraded"
++  }
++  return "ok"
++}
++
++/**
++ * Identidade lógica do evento.
++ *
++ * Composta pelo FATO governado, não pela execução: reingerir os mesmos datasets
++ * no mesmo período produz o mesmo evento, ainda que os `snapshot_id` mudem. A
++ * janela e o alvo entram porque "concentração em 04/09" e "concentração em
++ * setembro" são fatos distintos. Estruturada, nunca por gramática de delimitador.
++ */
++function identidadeDoEvento(
++  input: FirstDueDetectorInput,
++  escopos: ReadonlyMap<string, EscopoGovernado>,
++  janela: DueWindow,
++  target: ConcentrationTarget | null,
++): string {
++  const datasets = [...escopos.values()]
++    .map((e) => ({ source_system: e.source_system, dataset_id: e.dataset_id }))
++    .sort(
++      (a, b) =>
++        compareCodeUnits(a.source_system, b.source_system) ||
++        compareCodeUnits(a.dataset_id, b.dataset_id),
++    )
++
++  return structuralId(
++    "creditum:first_due_date_concentration:v1",
++    {
++      event_type: EVENT_TYPE,
++      period_start: input.period_start,
++      period_end: input.period_end,
++      window_mode: janela.mode,
++      target_start: target?.window.start ?? null,
++      target_end: target?.window.end ?? null,
++      datasets,
++    },
++    "evt",
++  )
++}
++
++function construirEvento(
++  input: FirstDueDetectorInput,
++  escopos: ReadonlyMap<string, EscopoGovernado>,
++  s: FirstDueSummary,
++  t: ConcentrationTarget,
++  severity: Severity,
++  quality: "ok" | "degraded" | "conflicted" | "insufficient",
++): IntelligenceEvent {
++  const snapshotIds = [...escopos.keys()].sort(compareCodeUnits)
++  const evidenceRefs = [...new Set([input.aggregate_evidence_ref, ...t.evidence_refs])].sort(
++    compareCodeUnits,
++  )
++
++  const bruto: unknown = {
++    event_id: s.event_id,
++    event_type: EVENT_TYPE,
++    detector_id: DETECTOR_ID,
++    detector_version: DETECTOR_VERSION,
++    snapshot_ids: snapshotIds,
++    period_start: input.period_start,
++    period_end: input.period_end,
++    detected_at: input.detected_at,
++    severity,
++    materiality: materialidade(t),
++    observed_metric: {
++      name: "contratos_com_primeiro_vencimento_no_alvo",
++      data_class: "calculated" as const,
++      unit: "count" as const,
++      value: t.contract_count,
++      formula: FORMULA_COUNT,
++    },
++    /**
++     * Sem baseline governado, LACUNA — e nomeada por observação.
++     *
++     * A fixture original trazia `inadimplencia_projetada_primeira_parcela`. Era
++     * lacuna, então nenhum número falso saiu, mas o nome afirmava uma projeção
++     * que este detector não sustenta e não pode sustentar sem modelo governado.
++     */
++    reference_metric: {
++      name: "contratos_com_primeiro_vencimento_no_alvo_referencia",
++      data_class: "gap" as const,
++      gap_reason: "DATA_NOT_AVAILABLE" as const,
++    },
++    evidence_refs: evidenceRefs,
++    data_quality: {
++      quality_status: quality,
++      ...(input.unit_coverage === undefined
++        ? {}
++        : { coverage_ratio_bp: input.unit_coverage.ratio_bp }),
++    },
++  }
++
++  return toEvent(bruto, { now: new Date(input.detected_at) })
++}
++
++/**
++ * Base da materialidade.
++ *
++ * `share_of_total_bp` é `basis_points` (0..10000) no contrato, então só entra
++ * quando a participação existe de fato. A base é `amount_cents` quando o volume
++ * existe, senão `count` — nunca declarar uma base sem o campo correspondente.
++ */
++function materialidade(t: ConcentrationTarget): unknown {
++  const parte = isOk(t.share_count_bp) ? { share_of_total_bp: t.share_count_bp.value } : {}
++
++  if (isOk(t.amount_cents)) {
++    return {
++      basis: "amount_cents",
++      amount_cents: t.amount_cents.value,
++      count: t.contract_count,
++      ...parte,
++    }
++  }
++  return { basis: "count", count: t.contract_count, ...parte }
++}
++
++export { FORMULA_COUNT, FORMULA_SHARE_COUNT, FORMULA_AMOUNT, FORMULA_SHARE_AMOUNT, FORMULA_ELIGIBILITY }
+diff --git a/intelligence/detectors/tests/config.test.ts b/intelligence/detectors/tests/config.test.ts
+new file mode 100644
+index 0000000..afb35c8
+--- /dev/null
++++ b/intelligence/detectors/tests/config.test.ts
+@@ -0,0 +1,288 @@
++/**
++ * Configuração fail-closed.
++ *
++ * O que estes testes protegem: um threshold ausente não pode cair para um valor
++ * "razoável". Se caísse, o número escolhido pelo engenheiro viraria política da
++ * Creditum no dia em que alguém o encontrasse num arquivo e assumisse aprovação.
++ */
++
++import { describe, expect, it } from "vitest"
++import { APPROVED_THRESHOLDS, BUSINESS_TIMEZONE, isValidTimezone, validateDetectorConfig } from "../src/config"
++import { GatewayError } from "../../gateway/src/errors"
++import { TEST_CONFIG } from "./test-config"
++
++function semCampo(caminho: readonly string[]): unknown {
++  const copia = structuredClone(TEST_CONFIG) as unknown as Record<string, unknown>
++  let alvo: Record<string, unknown> = copia
++  for (const parte of caminho.slice(0, -1)) {
++    alvo = alvo[parte] as Record<string, unknown>
++  }
++  delete alvo[caminho[caminho.length - 1] as string]
++  return copia
++}
++
++describe("valores com lastro", () => {
++  it("installment_threshold aprovado é 19 — briefing do Bloco 1, §14 Caso A", () => {
++    expect(APPROVED_THRESHOLDS.installment_threshold).toBe(19)
++  })
++
++  it("limiar de similaridade é o do motor, em basis points", () => {
++    expect(APPROVED_THRESHOLDS.similarity_threshold_bp).toBe(8000)
++  })
++
++  it("os aprovados são congelados — não viram default mutável", () => {
++    expect(Object.isFrozen(APPROVED_THRESHOLDS)).toBe(true)
++  })
++
++  it("o fuso da operação é explícito, não o da máquina", () => {
++    expect(BUSINESS_TIMEZONE).toBe("America/Sao_Paulo")
++  })
++})
++
++describe("não existe configuração de produção neste repositório", () => {
++  it("a config sintética usa versão 0.0.0 — nunca uma versão publicável", () => {
++    // Se algum dia um `PRODUCTION_CONFIG` aparecer, ele terá passado por
++    // aprovação de threshold. Hoje não há: o único conjunto completo de valores
++    // no repositório é o sintético, e ele se declara 0.0.0.
++    expect(TEST_CONFIG.config_version).toBe("0.0.0")
++  })
++
++  it("`src/config.ts` não exporta nenhum conjunto pronto de thresholds", async () => {
++    const modulo = (await import("../src/config")) as Record<string, unknown>
++    const exportados = Object.keys(modulo)
++    expect(exportados).not.toContain("DEFAULT_CONFIG")
++    expect(exportados).not.toContain("PRODUCTION_CONFIG")
++    expect(exportados).not.toContain("CREDITUM_CONFIG")
++  })
++})
++
++describe("config válida", () => {
++  it("aceita a configuração sintética completa", () => {
++    expect(() => validateDetectorConfig(TEST_CONFIG)).not.toThrow()
++  })
++
++  it("devolve o objeto congelado", () => {
++    expect(Object.isFrozen(validateDetectorConfig(TEST_CONFIG))).toBe(true)
++  })
++})
++
++describe("threshold ausente falha fechado", () => {
++  const obrigatorios: readonly (readonly string[])[] = [
++    ["installmentConcentration", "installment_threshold"],
++    ["installmentConcentration", "minimum_sample_size"],
++    ["installmentConcentration", "material_share_count_bp"],
++    ["installmentConcentration", "material_share_amount_bp"],
++    ["installmentConcentration", "material_amount_cents"],
++    ["installmentConcentration", "material_count_above"],
++    ["installmentConcentration", "contributing_case_rule"],
++    ["installmentConcentration", "severity_dimension"],
++    ["installmentConcentration", "severity_scale"],
++    ["installmentConcentration", "minimum_coverage_bp"],
++    ["crossSourceConflict", "material_absolute_count"],
++    ["crossSourceConflict", "material_share_bp"],
++    ["crossSourceConflict", "material_amount_cents"],
++    ["crossSourceConflict", "structural_fields"],
++    ["firstDueConcentration", "window"],
++    ["firstDueConcentration", "material_count"],
++    ["firstDueConcentration", "material_share_count_bp"],
++    ["firstDueConcentration", "material_amount_cents"],
++    ["firstDueConcentration", "material_share_amount_bp"],
++    ["firstDueConcentration", "severity_dimension"],
++    ["firstDueConcentration", "severity_scale"],
++    ["firstDueConcentration", "minimum_sample_size"],
++    ["materialSingleCase", "supported_metrics"],
++    ["materialSingleCase", "material_absolute_delta_cents"],
++    ["materialSingleCase", "material_count_delta"],
++    ["materialSingleCase", "material_relative_delta_bp"],
++    ["materialSingleCase", "material_share_of_total_bp"],
++    ["materialSingleCase", "severity_dimension"],
++    ["materialSingleCase", "severity_scale"],
++    ["materialSingleCase", "min_population_after_removal"],
++    ["coverage", "degraded_below_bp"],
++    ["coverage", "emit_event_below_bp"],
++    ["similarity_threshold_bp"],
++    ["businessTimezone"],
++    ["config_version"],
++  ]
++
++  for (const caminho of obrigatorios) {
++    it(`recusa sem ${caminho.join(".")}`, () => {
++      expect(() => validateDetectorConfig(semCampo(caminho))).toThrowError(GatewayError)
++    })
++  }
++
++  it("recusa seção inteira ausente", () => {
++    const copia = structuredClone(TEST_CONFIG) as unknown as Record<string, unknown>
++    delete copia["materialSingleCase"]
++    expect(() => validateDetectorConfig(copia)).toThrowError(/materialSingleCase/)
++  })
++
++  it("recusa entrada que não é objeto", () => {
++    for (const entrada of [null, undefined, 42, "config", []]) {
++      expect(() => validateDetectorConfig(entrada)).toThrowError(GatewayError)
++    }
++  })
++
++  it("a mensagem nomeia TODOS os campos faltantes, não só o primeiro", () => {
++    try {
++      validateDetectorConfig({ config_version: "1.0.0" })
++      expect.unreachable("deveria ter recusado")
++    } catch (e) {
++      expect((e as GatewayError).details.length).toBeGreaterThan(4)
++    }
++  })
++})
++
++describe("timezone", () => {
++  it("aceita zona IANA real", () => {
++    expect(isValidTimezone("America/Sao_Paulo")).toBe(true)
++    expect(isValidTimezone("UTC")).toBe(true)
++  })
++
++  it("recusa zona inventada", () => {
++    expect(isValidTimezone("America/Nao_Existe")).toBe(false)
++    expect(isValidTimezone("BRT")).toBe(false)
++    expect(isValidTimezone("")).toBe(false)
++    expect(isValidTimezone(null)).toBe(false)
++    expect(isValidTimezone(-3)).toBe(false)
++  })
++
++  it("config com timezone inválido é recusada", () => {
++    expect(() =>
++      validateDetectorConfig({ ...TEST_CONFIG, businessTimezone: "America/Nao_Existe" }),
++    ).toThrowError(/businessTimezone/)
++  })
++})
++
++describe("valores fora de faixa", () => {
++  it("recusa basis points acima de 10000", () => {
++    expect(() =>
++      validateDetectorConfig({ ...TEST_CONFIG, similarity_threshold_bp: 10001 }),
++    ).toThrowError(/similarity_threshold_bp/)
++  })
++
++  it("recusa inteiro não exato", () => {
++    expect(() =>
++      validateDetectorConfig({ ...TEST_CONFIG, similarity_threshold_bp: 8000.5 }),
++    ).toThrowError(/similarity_threshold_bp/)
++  })
++
++  it("recusa threshold de parcelas menor que 1", () => {
++    const c = structuredClone(TEST_CONFIG)
++    ;(c.installmentConcentration as { installment_threshold: number }).installment_threshold = 0
++    expect(() => validateDetectorConfig(c)).toThrowError(/installment_threshold/)
++  })
++})
++
++describe("o limiar de parcelas é invariante governada, não parâmetro", () => {
++  // O gate adversarial da Fase 2.3 mostrou o custo de deixá-lo configurável:
++  // uma config com 20 passava na validação, e aí um contrato de 20 parcelas
++  // saía da faixa — a configuração suprimia concentração real, e o evento ainda
++  // publicava uma fórmula dizendo "> 19". Enquanto não houver nova decisão de
++  // negócio, o único valor aceito é 19.
++  const comLimiar = (valor: unknown): unknown => {
++    const c = structuredClone(TEST_CONFIG) as unknown as Record<string, Record<string, unknown>>
++    c["installmentConcentration"]!["installment_threshold"] = valor
++    return c
++  }
++
++  it("18 é recusado", () => {
++    expect(() => validateDetectorConfig(comLimiar(18))).toThrowError(/installment_threshold/)
++  })
++
++  it("19 é aceito — é a regra aprovada", () => {
++    expect(() => validateDetectorConfig(comLimiar(19))).not.toThrow()
++    expect(validateDetectorConfig(comLimiar(19)).installmentConcentration.installment_threshold).toBe(19)
++  })
++
++  it("20 é recusado", () => {
++    expect(() => validateDetectorConfig(comLimiar(20))).toThrowError(/installment_threshold/)
++  })
++
++  it("o campo ausente também é recusado — 19 não é fallback", () => {
++    expect(() =>
++      validateDetectorConfig(semCampo(["installmentConcentration", "installment_threshold"])),
++    ).toThrowError(/installment_threshold/)
++  })
++
++  it("recusa o valor certo com o tipo errado", () => {
++    for (const errado of ["19", 19.0000001, null, true]) {
++      expect(() => validateDetectorConfig(comLimiar(errado)), `${String(errado)}`).toThrowError(
++        /installment_threshold/,
++      )
++    }
++  })
++
++  it("recusa versão de config fora do formato semver", () => {
++    expect(() => validateDetectorConfig({ ...TEST_CONFIG, config_version: "v1" })).toThrowError(
++      /config_version/,
++    )
++  })
++})
++
++describe("escala de severidade", () => {
++  const comEscala = (escala: unknown): unknown => {
++    const c = structuredClone(TEST_CONFIG) as unknown as Record<string, Record<string, unknown>>
++    c["installmentConcentration"]!["severity_scale"] = escala
++    return c
++  }
++
++  it("recusa escala vazia", () => {
++    expect(() => validateDetectorConfig(comEscala([]))).toThrowError(/severity_scale/)
++  })
++
++  it("recusa escala que não começa em 0 — deixaria valores sem classificação", () => {
++    expect(() =>
++      validateDetectorConfig(comEscala([{ at_least: 100, severity: "low" }])),
++    ).toThrowError(/at_least/)
++  })
++
++  it("recusa escala não crescente — classificação dependeria da ordem de avaliação", () => {
++    expect(() =>
++      validateDetectorConfig(
++        comEscala([
++          { at_least: 0, severity: "info" },
++          { at_least: 5000, severity: "high" },
++          { at_least: 2500, severity: "medium" },
++        ]),
++      ),
++    ).toThrowError(/crescentes/)
++  })
++
++  it("recusa banda repetida no mesmo limite", () => {
++    expect(() =>
++      validateDetectorConfig(
++        comEscala([
++          { at_least: 0, severity: "info" },
++          { at_least: 0, severity: "high" },
++        ]),
++      ),
++    ).toThrowError(/crescentes/)
++  })
++
++  it("recusa severidade inventada", () => {
++    expect(() =>
++      validateDetectorConfig(comEscala([{ at_least: 0, severity: "catastrofico" }])),
++    ).toThrowError(/severity/)
++  })
++})
++
++describe("coerência entre campos", () => {
++  it("recusa emitir evento com cobertura maior do que a que já degrada", () => {
++    const c = structuredClone(TEST_CONFIG)
++    ;(c.coverage as { emit_event_below_bp: number }).emit_event_below_bp = 9800
++    expect(() => validateDetectorConfig(c)).toThrowError(/incoerente/)
++  })
++
++  it("recusa regra de caso contribuinte com modo desconhecido", () => {
++    const c = structuredClone(TEST_CONFIG) as unknown as Record<string, Record<string, unknown>>
++    c["installmentConcentration"]!["contributing_case_rule"] = { mode: "aleatorio" }
++    expect(() => validateDetectorConfig(c)).toThrowError(/contributing_case_rule/)
++  })
++
++  it("recusa janela com modo desconhecido", () => {
++    const c = structuredClone(TEST_CONFIG) as unknown as Record<string, Record<string, unknown>>
++    c["firstDueConcentration"]!["window"] = { mode: "trimestre" }
++    expect(() => validateDetectorConfig(c)).toThrowError(/window/)
++  })
++})
+diff --git a/intelligence/detectors/tests/first-due-date-concentration.test.ts b/intelligence/detectors/tests/first-due-date-concentration.test.ts
+new file mode 100644
+index 0000000..1d23bdb
+--- /dev/null
++++ b/intelligence/detectors/tests/first-due-date-concentration.test.ts
+@@ -0,0 +1,1158 @@
++/**
++ * Detector C — concentração de primeira data de vencimento.
++ *
++ * TODOS os limiares destes testes vêm da `TEST_CONFIG` sintética e **não são
++ * política da Creditum**. O Detector C não tem nenhum threshold aprovado.
++ *
++ * O detector mede DISTRIBUIÇÃO OBSERVADA. Há testes que provam que nenhuma
++ * palavra de previsão ou causalidade atravessa a saída.
++ */
++
++import { describe, expect, it } from "vitest"
++import {
++  DETECTOR_ID,
++  DETECTOR_VERSION,
++  FORMULA_COUNT,
++  compararConcentracao,
++  detectFirstDueDateConcentration,
++} from "../src/first-due-date-concentration"
++import type {
++  DueBucket,
++  DueContractRecord,
++  FirstDueDetectorInput,
++} from "../src/first-due-date-concentration"
++import { validateDetectorConfig } from "../src/config"
++import type { DetectorConfig } from "../src/config"
++import { gap, isOk, observed } from "../src/engine"
++import { assertValid } from "../../gateway/src/contracts"
++import type { CanonicalUnitResult } from "../src/canonical-units"
++import type { Evidence, Snapshot } from "../../gateway/src/types"
++import { TEST_CONFIG } from "./test-config"
++import { rawEvidence, rawSnapshot } from "../../gateway/tests/helpers"
++
++const DETECTED_AT = "2026-08-16T09:05:00.000Z"
++
++const snapshots = [
++  rawSnapshot({ snapshot_id: "snap_vendas", source_system: "google_sheets", dataset_id: "ds_vendas" }),
++] as unknown as Snapshot[]
++
++const evidence = [
++  rawEvidence({
++    evidence_id: "ev_linha",
++    snapshot_id: "snap_vendas",
++    kind: "row",
++    locator: { dataset_id: "ds_vendas", sheet: "Vendas", row_key: "a".repeat(64) },
++  }),
++  rawEvidence({
++    evidence_id: "ev_agregado",
++    snapshot_id: "snap_vendas",
++    kind: "computed",
++    locator: { dataset_id: "ds_vendas", sheet: "Vendas", column: "Primeiro vencimento" },
++    formula: "count(elegiveis where first_due_date in target)",
++  }),
++] as unknown as Evidence[]
++
++const MATCHED: CanonicalUnitResult = {
++  status: "matched",
++  unit_id: "mogi_das_cruzes",
++  display_name: "Mogi das Cruzes",
++}
++const UNKNOWN: CanonicalUnitResult = { status: "unknown", raw_fingerprint: "u".repeat(16) }
++
++let seq = 0
++function subjectRef(): string {
++  seq += 1
++  return `subj_${seq.toString(16).padStart(16, "0")}`
++}
++
++function contrato(
++  first_due_date_raw: unknown,
++  amount_cents: number | null = 100_000,
++  unit: CanonicalUnitResult = MATCHED,
++): DueContractRecord {
++  return {
++    subject_ref: subjectRef(),
++    unit,
++    first_due_date_raw,
++    amount_cents,
++    evidence_refs: ["ev_linha"],
++    snapshot_id: "snap_vendas",
++  }
++}
++
++function entrada(
++  contracts: readonly DueContractRecord[],
++  extra: Partial<FirstDueDetectorInput> = {},
++): FirstDueDetectorInput {
++  return {
++    detected_at: DETECTED_AT,
++    period_start: "2026-08-01",
++    period_end: "2026-08-31",
++    contracts,
++    snapshots,
++    evidence,
++    aggregate_evidence_ref: "ev_agregado",
++    ...extra,
++  }
++}
++
++const detectar = (
++  contracts: readonly DueContractRecord[],
++  extra: Partial<FirstDueDetectorInput> = {},
++  config: DetectorConfig = TEST_CONFIG,
++): ReturnType<typeof detectFirstDueDateConcentration> =>
++  detectFirstDueDateConcentration(entrada(contracts, extra), config)
++
++/** Sobrescreve campos da seção sintética do Detector C. Nunca política real. */
++function comConfig(campos: Record<string, unknown>): DetectorConfig {
++  const c = structuredClone(TEST_CONFIG) as unknown as Record<string, Record<string, unknown>>
++  c["firstDueConcentration"] = { ...c["firstDueConcentration"], ...campos }
++  return c as unknown as DetectorConfig
++}
++
++const bucketDe = (r: ReturnType<typeof detectar>, date: string) =>
++  r.summary.buckets.find((b) => b.date === date)
++
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("identidade do detector", () => {
++  it("id e versão estáveis", () => {
++    expect(DETECTOR_ID).toBe("det.first_due_concentration")
++    expect(DETECTOR_VERSION).toMatch(/^\d+\.\d+\.\d+$/)
++  })
++
++  it("o Detector C não tem nenhum threshold aprovado", () => {
++    expect(TEST_CONFIG.config_version).toBe("0.0.0")
++  })
++})
++
++describe("A/B/C/D — canonicalização de data", () => {
++  // ── A ──
++  it("A — 04/08/2026 e 2026-08-04 caem no MESMO bucket", () => {
++    const r = detectar([contrato("04/08/2026"), contrato("2026-08-04"), contrato("2026-09-10")])
++    expect(r.summary.buckets).toHaveLength(2)
++    expect(bucketDe(r, "2026-08-04")?.contract_count).toBe(2)
++  })
++
++  it("A — variações de separador e dia sem zero também", () => {
++    const r = detectar([
++      contrato("04/08/2026"),
++      contrato("4/8/2026"),
++      contrato("04-08-2026"),
++      contrato("2026-08-04"),
++    ])
++    expect(r.summary.buckets).toHaveLength(1)
++    expect(bucketDe(r, "2026-08-04")?.contract_count).toBe(4)
++  })
++
++  // ── B ──
++  it("B — 04/08 e 05/08 são buckets diferentes", () => {
++    const r = detectar([contrato("04/08/2026"), contrato("05/08/2026"), contrato("05/08/2026")])
++    expect(r.summary.buckets.map((b) => b.date)).toEqual(["2026-08-04", "2026-08-05"])
++    expect(bucketDe(r, "2026-08-05")?.contract_count).toBe(2)
++  })
++
++  it("os buckets vêm em ordem canônica ascendente", () => {
++    const r = detectar([
++      contrato("2026-12-01"),
++      contrato("2026-01-15"),
++      contrato("2026-06-30"),
++    ])
++    expect(r.summary.buckets.map((b) => b.date)).toEqual([
++      "2026-01-15",
++      "2026-06-30",
++      "2026-12-01",
++    ])
++  })
++
++  // ── C ──
++  describe("C — data inválida nunca passa por parse permissivo", () => {
++    it("31/02/2026 é inválida — não vira 03/03", () => {
++      const r = detectar([contrato("31/02/2026"), ...preencher(4, "2026-08-04")])
++      expect(r.summary.population.excluded.INVALID_DUE_DATE).toBe(1)
++      expect(r.summary.buckets.map((b) => b.date)).toEqual(["2026-08-04"])
++    })
++
++    it("lixo textual é inválido, não interpretado", () => {
++      for (const ruim of ["amanhã", "próximo mês", "N/A", "-", "2026-13-01", "00/00/0000", "abc"]) {
++        const r = detectar([contrato(ruim), ...preencher(4, "2026-08-04")])
++        expect(r.summary.population.excluded.INVALID_DUE_DATE, ruim).toBe(1)
++      }
++    })
++
++    it("data inválida e data ausente são exclusões DISTINTAS", () => {
++      const r = detectar([contrato("31/02/2026"), contrato(null), ...preencher(4, "2026-08-04")])
++      expect(r.summary.population.excluded).toEqual({
++        MISSING_DUE_DATE: 1,
++        INVALID_DUE_DATE: 1,
++      })
++    })
++
++    it("contamina a qualidade", () => {
++      const r = detectar([contrato("31/02/2026"), ...preencher(4, "2026-08-04")])
++      expect(r.summary.quality_status).not.toBe("ok")
++    })
++  })
++
++  // ── D ──
++  describe("D — data ausente não vira hoje, zero nem fim do mês", () => {
++    const r = detectar([contrato(null), contrato(undefined), ...preencher(4, "2026-08-04")])
++
++    it("sai do denominador em vez de ganhar uma data", () => {
++      expect(r.summary.population.total_records).toBe(6)
++      expect(r.summary.population.eligible_contracts).toBe(4)
++      expect(r.summary.population.excluded.MISSING_DUE_DATE).toBe(2)
++    })
++
++    it("nenhum bucket recebeu contratos sem data", () => {
++      const emBuckets = r.summary.buckets.reduce((n, b) => n + b.contract_count, 0)
++      expect(emBuckets).toBe(4)
++    })
++
++    it("a exclusão é contada, não escondida", () => {
++      const e = r.summary.population.eligibility_ratio_bp
++      expect(isOk(e) && e.value).toBe(6667)
++    })
++  })
++})
++
++/** Preenche com contratos na mesma data. */
++const preencher = (n: number, date: string, valor: number | null = 100_000): DueContractRecord[] =>
++  Array.from({ length: n }, () => contrato(date, valor))
++
++/**
++ * Preenche com `n` contratos em `n` datas DISTINTAS.
++ *
++ * Necessário quando o teste quer que uma data específica seja o alvo: empilhar o
++ * resto numa única data faria ELA ser a mais concentrada, e o teste mediria o
++ * bucket errado — foi o que aconteceu na primeira versão destes testes.
++ */
++const espalhar = (n: number, valor: number | null = 100_000): DueContractRecord[] =>
++  Array.from({ length: n }, (_, i) => {
++    const dia = (i % 28) + 1
++    const mes = ((Math.floor(i / 28) + 9) % 12) + 1
++    const ano = 2027 + Math.floor(i / (28 * 12))
++    return contrato(
++      `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`,
++      valor,
++    )
++  })
++
++describe("E/F/G — denominador e distribuição", () => {
++  // ── E ──
++  it("E — nenhum elegível: EMPTY_DENOMINATOR, nunca 0%", () => {
++    const r = detectar([contrato(null), contrato("31/02/2026")])
++    expect(r.summary.population.eligible_contracts).toBe(0)
++    expect(r.summary.target).toBeNull()
++    expect(r.event).toBeNull()
++    expect(r.summary.not_emitted_reason).toBe("EMPTY_DENOMINATOR")
++    const e = r.summary.population.eligibility_ratio_bp
++    expect(isOk(e) && e.value).toBe(0)
++  })
++
++  it("E — sem nenhum registro, a própria elegibilidade é lacuna", () => {
++    const r = detectar([])
++    const e = r.summary.population.eligibility_ratio_bp
++    expect(isOk(e)).toBe(false)
++    if (!isOk(e)) expect(e.gap).toBe("EMPTY_DENOMINATOR")
++  })
++
++  // ── F ──
++  it("F — todos na mesma data: share_count = 10000 bp", () => {
++    const r = detectar(preencher(7, "2026-09-04"))
++    expect(isOk(r.summary.target?.share_count_bp ?? { gap: "x" } as never)).toBe(true)
++    const s = r.summary.target?.share_count_bp
++    expect(s !== undefined && isOk(s) && s.value).toBe(10000)
++    expect(r.summary.target?.contract_count).toBe(7)
++  })
++
++  // ── G ──
++  describe("G — distribuição 5/3/2", () => {
++    const r = detectar([
++      ...preencher(5, "2026-09-04"),
++      ...preencher(3, "2026-09-10"),
++      ...preencher(2, "2026-09-20"),
++    ])
++
++    it("os três buckets existem com as contagens certas", () => {
++      expect(r.summary.buckets.map((b) => b.contract_count)).toEqual([5, 3, 2])
++    })
++
++    it("as participações são 5000 / 3000 / 2000 bp", () => {
++      const shares = r.summary.buckets.map((b) =>
++        isOk(b.share_count_bp) ? b.share_count_bp.value : -1,
++      )
++      expect(shares).toEqual([5000, 3000, 2000])
++    })
++
++    it("o alvo é o bucket mais concentrado", () => {
++      expect(r.summary.target?.dates).toEqual(["2026-09-04"])
++      expect(r.summary.target?.contract_count).toBe(5)
++    })
++
++    it("as participações somam 10000 bp", () => {
++      const soma = r.summary.buckets.reduce(
++        (n, b) => n + (isOk(b.share_count_bp) ? b.share_count_bp.value : 0),
++        0,
++      )
++      expect(soma).toBe(10000)
++    })
++  })
++})
++
++describe("H/I — desempate e ordem", () => {
++  // ── H ──
++  describe("H — empate resolvido deterministicamente", () => {
++    const empatado = (): DueContractRecord[] => [
++      ...preencher(3, "2026-09-20"),
++      ...preencher(3, "2026-09-04"),
++      ...preencher(1, "2026-09-30"),
++    ]
++
++    it("escolhe a data canônica mais antiga", () => {
++      expect(detectar(empatado()).summary.target?.dates).toEqual(["2026-09-04"])
++    })
++
++    it("registra que a escolha foi mecânica, não política", () => {
++      const t = detectar(empatado()).summary.tie_break
++      expect(t).toBeDefined()
++      expect(t).toContain("2 datas empatadas")
++      expect(t).toContain("não política de materialidade")
++    })
++
++    it("sem empate, não há tie_break", () => {
++      const r = detectar([...preencher(5, "2026-09-04"), ...preencher(2, "2026-09-10")])
++      expect(r.summary.tie_break).toBeUndefined()
++    })
++
++    it("valor absoluto desempata antes da data", () => {
++      // Mesma contagem; a data mais recente tem valor maior.
++      const r = detectar([
++        ...preencher(2, "2026-09-04", 100_000),
++        ...preencher(2, "2026-09-20", 900_000),
++      ])
++      expect(r.summary.target?.dates).toEqual(["2026-09-20"])
++      expect(r.summary.tie_break).toBeUndefined()
++    })
++  })
++
++  // ── I ──
++  it("I — permutar a entrada não altera nada", () => {
++    const base = [
++      ...preencher(5, "2026-09-04"),
++      ...preencher(3, "2026-09-10"),
++      ...preencher(2, "2026-09-20"),
++    ]
++    const a = detectar(base)
++    const b = detectar([...base].reverse())
++    expect(structuredClone(b)).toEqual(structuredClone(a))
++  })
++
++  it("I — nem em cenário de empate", () => {
++    const base = [...preencher(3, "2026-09-20"), ...preencher(3, "2026-09-04")]
++    const a = detectar(base)
++    const b = detectar([...base].reverse())
++    expect(b.summary.target?.dates).toEqual(a.summary.target?.dates)
++    expect(b.summary.event_id).toBe(a.summary.event_id)
++  })
++})
++
++describe("J/K/L/M/N — dinheiro", () => {
++  // ── J ──
++  describe("J — valor ausente: contagem sim, dinheiro não", () => {
++    const r = detectar([
++      ...preencher(4, "2026-09-04"),
++      contrato("2026-09-04", null),
++      ...preencher(2, "2026-09-10"),
++    ])
++
++    it("a concentração em quantidade continua exata", () => {
++      const s = r.summary.target?.share_count_bp
++      expect(s !== undefined && isOk(s) && s.value).toBe(7143)
++    })
++
++    it("mas o valor do alvo é lacuna, não zero", () => {
++      const v = r.summary.target?.amount_cents
++      expect(v !== undefined && isOk(v)).toBe(false)
++      if (v !== undefined && !isOk(v)) expect(v.gap).toBe("DATA_NOT_AVAILABLE")
++    })
++
++    it("e a participação em valor também", () => {
++      const s = r.summary.target?.share_amount_bp
++      expect(s !== undefined && isOk(s)).toBe(false)
++    })
++  })
++
++  // ── K ──
++  it("K — dinheiro positivo: participação em valor correta", () => {
++    const r = detectar([
++      ...preencher(3, "2026-09-04", 300_000),
++      ...preencher(3, "2026-09-10", 100_000),
++    ])
++    // 900.000 de 1.200.000 = 7500 bp
++    const s = r.summary.target?.share_amount_bp
++    expect(s !== undefined && isOk(s) && s.value).toBe(7500)
++  })
++
++  it("K — as duas participações são grandezas distintas", () => {
++    const r = detectar([
++      ...preencher(3, "2026-09-04", 300_000),
++      ...preencher(3, "2026-09-10", 100_000),
++    ])
++    const qtd = r.summary.target?.share_count_bp
++    const val = r.summary.target?.share_amount_bp
++    expect(qtd !== undefined && isOk(qtd) && qtd.value).toBe(5000)
++    expect(val !== undefined && isOk(val) && val.value).toBe(7500)
++  })
++
++  // ── L ──
++  it("L — sinal misto: participação em valor vira lacuna, contagem intacta", () => {
++    const r = detectar([
++      ...preencher(3, "2026-09-04", 900_000),
++      contrato("2026-09-10", -2_000_000),
++      ...preencher(2, "2026-09-10", 100_000),
++    ])
++    const val = r.summary.target?.share_amount_bp
++    expect(val !== undefined && isOk(val)).toBe(false)
++    if (val !== undefined && !isOk(val)) expect(val.gap).toBe("BUSINESS_RULE_PENDING")
++
++    const qtd = r.summary.target?.share_count_bp
++    expect(qtd !== undefined && isOk(qtd) && qtd.value).toBe(5000)
++  })
++
++  it("L — nenhuma participação em valor publicada passa de 10000 bp", () => {
++    const r = detectar([
++      ...preencher(3, "2026-09-04", 900_000),
++      contrato("2026-09-10", -2_000_000),
++      ...preencher(2, "2026-09-10", 100_000),
++    ])
++    for (const b of r.summary.buckets) {
++      if (isOk(b.share_amount_bp)) expect(b.share_amount_bp.value).toBeLessThanOrEqual(10000)
++    }
++  })
++
++  // ── M ──
++  it("M — total elegível zero: participação em valor é EMPTY_DENOMINATOR", () => {
++    const r = detectar([...preencher(3, "2026-09-04", 0), ...preencher(2, "2026-09-10", 0)])
++    const val = r.summary.target?.share_amount_bp
++    expect(val !== undefined && isOk(val)).toBe(false)
++    if (val !== undefined && !isOk(val)) expect(val.gap).toBe("EMPTY_DENOMINATOR")
++  })
++
++  // ── N ──
++  describe("N — overflow falha fechado no DINHEIRO, sem derrubar a contagem", () => {
++    const r = detectar([
++      ...preencher(3, "2026-09-04", Number.MAX_SAFE_INTEGER),
++      ...preencher(2, "2026-09-10", Number.MAX_SAFE_INTEGER),
++    ])
++
++    it("o valor do alvo é lacuna, não número aproximado", () => {
++      const v = r.summary.target?.amount_cents
++      expect(v !== undefined && isOk(v)).toBe(false)
++      if (v !== undefined && !isOk(v)) expect(v.gap).toBe("DATA_NOT_AVAILABLE")
++    })
++
++    it("a participação em valor também", () => {
++      const s2 = r.summary.target?.share_amount_bp
++      expect(s2 !== undefined && isOk(s2)).toBe(false)
++    })
++
++    it("mas a concentração em QUANTIDADE segue exata — §11", () => {
++      const q = r.summary.target?.share_count_bp
++      expect(q !== undefined && isOk(q) && q.value).toBe(6000)
++    })
++
++    it("e a materialidade cai para base `count`, sem declarar valor inexistente", () => {
++      expect(r.event).not.toBeNull()
++      const m = r.event?.materiality as { basis?: string; amount_cents?: number }
++      expect(m.basis).toBe("count")
++      expect(m.amount_cents).toBeUndefined()
++    })
++  })
++})
++
++describe("O/P/Q/R — lastro falha fechado", () => {
++  const base = () => preencher(5, "2026-09-04")
++
++  it("O — evidência pendurada", () => {
++    const orfao: DueContractRecord = { ...contrato("2026-09-04"), evidence_refs: ["ev_nada"] }
++    expect(() => detectar([orfao, ...base()])).toThrowError(/evidência inexistente/)
++  })
++
++  it("O — contrato sem nenhuma evidência", () => {
++    const semLastro: DueContractRecord = { ...contrato("2026-09-04"), evidence_refs: [] }
++    expect(() => detectar([semLastro, ...base()])).toThrowError(/sem evidência/)
++  })
++
++  const outroSnap = rawSnapshot({
++    snapshot_id: "snap_outro",
++    source_system: "bitrix24",
++    dataset_id: "ds_outro",
++  }) as unknown as Snapshot
++
++  it("P — evidência agregada de snapshot errado", () => {
++    const ev = rawEvidence({
++      evidence_id: "ev_agg_outro",
++      snapshot_id: "snap_outro",
++      kind: "aggregate",
++      locator: { dataset_id: "ds_outro", sheet: "Vendas" },
++    }) as unknown as Evidence
++    expect(() =>
++      detectar(base(), {
++        snapshots: [...snapshots, outroSnap],
++        evidence: [...evidence, ev],
++        aggregate_evidence_ref: "ev_agg_outro",
++      }),
++    ).toThrowError(/snapshot/)
++  })
++
++  it("Q — snapshot certo, dataset errado no localizador", () => {
++    const ev = rawEvidence({
++      evidence_id: "ev_agg_ds_errado",
++      snapshot_id: "snap_vendas",
++      kind: "aggregate",
++      locator: { dataset_id: "ds_nao_usado", sheet: "Vendas" },
++    }) as unknown as Evidence
++    expect(() =>
++      detectar(base(), { evidence: [...evidence, ev], aggregate_evidence_ref: "ev_agg_ds_errado" }),
++    ).toThrowError(/dataset/)
++  })
++
++  it("R — multi-dataset sem evidência composta falha fechado", () => {
++    const evLinha = rawEvidence({
++      evidence_id: "ev_linha_outro",
++      snapshot_id: "snap_outro",
++      kind: "row",
++      locator: { dataset_id: "ds_outro", sheet: "Vendas", row_key: "b".repeat(64) },
++    }) as unknown as Evidence
++    const doOutro: DueContractRecord = {
++      subject_ref: subjectRef(),
++      unit: MATCHED,
++      first_due_date_raw: "2026-09-04",
++      amount_cents: 100_000,
++      evidence_refs: ["ev_linha_outro"],
++      snapshot_id: "snap_outro",
++    }
++    expect(() =>
++      detectar([...base(), doOutro], {
++        snapshots: [...snapshots, outroSnap],
++        evidence: [...evidence, evLinha],
++      }),
++    ).toThrowError(/escopos governados/)
++  })
++
++  it("a evidência agregada não aceita tipo row", () => {
++    expect(() => detectar(base(), { aggregate_evidence_ref: "ev_linha" })).toThrowError(
++      /computed ou aggregate/,
++    )
++  })
++})
++
++describe("S/T — D13 e privacidade", () => {
++  it("S — unidade ambígua não recebe identidade inventada", () => {
++    const ambigua: CanonicalUnitResult = {
++      status: "ambiguous",
++      candidates: ["presidente_prudente", "presidente_venceslau"],
++      raw_fingerprint: "a".repeat(16),
++    }
++    const r = detectar([contrato("2026-09-04", 100_000, ambigua), ...preencher(4, "2026-09-04")])
++    // Nenhuma resolução aparece: "Presidente P." não vira "Presidente Prudente".
++    const texto = JSON.stringify(r)
++    expect(texto).not.toContain("presidente_prudente")
++    expect(texto).not.toContain("Presidente")
++    expect(r.summary.quality_status).not.toBe("ok")
++  })
++
++  it("S — unidade unknown também degrada e nada sai", () => {
++    const r = detectar([contrato("2026-09-04", 100_000, UNKNOWN), ...preencher(4, "2026-09-04")])
++    expect(r.summary.quality_status).not.toBe("ok")
++    expect(JSON.stringify(r)).not.toContain("u".repeat(16))
++  })
++
++  it("T — o output só carrega pseudônimos", () => {
++    const r = detectar(preencher(5, "2026-09-04"))
++    const texto = JSON.stringify(r)
++    expect(texto).not.toContain("Maria")
++    expect(texto).not.toMatch(/\d{3}\.\d{3}\.\d{3}-\d{2}/)
++    for (const ref of r.summary.target?.subject_refs ?? []) {
++      expect(ref).toMatch(/^subj_[a-f0-9]{16}$/)
++    }
++  })
++})
++
++describe("U — boundary de materialidade por dimensão (TEST_CONFIG sintética)", () => {
++  /** Isola uma dimensão pondo as outras fora de alcance. */
++  const soDimensao = (campo: string, valor: number): DetectorConfig =>
++    comConfig({
++      material_count: 999_999,
++      material_share_count_bp: 10000,
++      material_amount_cents: Number.MAX_SAFE_INTEGER,
++      material_share_amount_bp: 10000,
++      minimum_sample_size: 1,
++      [campo]: valor,
++    })
++
++  it("contagem absoluta: 4 / 5 / 6 contra limiar 5", () => {
++    for (const [n, esperado] of [[4, false], [5, true], [6, true]] as const) {
++      const r = detectar(
++        [...preencher(n, "2026-09-04"), ...espalhar(20)],
++        {},
++        soDimensao("material_count", 5),
++      )
++      expect(r.summary.target?.dates, `${n} contratos`).toEqual(["2026-09-04"])
++      expect(r.summary.material, `${n} contratos`).toBe(esperado)
++    }
++  })
++
++  it("participação em quantidade: 2999 / 3000 / 3001 bp", () => {
++    // 3 de 10 = 3000 bp exato.
++    const r = detectar(
++      [...preencher(3, "2026-09-04"), ...espalhar(7)],
++      {},
++      soDimensao("material_share_count_bp", 3000),
++    )
++    expect(r.summary.target?.dates).toEqual(["2026-09-04"])
++    expect(r.summary.material).toBe(true)
++
++    // 2 de 10 = 2000 bp.
++    const abaixo = detectar(
++      [...preencher(2, "2026-09-04"), ...espalhar(8)],
++      {},
++      soDimensao("material_share_count_bp", 3000),
++    )
++    expect(abaixo.summary.material).toBe(false)
++  })
++
++  it("valor absoluto é independente da participação", () => {
++    const r = detectar(
++      [...preencher(2, "2026-09-04", 500_000), ...espalhar(20, 100_000)],
++      {},
++      soDimensao("material_amount_cents", 1_000_000),
++    )
++    expect(r.summary.material).toBe(true)
++    const s = r.summary.target?.share_count_bp
++    expect(s !== undefined && isOk(s) && s.value).toBeLessThan(10000)
++  })
++
++  it("um limiar de contagem não classifica centavos, e vice-versa", () => {
++    const cfg = TEST_CONFIG.firstDueConcentration
++    expect(cfg.material_count).not.toBe(cfg.material_amount_cents)
++    expect(cfg.material_share_count_bp).not.toBe(cfg.material_amount_cents)
++  })
++
++  it("amostra abaixo do mínimo não é material, e o motivo é próprio", () => {
++    const r = detectar(preencher(2, "2026-09-04"), {}, comConfig({ minimum_sample_size: 5 }))
++    expect(r.summary.material).toBe(false)
++    expect(r.summary.not_emitted_reason).toBe("INSUFFICIENT_SAMPLE")
++  })
++})
++
++describe("V — boundary de severidade (TEST_CONFIG sintética)", () => {
++  // severity_dimension = share_count_bp na TEST_CONFIG.
++  const grau = (noAlvo: number, total: number): string | null => {
++    const r = detectar([...preencher(noAlvo, "2026-09-04"), ...espalhar(total - noAlvo)])
++    // O alvo tem de ser o bucket pretendido, senão o teste mede outra coisa.
++    expect(r.summary.target?.dates).toEqual(["2026-09-04"])
++    return r.summary.severity
++  }
++
++  it("200 bp → info (faixa que começa em 0)", () => {
++    expect(grau(2, 100)).toBe("info")
++  })
++
++  it("1000 bp → low", () => {
++    expect(grau(10, 100)).toBe("low")
++  })
++
++  it("2500 bp → medium", () => {
++    expect(grau(25, 100)).toBe("medium")
++  })
++
++  it("5000 bp → high", () => {
++    expect(grau(50, 100)).toBe("high")
++  })
++
++  it("7500 bp → critical", () => {
++    expect(grau(75, 100)).toBe("critical")
++  })
++})
++
++describe("W — dimensão de severidade indisponível: sem Event, com auditoria", () => {
++  // severity_dimension = share_amount_bp, com sinal misto → participação lacuna.
++  const r = detectar(
++    [
++      ...preencher(4, "2026-09-04", 900_000),
++      contrato("2026-10-01", -5_000_000),
++      ...preencher(2, "2026-10-01", 100_000),
++    ],
++    {},
++    comConfig({ severity_dimension: "share_amount_bp", material_count: 3 }),
++  )
++
++  it("o fato É material por contagem", () => {
++    expect(r.summary.material).toBe(true)
++    expect(r.summary.target?.contract_count).toBe(4)
++  })
++
++  it("severity é null — não fabricada", () => {
++    expect(r.summary.severity).toBeNull()
++  })
++
++  it("nenhum Event é emitido", () => {
++    expect(r.event).toBeNull()
++    expect(r.summary.emitted).toBe(false)
++  })
++
++  it("o motivo é tipado e específico", () => {
++    expect(r.summary.not_emitted_reason).toBe("SEVERITY_DIMENSION_UNAVAILABLE")
++  })
++
++  it("a lacuna exata fica registrada", () => {
++    expect(r.summary.severity_gap).toContain("share_amount_bp")
++    expect(r.summary.severity_gap).toContain("BUSINESS_RULE_PENDING")
++  })
++
++  it("o resultado auditável preserva buckets, população e alvo", () => {
++    expect(r.summary.buckets.length).toBeGreaterThan(0)
++    expect(r.summary.population.eligible_contracts).toBe(7)
++    expect(r.summary.target).not.toBeNull()
++    expect(isOk(r.summary.target?.share_count_bp ?? ({ gap: "x" } as never))).toBe(true)
++  })
++
++  it("trocar para a dimensão que existe libera a emissão", () => {
++    const r2 = detectar(
++      [
++        ...preencher(4, "2026-09-04", 900_000),
++        contrato("2026-10-01", -5_000_000),
++        ...preencher(2, "2026-10-01", 100_000),
++      ],
++      {},
++      comConfig({ severity_dimension: "share_count_bp", material_count: 3 }),
++    )
++    expect(r2.summary.severity).not.toBeNull()
++    expect(r2.event).not.toBeNull()
++  })
++
++  it("participação em quantidade em lacuna também bloqueia", () => {
++    const vazio = detectar([contrato(null), contrato("lixo")])
++    expect(vazio.summary.severity).toBeNull()
++    expect(vazio.event).toBeNull()
++  })
++})
++
++describe("janelas: só as configuradas, e sempre com referência explícita", () => {
++  const distribuido = (): DueContractRecord[] => [
++    ...preencher(2, "2026-09-04"),
++    ...preencher(3, "2026-09-20"),
++    ...preencher(4, "2026-10-05"),
++  ]
++
++  it("same_day não precisa de referência", () => {
++    expect(() => detectar(distribuido(), {}, comConfig({ window: { mode: "same_day" } }))).not.toThrow()
++  })
++
++  it("calendar_month SEM reference_date falha fechado — nunca Date.now", () => {
++    expect(() =>
++      detectar(distribuido(), {}, comConfig({ window: { mode: "calendar_month", months_ahead: 1 } })),
++    ).toThrowError(/reference_date obrigatória/)
++  })
++
++  it("next_n_days SEM reference_date falha fechado", () => {
++    expect(() =>
++      detectar(distribuido(), {}, comConfig({ window: { mode: "next_n_days", days: 30 } })),
++    ).toThrowError(/reference_date obrigatória/)
++  })
++
++  it("calendar_month agrega o mês inteiro", () => {
++    const r = detectar(
++      distribuido(),
++      { reference_date: "2026-08-16" },
++      comConfig({ window: { mode: "calendar_month", months_ahead: 1 }, material_count: 1 }),
++    )
++    // Setembro: 2 + 3 = 5 contratos, de 9 elegíveis.
++    expect(r.summary.target?.contract_count).toBe(5)
++    expect(r.summary.target?.window).toEqual({ start: "2026-09-01", end: "2026-09-30" })
++    expect(r.summary.target?.dates).toEqual(["2026-09-04", "2026-09-20"])
++  })
++
++  it("next_n_days respeita a referência inclusive", () => {
++    const r = detectar(
++      distribuido(),
++      { reference_date: "2026-09-04" },
++      comConfig({ window: { mode: "next_n_days", days: 17 }, material_count: 1 }),
++    )
++    // 04/09 a 20/09 inclusive: 2 + 3 = 5.
++    expect(r.summary.target?.window).toEqual({ start: "2026-09-04", end: "2026-09-20" })
++    expect(r.summary.target?.contract_count).toBe(5)
++  })
++
++  it("janela sem nenhum vencimento produz alvo vazio, não lacuna silenciosa", () => {
++    const r = detectar(
++      distribuido(),
++      { reference_date: "2027-01-01" },
++      comConfig({ window: { mode: "next_n_days", days: 5 }, material_count: 1 }),
++    )
++    expect(r.summary.target?.contract_count).toBe(0)
++    expect(r.summary.target?.dates).toEqual([])
++    expect(r.summary.material).toBe(false)
++    expect(r.event).toBeNull()
++  })
++
++  it("os buckets diários continuam completos mesmo com janela agregada", () => {
++    const r = detectar(
++      distribuido(),
++      { reference_date: "2026-08-16" },
++      comConfig({ window: { mode: "calendar_month", months_ahead: 1 }, material_count: 1 }),
++    )
++    expect(r.summary.buckets).toHaveLength(3)
++  })
++
++  it("modo de janela inválido é recusado na config", () => {
++    expect(() => comConfigValidada({ window: { mode: "semana_critica" } })).toThrowError(/mode/)
++  })
++})
++
++describe("X/Y/Z — determinismo e identidade", () => {
++  const casos = (): DueContractRecord[] => [
++    ...preencher(5, "2026-09-04"),
++    ...preencher(2, "2026-09-10"),
++  ]
++
++  it("X — mesma entrada, config e detected_at: deep-equal", () => {
++    const c = casos()
++    expect(structuredClone(detectar(c))).toEqual(structuredClone(detectar(c)))
++  })
++
++  it("Y — reingestão com outro snapshot_id mantém a identidade", () => {
++    const c = casos()
++    const outro = rawSnapshot({
++      snapshot_id: "snap_reingerido",
++      source_system: "google_sheets",
++      dataset_id: "ds_vendas",
++    }) as unknown as Snapshot
++    const evs = evidence.map((e) => ({ ...e, snapshot_id: "snap_reingerido" })) as Evidence[]
++    const reingerido = c.map((x) => ({ ...x, snapshot_id: "snap_reingerido" }))
++
++    const a = detectar(c)
++    const b = detectar(reingerido, { snapshots: [outro], evidence: evs })
++    expect(b.summary.event_id).toBe(a.summary.event_id)
++  })
++
++  it("Z — dataset diferente com os mesmos valores muda a identidade", () => {
++    const c = casos()
++    const outro = rawSnapshot({
++      snapshot_id: "snap_outro_ds",
++      source_system: "google_sheets",
++      dataset_id: "ds_outro",
++    }) as unknown as Snapshot
++    const evs = evidence.map((e) => ({
++      ...e,
++      snapshot_id: "snap_outro_ds",
++      locator: { ...e.locator, dataset_id: "ds_outro" },
++    })) as Evidence[]
++    const noOutro = c.map((x) => ({ ...x, snapshot_id: "snap_outro_ds" }))
++
++    const a = detectar(c)
++    const b = detectar(noOutro, { snapshots: [outro], evidence: evs })
++    expect(b.summary.event_id).not.toBe(a.summary.event_id)
++  })
++
++  it("alvo diferente é fato diferente", () => {
++    const a = detectar([...preencher(5, "2026-09-04"), ...preencher(2, "2026-09-10")])
++    const b = detectar([...preencher(5, "2026-10-04"), ...preencher(2, "2026-10-10")])
++    expect(b.summary.event_id).not.toBe(a.summary.event_id)
++  })
++
++  it("modo de janela diferente é fato diferente", () => {
++    const c = casos()
++    const a = detectar(c)
++    const b = detectar(
++      c,
++      { reference_date: "2026-09-01" },
++      comConfig({ window: { mode: "calendar_month", months_ahead: 0 } }),
++    )
++    expect(b.summary.event_id).not.toBe(a.summary.event_id)
++  })
++
++  it("a política de severidade NÃO entra na identidade", () => {
++    const c = casos()
++    const a = detectar(c)
++    const b = detectar(c, {}, comConfig({ severity_dimension: "share_amount_bp" }))
++    expect(b.summary.event_id).toBe(a.summary.event_id)
++  })
++
++  it("o id casa com o padrão do contrato", () => {
++    expect(detectar(casos()).summary.event_id).toMatch(/^evt_[a-f0-9]{16}$/)
++  })
++})
++
++describe("evento válido contra o contrato", () => {
++  const r = detectar([...preencher(5, "2026-09-04"), ...preencher(2, "2026-09-10")])
++
++  it("passa schema + semântica", () => {
++    expect(r.event).not.toBeNull()
++    expect(() => assertValid("event", r.event)).not.toThrow()
++  })
++
++  it("event_type é first_due_date_concentration", () => {
++    expect(r.event?.event_type).toBe("first_due_date_concentration")
++  })
++
++  it("a métrica principal traz fórmula e contagem", () => {
++    const m = r.event?.observed_metric as { name?: string; value?: number; formula?: string }
++    expect(m.name).toBe("contratos_com_primeiro_vencimento_no_alvo")
++    expect(m.value).toBe(5)
++    expect(m.formula).toBe(FORMULA_COUNT)
++  })
++
++  it("a evidência agregada está nos refs", () => {
++    expect(r.event?.evidence_refs).toContain("ev_agregado")
++  })
++})
++
++// ── AD ──
++describe("AD — nenhuma previsão e nenhuma causalidade na saída", () => {
++  const r = detectar([...preencher(5, "2026-09-04"), ...preencher(2, "2026-09-10")])
++
++  it("o payload não contém vocabulário de previsão", () => {
++    const texto = JSON.stringify(r).toLowerCase()
++    for (const proibido of [
++      "forecast",
++      "inadimpl",
++      "delinquen",
++      "projet",
++      "expected_default",
++      "probabilidade",
++      "confidence_bp",
++      "range_low",
++      "range_high",
++    ]) {
++      expect(texto, proibido).not.toContain(proibido)
++    }
++  })
++
++  it("nem vocabulário causal", () => {
++    const texto = JSON.stringify(r).toLowerCase()
++    for (const proibido of ["caused", "causar", "responsible", "would have", "prevented", "risco de"]) {
++      expect(texto, proibido).not.toContain(proibido)
++    }
++  })
++
++  it("a classe de dado nunca é inferred nem forecast", () => {
++    const texto = JSON.stringify(r)
++    expect(texto).not.toContain('"inferred"')
++    expect(texto).not.toContain('"forecast"')
++  })
++
++  it("a referência é lacuna nomeada por observação, não por projeção", () => {
++    const m = r.event?.reference_metric as { name?: string; data_class?: string }
++    expect(m.data_class).toBe("gap")
++    expect(m.name).toContain("primeiro_vencimento")
++    expect(m.name).not.toContain("inadimplencia")
++  })
++
++  it("as fórmulas descrevem contagem e soma, não previsão", () => {
++    expect(FORMULA_COUNT).toContain("count(")
++    expect(FORMULA_COUNT.toLowerCase()).not.toMatch(/forecast|expect|project|caus/)
++  })
++})
++
++describe("AA/AB/AC — imutabilidade e ownership", () => {
++  const inputMutavel = (): FirstDueDetectorInput => {
++    const contracts: DueContractRecord[] = ["2026-09-04", "2026-09-04", "2026-09-04", "2026-09-10"].map(
++      (d) => ({
++        subject_ref: subjectRef(),
++        unit: MATCHED,
++        first_due_date_raw: d,
++        amount_cents: 100_000,
++        evidence_refs: ["ev_linha"],
++        snapshot_id: "snap_vendas",
++      }),
++    )
++    return {
++      detected_at: DETECTED_AT,
++      period_start: "2026-08-01",
++      period_end: "2026-08-31",
++      contracts,
++      snapshots,
++      evidence,
++      aggregate_evidence_ref: "ev_agregado",
++    }
++  }
++
++  it("AB — nenhum objeto do input é alcançável a partir do output", () => {
++    const input = inputMutavel()
++    const r = detectFirstDueDateConcentration(input, TEST_CONFIG)
++    const doInput = new Set<unknown>([
++      input.contracts,
++      ...input.contracts,
++      ...input.contracts.map((c) => c.evidence_refs),
++      ...input.contracts.map((c) => c.unit),
++      input.snapshots,
++      input.evidence,
++    ])
++    const visto = new WeakSet<object>()
++    const percorrer = (v: unknown): void => {
++      if (v === null || typeof v !== "object") return
++      if (visto.has(v)) return
++      visto.add(v)
++      expect(doInput.has(v)).toBe(false)
++      for (const filho of Object.values(v)) percorrer(filho)
++    }
++    percorrer(r)
++  })
++
++  describe("AC — mutar o input depois não altera o resultado", () => {
++    const input = inputMutavel()
++    const r1 = detectFirstDueDateConcentration(input, TEST_CONFIG)
++    const antes = structuredClone(r1) as unknown
++
++    it("o input É mutável e recebe a forja", () => {
++      ;(input.contracts[0]?.evidence_refs as string[]).push("forged")
++      expect(input.contracts[0]?.evidence_refs).toContain("forged")
++    })
++
++    it("e o resultado anterior segue idêntico", () => {
++      expect(structuredClone(r1)).toEqual(antes)
++      expect(JSON.stringify(r1)).not.toContain("forged")
++    })
++  })
++
++  it("AB — o input não é congelado como efeito colateral", () => {
++    const input = inputMutavel()
++    detectFirstDueDateConcentration(input, TEST_CONFIG)
++    expect(Object.isFrozen(input)).toBe(false)
++    expect(Object.isFrozen(input.contracts)).toBe(false)
++    expect(Object.isFrozen(input.contracts[0])).toBe(false)
++    expect(Object.isFrozen(input.contracts[0]?.evidence_refs)).toBe(false)
++  })
++
++  const r = detectar([...preencher(5, "2026-09-04"), ...preencher(2, "2026-09-10")])
++
++  it("AA — Object.isFrozen em cada nível do grafo", () => {
++    const alvos: readonly [string, unknown][] = [
++      ["result", r],
++      ["summary", r.summary],
++      ["population", r.summary.population],
++      ["population.excluded", r.summary.population.excluded],
++      ["buckets", r.summary.buckets],
++      ["buckets[0]", r.summary.buckets[0]],
++      ["buckets[0].share_count_bp", r.summary.buckets[0]?.share_count_bp],
++      ["buckets[0].subject_refs", r.summary.buckets[0]?.subject_refs],
++      ["target", r.summary.target],
++      ["target.window", r.summary.target?.window],
++      ["target.dates", r.summary.target?.dates],
++      ["event", r.event],
++      ["event.materiality", r.event?.materiality],
++      ["event.evidence_refs", r.event?.evidence_refs],
++      ["event.snapshot_ids", r.event?.snapshot_ids],
++      ["event.data_quality", r.event?.data_quality],
++    ]
++    for (const [nome, alvo] of alvos) {
++      expect(alvo, `${nome} deveria existir`).toBeDefined()
++      expect(Object.isFrozen(alvo), `${nome} deveria estar congelado`).toBe(true)
++    }
++  })
++
++  it("AA — cada mutação aninhada lança e o estado não muda", () => {
++    const antes = structuredClone(r) as unknown
++    const tentativas: readonly [string, () => void][] = [
++      ["population.excluded", () => ((r.summary.population.excluded as Record<string, number>).MISSING_DUE_DATE = 9)],
++      ["bucket.count", () => ((r.summary.buckets[0] as { contract_count: number }).contract_count = 0)],
++      ["share value", () => ((r.summary.buckets[0]?.share_count_bp as { value: number }).value = 0)],
++      ["buckets.push", () => (r.summary.buckets as unknown[]).push({ forged: true })],
++      ["target.dates.push", () => (r.summary.target?.dates as string[]).push("2099-01-01")],
++      ["subject_refs.push", () => (r.summary.buckets[0]?.subject_refs as string[]).push("forged")],
++      ["event.evidence_refs.push", () => (r.event?.evidence_refs as string[]).push("forged")],
++      ["materiality", () => ((r.event?.materiality as { count: number }).count = 0)],
++      ["root", () => ((r as unknown as { event: null }).event = null)],
++    ]
++    for (const [nome, mutar] of tentativas) {
++      expect(mutar, nome).toThrowError(TypeError)
++    }
++    expect(structuredClone(r)).toEqual(antes)
++  })
++
++  it("AA — resultado sem evento também é congelado por inteiro", () => {
++    const r0 = detectar([contrato(null), contrato("lixo")])
++    expect(r0.event).toBeNull()
++    expect(Object.isFrozen(r0)).toBe(true)
++    expect(Object.isFrozen(r0.summary)).toBe(true)
++    expect(Object.isFrozen(r0.summary.buckets)).toBe(true)
++    expect(() => ((r0.summary as { material: boolean }).material = true)).toThrowError(TypeError)
++  })
++})
++
++// ─────────────────────────────────────────────────────────────────────────────
++
++/** Passa a config sintética alterada pelo validador REAL. */
++function comConfigValidada(campos: Record<string, unknown>): DetectorConfig {
++  return validateDetectorConfig(comConfig(campos))
++}
++
++describe("H — a ordem de concentração é total, não herdada do runtime", () => {
++  /**
++   * Por que este bloco existe: um mutante que trocava o desempate por data por
++   * `return 0` passou por TODOS os testes anteriores. `buckets` já chega ordenado
++   * por data e `Array.sort` é estável no V8, então a data mais antiga vencia por
++   * acidente do motor. Testar o comparador direto, contra entrada embaralhada,
++   * transforma o acidente em garantia.
++   */
++  const bucket = (date: string, count: number, share: number, valor: number | null): DueBucket => ({
++    date,
++    contract_count: count,
++    share_count_bp: observed(share),
++    amount_cents: valor === null ? gap<number>("DATA_NOT_AVAILABLE", "calculated", "x") : observed(valor),
++    share_amount_bp: gap<number>("DATA_NOT_AVAILABLE", "calculated", "x"),
++    subject_refs: [],
++    evidence_refs: [],
++  })
++
++  it("participação maior vem primeiro, em qualquer ordem de entrada", () => {
++    const a = bucket("2026-12-01", 1, 1000, 100)
++    const b = bucket("2026-01-01", 5, 5000, 100)
++    expect([a, b].sort(compararConcentracao)[0]?.date).toBe("2026-01-01")
++    expect([b, a].sort(compararConcentracao)[0]?.date).toBe("2026-01-01")
++  })
++
++  it("com participação igual, o maior valor vence — nas duas ordens", () => {
++    const antigo = bucket("2026-01-01", 3, 3000, 100)
++    const rico = bucket("2026-12-01", 3, 3000, 900)
++    expect([antigo, rico].sort(compararConcentracao)[0]?.date).toBe("2026-12-01")
++    expect([rico, antigo].sort(compararConcentracao)[0]?.date).toBe("2026-12-01")
++  })
++
++  it("com participação E valor iguais, a data ascendente vence — nas duas ordens", () => {
++    const cedo = bucket("2026-01-01", 3, 3000, 500)
++    const tarde = bucket("2026-12-01", 3, 3000, 500)
++    expect([cedo, tarde].sort(compararConcentracao)[0]?.date).toBe("2026-01-01")
++    // A ordem INVERTIDA é o caso que o mutante `return 0` passava indevidamente.
++    expect([tarde, cedo].sort(compararConcentracao)[0]?.date).toBe("2026-01-01")
++  })
++
++  it("todas as permutações de três empatados dão o mesmo vencedor", () => {
++    const x = bucket("2026-03-01", 2, 2000, 100)
++    const y = bucket("2026-02-01", 2, 2000, 100)
++    const z = bucket("2026-01-01", 2, 2000, 100)
++    const permutacoes = [
++      [x, y, z], [x, z, y], [y, x, z], [y, z, x], [z, x, y], [z, y, x],
++    ]
++    const vencedores = new Set(permutacoes.map((p) => [...p].sort(compararConcentracao)[0]?.date))
++    expect(vencedores).toEqual(new Set(["2026-01-01"]))
++  })
++
++  it("o comparador é antissimétrico e transitivo nos empates", () => {
++    const cedo = bucket("2026-01-01", 3, 3000, 500)
++    const tarde = bucket("2026-12-01", 3, 3000, 500)
++    expect(compararConcentracao(cedo, tarde)).toBeLessThan(0)
++    expect(compararConcentracao(tarde, cedo)).toBeGreaterThan(0)
++    expect(compararConcentracao(cedo, cedo)).toBe(0)
++  })
++
++  it("valor em lacuna perde de valor conhecido, sem virar zero", () => {
++    const semValor = bucket("2026-01-01", 3, 3000, null)
++    const comValor = bucket("2026-12-01", 3, 3000, 1)
++    expect([semValor, comValor].sort(compararConcentracao)[0]?.date).toBe("2026-12-01")
++    expect([comValor, semValor].sort(compararConcentracao)[0]?.date).toBe("2026-12-01")
++  })
++})
+diff --git a/intelligence/detectors/tests/test-config.ts b/intelligence/detectors/tests/test-config.ts
+new file mode 100644
+index 0000000..6842ad0
+--- /dev/null
++++ b/intelligence/detectors/tests/test-config.ts
+@@ -0,0 +1,181 @@
++/**
++ * ┌───────────────────────────────────────────────────────────────────────────┐
++ * │  CONFIGURAÇÃO SINTÉTICA — NÃO É POLÍTICA DA CREDITUM                      │
++ * │                                                                           │
++ * │  Os números aqui existem para exercitar limites em teste. NENHUM deles foi │
++ * │  aprovado pelo CEO ou pelo arquiteto, e nenhum tem lastro no projeto —     │
++ * │  exceto `installment_threshold` e `similarity_threshold_bp`, que vêm de    │
++ * │  `APPROVED_THRESHOLDS`.                                                    │
++ * │                                                                           │
++ * │  Este arquivo vive em `tests/`, fora de `src/`, justamente para que código │
++ * │  de produção não consiga importá-lo por engano.                            │
++ * └───────────────────────────────────────────────────────────────────────────┘
++ */
++
++import { APPROVED_THRESHOLDS, BUSINESS_TIMEZONE } from "../src/config"
++import type { DetectorConfig, SeverityScale } from "../src/config"
++import type { CanonicalUnit, UnitCatalog, UnitNormalizerPort } from "../src/canonical-units"
++
++const ESCALA_SINTETICA: SeverityScale = [
++  { at_least: 0, severity: "info" },
++  { at_least: 1000, severity: "low" },
++  { at_least: 2500, severity: "medium" },
++  { at_least: 5000, severity: "high" },
++  { at_least: 7500, severity: "critical" },
++]
++
++/** Sintética. Ver aviso no topo do arquivo. */
++export const TEST_CONFIG: DetectorConfig = {
++  config_version: "0.0.0",
++  businessTimezone: BUSINESS_TIMEZONE,
++  similarity_threshold_bp: APPROVED_THRESHOLDS.similarity_threshold_bp,
++  installmentConcentration: {
++    installment_threshold: APPROVED_THRESHOLDS.installment_threshold,
++    minimum_sample_size: 4,
++    material_count_above: 3,
++    material_share_count_bp: 3000,
++    material_share_amount_bp: 4000,
++    material_amount_cents: 1_000_000,
++    contributing_case_rule: { mode: "top_n", n: 3 },
++    severity_dimension: "share_count_bp",
++    severity_scale: ESCALA_SINTETICA,
++    minimum_coverage_bp: 9000,
++  },
++  crossSourceConflict: {
++    material_absolute_count: 3,
++    material_amount_cents: 100_000,
++    material_absolute_basis_points: 1500,
++    material_relative_difference_bp: 4000,
++    material_share_bp: 2000,
++    structural_fields: ["sales_count", "sale_date"],
++    structural_severity: "high",
++    severity_by_relative_bp: ESCALA_SINTETICA,
++  },
++  firstDueConcentration: {
++    window: { mode: "same_day" },
++    material_count: 5,
++    material_share_count_bp: 3000,
++    material_amount_cents: 500_000,
++    material_share_amount_bp: 3000,
++    severity_dimension: "share_count_bp",
++    severity_scale: ESCALA_SINTETICA,
++    minimum_sample_size: 3,
++  },
++  materialSingleCase: {
++    supported_metrics: ["amount_sum_cents", "amount_mean_cents", "case_count"],
++    min_population_after_removal: 2,
++    material_absolute_delta_cents: 200_000,
++    material_count_delta: 1,
++    material_relative_delta_bp: 2000,
++    material_share_of_total_bp: 1000,
++    severity_dimension: "share_of_total_bp",
++    severity_scale: ESCALA_SINTETICA,
++  },
++  coverage: {
++    degraded_below_bp: 9500,
++    emit_event_below_bp: 8000,
++  },
++}
++
++export { ESCALA_SINTETICA }
++
++// Escapes, nunca o caractere literal: zero-width é invisível no editor e um
++// `git diff` inocente pode apagá-lo sem ninguém notar. Mesma razão documentada
++// em `src/lib/ceo/parse.ts`.
++const ZERO_WIDTH = new RegExp("\\u200B|\\u200C|\\u200D|\\uFEFF", "gu")
++const NBSP = new RegExp("\\u00A0", "gu")
++const DIACRITICOS = new RegExp("[\\u0300-\\u036F]", "gu")
++
++/**
++ * Normalizador de TESTE.
++ *
++ * Mínimo deliberado: acento, caixa, espaço, prefixo `grau`. **Não** é a
++ * implementação de produção — essa é `canonicalSchoolKey`/`similarity` de
++ * `src/lib/ceo/normalize.ts`, cuja fiação está bloqueada (ver relatório da
++ * Fase 2.1). O motor recebe a porta justamente para não depender de qual das
++ * duas está do outro lado.
++ */
++export const TEST_NORMALIZER: UnitNormalizerPort = {
++  comparableKey(raw: unknown): string | null {
++    // Só string e número entram. Um objeto viraria "[object Object]" e
++    // produziria chave sem significado que ainda assim pareceria válida.
++    if (typeof raw !== "string" && typeof raw !== "number") return null
++
++    const s = String(raw)
++      .replace(ZERO_WIDTH, "")
++      .replace(NBSP, " ")
++      .normalize("NFD")
++      .replace(DIACRITICOS, "")
++      .replace(/\s+/g, " ")
++      .trim()
++      .toLowerCase()
++
++    if (!s) return null
++    const tokens = s.split(" ").filter(Boolean)
++    if (tokens.length === 0) return null
++    const semPrefixo = tokens.length > 1 && tokens[0] === "grau" ? tokens.slice(1) : tokens
++    return semPrefixo.join(" ")
++  },
++
++  similarity(a: string, b: string): number {
++    if (!a || !b) return 0
++    if (a === b) return 1
++    const ta = a.split(" ").filter(Boolean)
++    const tb = b.split(" ").filter(Boolean)
++    const sa = new Set(ta)
++    let comuns = 0
++    for (const t of new Set(tb)) if (sa.has(t)) comuns++
++    // Mesmo veto estrutural de D12: contagem de palavras diferente e nenhuma
++    // palavra em comum são lugares diferentes.
++    if (comuns === 0 && ta.length !== tb.length) return 0
++    const maior = Math.max(a.length, b.length)
++    return maior === 0 ? 0 : 1 - levenshtein(a, b) / maior
++  },
++}
++
++function levenshtein(a: string, b: string): number {
++  if (a === b) return 0
++  if (!a.length) return b.length
++  if (!b.length) return a.length
++  let prev = Array.from({ length: b.length + 1 }, (_, i) => i)
++  let curr = new Array<number>(b.length + 1).fill(0)
++  for (let i = 1; i <= a.length; i++) {
++    curr[0] = i
++    for (let j = 1; j <= b.length; j++) {
++      const custo = a[i - 1] === b[j - 1] ? 0 : 1
++      curr[j] = Math.min((curr[j - 1] ?? 0) + 1, (prev[j] ?? 0) + 1, (prev[j - 1] ?? 0) + custo)
++    }
++    const troca = prev
++    prev = curr
++    curr = troca
++  }
++  return prev[b.length] ?? 0
++}
++
++/**
++ * Catálogo de TESTE — subconjunto pequeno, escolhido para exercitar o motor.
++ *
++ * **Não é o catálogo canônico da Creditum.** Aquele depende da validação em
++ * `docs/D13_CATALOG_VALIDATION.md` e da decisão do CEO (bloqueio B1).
++ * As unidades abaixo cobrem os casos difíceis reais: `santos` vs `santo amaro`
++ * (armadilha de fusão) e `alecrim` (erro de digitação).
++ */
++export function testCatalog(overrides: readonly CanonicalUnit[] = []): UnitCatalog {
++  return {
++    catalog_version: "0.0.0",
++    units: [
++      { unit_id: "sumare", display_name: "Sumaré", aliases: ["Grau Sumaré"], active: true },
++      { unit_id: "santos", display_name: "Santos", aliases: [], active: true },
++      { unit_id: "santo_amaro", display_name: "Santo Amaro", aliases: [], active: true },
++      { unit_id: "alecrim", display_name: "Alecrim", aliases: [], active: true },
++      {
++        unit_id: "mogi_das_cruzes",
++        display_name: "Mogi das Cruzes",
++        aliases: ["Mogi", "Grau Mogi"],
++        active: true,
++      },
++      { unit_id: "limeira", display_name: "Limeira", aliases: [], active: false },
++      ...overrides,
++    ],
++  }
++}
+diff --git a/intelligence/fixtures/synthetic/events/evt_c_primeiro_vencimento.json b/intelligence/fixtures/synthetic/events/evt_c_primeiro_vencimento.json
+new file mode 100644
+index 0000000..abe811a
+--- /dev/null
++++ b/intelligence/fixtures/synthetic/events/evt_c_primeiro_vencimento.json
+@@ -0,0 +1,37 @@
++{
++  "event_id": "evt_c_primeiro_vencimento_setembro",
++  "event_type": "first_due_date_concentration",
++  "detector_id": "det.first_due_concentration",
++  "detector_version": "1.0.0",
++  "snapshot_ids": [
++    "snap_2026_08_pipeline"
++  ],
++  "period_start": "2026-08-01",
++  "period_end": "2026-08-31",
++  "detected_at": "2026-08-16T09:05:00.000Z",
++  "severity": "medium",
++  "materiality": {
++    "basis": "count",
++    "count": 9,
++    "share_of_total_bp": 7500
++  },
++  "observed_metric": {
++    "name": "contratos_com_primeiro_vencimento_no_alvo",
++    "data_class": "calculated",
++    "unit": "count",
++    "value": 9,
++    "formula": "count(elegiveis where first_due_date in target)"
++  },
++  "reference_metric": {
++    "name": "contratos_com_primeiro_vencimento_no_alvo_referencia",
++    "data_class": "gap",
++    "gap_reason": "DATA_NOT_AVAILABLE"
++  },
++  "evidence_refs": [
++    "ev_c_hist_vencimento"
++  ],
++  "data_quality": {
++    "quality_status": "degraded",
++    "coverage_ratio_bp": 9500
++  }
++}

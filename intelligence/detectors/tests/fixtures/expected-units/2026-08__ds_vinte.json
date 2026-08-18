@@ -1,0 +1,72 @@
+{
+  "schema_version": "1.0.0",
+  "period": "2026-08",
+  "dataset_id": "ds_vinte",
+  "expected_units": [
+    {
+      "unit_id": "alecrim"
+    },
+    {
+      "unit_id": "bangu"
+    },
+    {
+      "unit_id": "belford_roxo"
+    },
+    {
+      "unit_id": "bezerra"
+    },
+    {
+      "unit_id": "bonsucesso"
+    },
+    {
+      "unit_id": "camaragibe"
+    },
+    {
+      "unit_id": "cariacica"
+    },
+    {
+      "unit_id": "carpina"
+    },
+    {
+      "unit_id": "curitiba"
+    },
+    {
+      "unit_id": "diadema"
+    },
+    {
+      "unit_id": "divinopolis"
+    },
+    {
+      "unit_id": "fortaleza_centro"
+    },
+    {
+      "unit_id": "joao_pessoa"
+    },
+    {
+      "unit_id": "joinville"
+    },
+    {
+      "unit_id": "limeira"
+    },
+    {
+      "unit_id": "limoeiro"
+    },
+    {
+      "unit_id": "madureira"
+    },
+    {
+      "unit_id": "manaus"
+    },
+    {
+      "unit_id": "maraba"
+    },
+    {
+      "unit_id": "maracanau"
+    }
+  ],
+  "provenance": {
+    "source_system": "fixture_teste",
+    "source_version": "1.0.0",
+    "content_hash": "8238eca526861f4b1912ba80dd8ff421ee0f62783cb14648ceff6981826fa15d"
+  }
+}

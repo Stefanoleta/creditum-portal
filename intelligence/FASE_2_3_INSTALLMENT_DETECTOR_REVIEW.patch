@@ -1,0 +1,2385 @@
+diff --git a/intelligence/detectors/src/config.ts b/intelligence/detectors/src/config.ts
+new file mode 100644
+index 0000000..f3a21ff
+--- /dev/null
++++ b/intelligence/detectors/src/config.ts
+@@ -0,0 +1,427 @@
++/**
++ * Configuração dos detectores — validada, fail-closed, sem default inventado.
++ *
++ * A regra que governa este arquivo: **não existe valor de produção que não tenha
++ * lastro documentado no projeto**. Dois têm. Os demais não, e por isso não há
++ * `DEFAULT_CONFIG` exportado — uma configuração incompleta não cai para um
++ * padrão razoável, ela é recusada.
++ *
++ * O motivo é o de sempre: um threshold plausível inventado por engenheiro vira
++ * política da Creditum no dia em que alguém o encontra num arquivo e assume que
++ * foi aprovado. Fica sem padrão até o arquiteto decidir.
++ */
++
++import { GatewayError } from "../../gateway/src/errors"
++
++// ─── Valores COM lastro no projeto ────────────────────────────────────────────
++
++/**
++ * Os únicos dois números aprovados.
++ *
++ * Não são default: são referência. A configuração continua tendo que declará-los
++ * explicitamente — para que a revisão veja o valor, não a ausência dele.
++ */
++export const APPROVED_THRESHOLDS = Object.freeze({
++  /** Briefing do Bloco 1, §14 Caso A: "contratos com mais de 19 parcelas". */
++  installment_threshold: 19,
++  /**
++   * `SUGGESTION_THRESHOLD` de `src/lib/ceo/normalize.ts`, em basis points.
++   * Calibrado contra unidades reais: alecrim/alecrin = 8600 (sugere),
++   * limeira/limoeiro = 7500 (não sugere).
++   */
++  similarity_threshold_bp: 8000,
++})
++
++/** Fuso da operação. Decisão do arquiteto na Fase 2.1. */
++export const BUSINESS_TIMEZONE = "America/Sao_Paulo"
++
++// ─── Tipos ────────────────────────────────────────────────────────────────────
++
++export type Severity = "info" | "low" | "medium" | "high" | "critical"
++
++/** Faixa de severidade: a partir de `at_least`, vale `severity`. */
++export interface SeverityBand {
++  readonly at_least: number
++  readonly severity: Severity
++}
++
++export type SeverityScale = readonly SeverityBand[]
++
++/**
++ * Dimensão sobre a qual a severidade do Detector A é classificada.
++ *
++ * Precisa ser explícita: participação em QUANTIDADE e participação em VALOR
++ * respondem a perguntas diferentes, e misturá-las em silêncio faria "poucos
++ * contratos grandes" e "muitos contratos pequenos" receberem a mesma leitura.
++ */
++export type ConcentrationSeverityDimension = "share_count_bp" | "share_amount_bp"
++
++export interface InstallmentConcentrationConfig {
++  /** Único threshold de negócio aprovado deste detector. Comparação é `> 19`. */
++  readonly installment_threshold: number
++  /** Abaixo disto a amostra é pequena demais para afirmar concentração. */
++  readonly minimum_sample_size: number
++
++  // ── Materialidade: três dimensões distintas, nenhuma serve de sinônimo ──
++  /** Contagem ABSOLUTA de contratos acima do limiar. */
++  readonly material_count_above: number
++  /** Participação em QUANTIDADE: contratos acima ÷ contratos elegíveis. */
++  readonly material_share_count_bp: number
++  /** Participação em VALOR: volume da faixa ÷ volume elegível. */
++  readonly material_share_amount_bp: number
++  /** Volume ABSOLUTO da faixa, em centavos. */
++  readonly material_amount_cents: number
++
++  readonly contributing_case_rule: ContributingCaseRule
++
++  /** Qual das duas participações governa a severidade. Sem default. */
++  readonly severity_dimension: ConcentrationSeverityDimension
++  readonly severity_scale: SeverityScale
++
++  /** Abaixo desta cobertura de unidades, a amostra não sustenta o consolidado. */
++  readonly minimum_coverage_bp: number
++}
++
++export type ContributingCaseRule =
++  | { readonly mode: "top_n"; readonly n: number }
++  | { readonly mode: "until_share_bp"; readonly share_bp: number }
++  | { readonly mode: "min_individual_share_bp"; readonly share_bp: number }
++
++/**
++ * Materialidade de conflito — três dimensões DISTINTAS.
++ *
++ * A versão anterior usava um único `material_share_bp` para duas grandezas
++ * diferentes, e isso é erro dimensional, não de nomenclatura:
++ *
++ *   `1000 bp` vs `2500 bp` tem **diferença absoluta** de 1500 bp e **divergência
++ *   relativa** de 6000 bp. Comparar a primeira contra um limiar pensado para a
++ *   segunda esconde o conflito; comparar `0` vs `2000` contra o mesmo limiar o
++ *   torna material por coincidência numérica.
++ *
++ * Cada dimensão tem agora seu campo, e nenhum serve de sinônimo do outro.
++ */
++export interface CrossSourceConflictConfig {
++  /** (A) Diferença ABSOLUTA, na unidade da métrica. */
++  readonly material_absolute_count: number
++  readonly material_amount_cents: number
++  /** Diferença absoluta entre métricas cuja UNIDADE já é basis points. */
++  readonly material_absolute_basis_points: number
++
++  /**
++   * (B) Divergência RELATIVA entre as versões: amplitude ÷ maior versão.
++   * Mede "quanto as fontes discordam entre si".
++   */
++  readonly material_relative_difference_bp: number
++
++  /**
++   * (C) Participação da amplitude num TOTAL real do período.
++   * Só existe quando a disputa declara `total_for_share`. Mede "quanto a
++   * divergência pesa no consolidado" — pergunta diferente de (B).
++   */
++  readonly material_share_bp: number
++
++  /**
++   * Campos onde qualquer divergência é material, independentemente do tamanho.
++   * Data de venda e identidade não têm "diferença pequena": ou batem ou não.
++   */
++  readonly structural_fields: readonly string[]
++
++  /**
++   * Escala de severidade sobre uma medida RELATIVA em basis points.
++   *
++   * Classifica `share_of_total_bp` quando existe total real, senão
++   * `relative_difference_bp`. As duas são relativas e em bp — mesma dimensão,
++   * então a mesma escala é legítima. Diferença absoluta NÃO entra aqui.
++   */
++  readonly severity_by_relative_bp: SeverityScale
++
++  /**
++   * Severidade de conflito estrutural (data, identidade).
++   *
++   * Existe porque a escala acima é relativa, e divergência de data não tem
++   * denominador — a diferença é em dias, não em proporção. Sem este campo o
++   * detector teria que inventar uma conversão.
++   */
++  readonly structural_severity: Severity
++}
++
++export type DueWindow =
++  | { readonly mode: "calendar_month"; readonly months_ahead: number }
++  | { readonly mode: "next_n_days"; readonly days: number }
++
++export interface FirstDueConcentrationConfig {
++  readonly window: DueWindow
++  readonly material_share_bp: number
++  readonly severity_by_share_bp: SeverityScale
++}
++
++export interface MaterialSingleCaseConfig {
++  readonly min_delta_bp: number
++  readonly min_share_of_total_bp: number
++  readonly min_population_after_removal: number
++  readonly severity_by_delta_bp: SeverityScale
++}
++
++export interface CoverageConfig {
++  readonly degraded_below_bp: number
++  readonly emit_event_below_bp: number
++}
++
++export interface DetectorConfig {
++  readonly config_version: string
++  /** IANA. Nunca o fuso da máquina. */
++  readonly businessTimezone: string
++  readonly similarity_threshold_bp: number
++  readonly installmentConcentration: InstallmentConcentrationConfig
++  readonly crossSourceConflict: CrossSourceConflictConfig
++  readonly firstDueConcentration: FirstDueConcentrationConfig
++  readonly materialSingleCase: MaterialSingleCaseConfig
++  readonly coverage: CoverageConfig
++}
++
++// ─── Validação ────────────────────────────────────────────────────────────────
++
++const SEVERITIES: readonly Severity[] = ["info", "low", "medium", "high", "critical"]
++const SEMVER = /^\d+\.\d+\.\d+$/
++
++function isPlainObject(v: unknown): v is Record<string, unknown> {
++  return typeof v === "object" && v !== null && !Array.isArray(v)
++}
++
++class ConfigIssues {
++  readonly list: string[] = []
++
++  add(path: string, message: string): void {
++    this.list.push(`${path}: ${message}`)
++  }
++
++  requirePositiveInt(value: unknown, path: string, min = 0): number | null {
++    if (typeof value !== "number" || !Number.isSafeInteger(value)) {
++      this.add(path, "obrigatório e precisa ser inteiro exato")
++      return null
++    }
++    if (value < min) {
++      this.add(path, `precisa ser >= ${min}`)
++      return null
++    }
++    return value
++  }
++
++  requireBp(value: unknown, path: string): number | null {
++    const n = this.requirePositiveInt(value, path)
++    if (n === null) return null
++    if (n > 10000) {
++      this.add(path, "basis points não podem passar de 10000")
++      return null
++    }
++    return n
++  }
++}
++
++/**
++ * Fuso horário: precisa ser IANA reconhecido pelo runtime.
++ *
++ * `Intl.DateTimeFormat` lança `RangeError` para zona desconhecida — é a única
++ * verificação confiável, e ela não depende do fuso da máquina.
++ */
++export function isValidTimezone(tz: unknown): tz is string {
++  if (typeof tz !== "string" || tz.length === 0) return false
++  try {
++    new Intl.DateTimeFormat("en-US", { timeZone: tz })
++    return true
++  } catch {
++    return false
++  }
++}
++
++function validateSeverityScale(raw: unknown, path: string, issues: ConfigIssues): void {
++  if (!Array.isArray(raw) || raw.length === 0) {
++    issues.add(path, "escala de severidade obrigatória e não vazia")
++    return
++  }
++
++  // `Array.isArray` sobre `unknown` narrowa para `any[]`. Reafirmar como
++  // `unknown[]` mantém a checagem ligada dentro do laço.
++  const value: readonly unknown[] = raw
++
++  let anterior: number | null = null
++  value.forEach((banda, i) => {
++    const p = `${path}[${i}]`
++    if (!isPlainObject(banda)) {
++      issues.add(p, "banda precisa ser objeto")
++      return
++    }
++    const at = issues.requirePositiveInt(banda["at_least"], `${p}.at_least`)
++    if (!SEVERITIES.includes(banda["severity"] as Severity)) {
++      issues.add(`${p}.severity`, `precisa ser uma de ${SEVERITIES.join(", ")}`)
++    }
++    // Escala não monotônica é ambígua: dois valores poderiam classificar o mesmo
++    // número de formas diferentes conforme a ordem de avaliação.
++    if (at !== null && anterior !== null && at <= anterior) {
++      issues.add(p, "as bandas precisam ser estritamente crescentes por at_least")
++    }
++    if (at !== null) anterior = at
++  })
++
++  const primeira = value[0]
++  if (isPlainObject(primeira) && primeira["at_least"] !== 0) {
++    issues.add(`${path}[0].at_least`, "a primeira banda precisa começar em 0 para cobrir todo o domínio")
++  }
++}
++
++function validateContributingCaseRule(value: unknown, path: string, issues: ConfigIssues): void {
++  if (!isPlainObject(value)) {
++    issues.add(path, "regra de caso contribuinte obrigatória")
++    return
++  }
++  const mode = value["mode"]
++  if (mode === "top_n") {
++    issues.requirePositiveInt(value["n"], `${path}.n`, 1)
++  } else if (mode === "until_share_bp" || mode === "min_individual_share_bp") {
++    issues.requireBp(value["share_bp"], `${path}.share_bp`)
++  } else {
++    issues.add(`${path}.mode`, "precisa ser top_n, until_share_bp ou min_individual_share_bp")
++  }
++}
++
++function validateWindow(value: unknown, path: string, issues: ConfigIssues): void {
++  if (!isPlainObject(value)) {
++    issues.add(path, "janela obrigatória")
++    return
++  }
++  const mode = value["mode"]
++  if (mode === "calendar_month") {
++    issues.requirePositiveInt(value["months_ahead"], `${path}.months_ahead`)
++  } else if (mode === "next_n_days") {
++    issues.requirePositiveInt(value["days"], `${path}.days`, 1)
++  } else {
++    issues.add(`${path}.mode`, "precisa ser calendar_month ou next_n_days")
++  }
++}
++
++/**
++ * Valida e devolve a configuração, ou aborta.
++ *
++ * Não há caminho parcial: uma configuração com metade dos campos não roda com a
++ * outra metade em default.
++ */
++export function validateDetectorConfig(raw: unknown): DetectorConfig {
++  const issues = new ConfigIssues()
++
++  if (!isPlainObject(raw)) {
++    throw new GatewayError("NOT_ALLOWED", "Configuração de detectores recusada", [
++      "$: configuração precisa ser um objeto",
++    ])
++  }
++
++  if (typeof raw["config_version"] !== "string" || !SEMVER.test(raw["config_version"])) {
++    issues.add("config_version", "obrigatório, formato x.y.z")
++  }
++
++  if (!isValidTimezone(raw["businessTimezone"])) {
++    issues.add("businessTimezone", "fuso IANA obrigatório e reconhecido pelo runtime")
++  }
++
++  issues.requireBp(raw["similarity_threshold_bp"], "similarity_threshold_bp")
++
++  // ── installmentConcentration ──
++  const inst = raw["installmentConcentration"]
++  if (!isPlainObject(inst)) {
++    issues.add("installmentConcentration", "obrigatório")
++  } else {
++    issues.requirePositiveInt(inst["installment_threshold"], "installmentConcentration.installment_threshold", 1)
++    issues.requirePositiveInt(inst["minimum_sample_size"], "installmentConcentration.minimum_sample_size", 1)
++    issues.requirePositiveInt(inst["material_count_above"], "installmentConcentration.material_count_above")
++    issues.requireBp(inst["material_share_count_bp"], "installmentConcentration.material_share_count_bp")
++    issues.requireBp(inst["material_share_amount_bp"], "installmentConcentration.material_share_amount_bp")
++    issues.requirePositiveInt(inst["material_amount_cents"], "installmentConcentration.material_amount_cents")
++    issues.requireBp(inst["minimum_coverage_bp"], "installmentConcentration.minimum_coverage_bp")
++    if (inst["severity_dimension"] !== "share_count_bp" && inst["severity_dimension"] !== "share_amount_bp") {
++      issues.add(
++        "installmentConcentration.severity_dimension",
++        "precisa ser share_count_bp ou share_amount_bp — a política não pode ficar implícita",
++      )
++    }
++    validateContributingCaseRule(
++      inst["contributing_case_rule"],
++      "installmentConcentration.contributing_case_rule",
++      issues,
++    )
++    validateSeverityScale(
++      inst["severity_scale"],
++      "installmentConcentration.severity_scale",
++      issues,
++    )
++  }
++
++  // ── crossSourceConflict ──
++  const conf = raw["crossSourceConflict"]
++  if (!isPlainObject(conf)) {
++    issues.add("crossSourceConflict", "obrigatório")
++  } else {
++    issues.requirePositiveInt(conf["material_absolute_count"], "crossSourceConflict.material_absolute_count")
++    issues.requirePositiveInt(conf["material_amount_cents"], "crossSourceConflict.material_amount_cents")
++    issues.requireBp(
++      conf["material_absolute_basis_points"],
++      "crossSourceConflict.material_absolute_basis_points",
++    )
++    issues.requireBp(
++      conf["material_relative_difference_bp"],
++      "crossSourceConflict.material_relative_difference_bp",
++    )
++    issues.requireBp(conf["material_share_bp"], "crossSourceConflict.material_share_bp")
++    if (!Array.isArray(conf["structural_fields"])) {
++      issues.add("crossSourceConflict.structural_fields", "obrigatório (pode ser lista vazia)")
++    }
++    if (!SEVERITIES.includes(conf["structural_severity"] as Severity)) {
++      issues.add("crossSourceConflict.structural_severity", `precisa ser uma de ${SEVERITIES.join(", ")}`)
++    }
++    validateSeverityScale(conf["severity_by_relative_bp"], "crossSourceConflict.severity_by_relative_bp", issues)
++  }
++
++  // ── firstDueConcentration ──
++  const due = raw["firstDueConcentration"]
++  if (!isPlainObject(due)) {
++    issues.add("firstDueConcentration", "obrigatório")
++  } else {
++    validateWindow(due["window"], "firstDueConcentration.window", issues)
++    issues.requireBp(due["material_share_bp"], "firstDueConcentration.material_share_bp")
++    validateSeverityScale(due["severity_by_share_bp"], "firstDueConcentration.severity_by_share_bp", issues)
++  }
++
++  // ── materialSingleCase ──
++  const single = raw["materialSingleCase"]
++  if (!isPlainObject(single)) {
++    issues.add("materialSingleCase", "obrigatório")
++  } else {
++    issues.requireBp(single["min_delta_bp"], "materialSingleCase.min_delta_bp")
++    issues.requireBp(single["min_share_of_total_bp"], "materialSingleCase.min_share_of_total_bp")
++    issues.requirePositiveInt(
++      single["min_population_after_removal"],
++      "materialSingleCase.min_population_after_removal",
++      1,
++    )
++    validateSeverityScale(single["severity_by_delta_bp"], "materialSingleCase.severity_by_delta_bp", issues)
++  }
++
++  // ── coverage ──
++  const cov = raw["coverage"]
++  if (!isPlainObject(cov)) {
++    issues.add("coverage", "obrigatório")
++  } else {
++    const degraded = issues.requireBp(cov["degraded_below_bp"], "coverage.degraded_below_bp")
++    const emit = issues.requireBp(cov["emit_event_below_bp"], "coverage.emit_event_below_bp")
++    if (degraded !== null && emit !== null && emit > degraded) {
++      issues.add(
++        "coverage.emit_event_below_bp",
++        "emitir evento com cobertura MAIOR do que a que já degrada é incoerente",
++      )
++    }
++  }
++
++  if (issues.list.length > 0) {
++    throw new GatewayError("NOT_ALLOWED", "Configuração de detectores recusada", issues.list)
++  }
++
++  return Object.freeze(raw as unknown as DetectorConfig)
++}
+diff --git a/intelligence/detectors/src/installment-concentration.ts b/intelligence/detectors/src/installment-concentration.ts
+new file mode 100644
+index 0000000..490e042
+--- /dev/null
++++ b/intelligence/detectors/src/installment-concentration.ts
+@@ -0,0 +1,695 @@
++/**
++ * Detector A — concentração de parcelamento.
++ *
++ * Detecta concentração material de contratos acima do limiar de parcelas.
++ *
++ * ─── O único threshold de negócio aprovado ────────────────────────────────────
++ *
++ * `installment_threshold = 19`, do briefing do Bloco 1 §14 Caso A: *"contratos
++ * com mais de 19 parcelas"*. A comparação é **estritamente maior**: 19 parcelas
++ * NÃO entra na faixa, 20 entra. Todos os demais limiares — materialidade,
++ * severidade, seleção de caso, cobertura mínima — vêm da configuração e não têm
++ * padrão de produção.
++ *
++ * ─── Elegibilidade ────────────────────────────────────────────────────────────
++ *
++ * `installment_count` ausente **não vira zero parcelas**. Zero ou negativo é
++ * inválido no domínio — o schema `ceo` já impõe
++ * `check (installments_grau is null or installments_grau > 0)`, e as ~55
++ * linhas-fantasma da planilha real carregam justamente `Total de parcelas = 0`.
++ * Contrato inelegível sai do denominador e aparece na contagem de exclusões.
++ *
++ * ─── Duas participações que não se misturam ───────────────────────────────────
++ *
++ *   share_count_bp   contratos acima ÷ contratos elegíveis      (QUANTIDADE)
++ *   share_amount_bp  volume da faixa ÷ volume elegível          (VALOR)
++ *
++ * Poucos contratos grandes e muitos contratos pequenos produzem leituras opostas
++ * nas duas. Qual delas governa a severidade é decisão de configuração explícita.
++ *
++ * Função pura: sem rede, disco, env, relógio implícito, aleatoriedade ou mutação.
++ * Não produz inferência nem previsão — só `observed`, `calculated` e `gap`.
++ */
++
++import { GatewayError } from "../../gateway/src/errors"
++import { toEvent } from "../../gateway/src/factory"
++import type { Evidence, IntelligenceEvent, Snapshot } from "../../gateway/src/types"
++import type { CanonicalUnitResult } from "./canonical-units"
++import type { DetectorConfig, Severity } from "./config"
++import { gap, isOk, observed, ratio, sumCents } from "./engine"
++import type { Metric } from "./engine"
++import { classifySeverity } from "./severity"
++import { compareCodeUnits, structuralId } from "./structural-id"
++
++export const DETECTOR_ID = "det.installment_concentration"
++/** SemVer. Muda quando a regra observável muda — nunca data nem hash. */
++export const DETECTOR_VERSION = "1.0.0"
++
++// ─── Entrada ──────────────────────────────────────────────────────────────────
++
++export interface ContractRecord {
++  /** Pseudônimo estável. NUNCA nome, CPF, telefone ou e-mail. */
++  readonly subject_ref: string
++  /** Já canonicalizada por D13. O detector não executa heurística própria. */
++  readonly unit: CanonicalUnitResult
++  /** Ausente = `null`. Nunca zero por omissão. */
++  readonly installment_count: number | null
++  readonly amount_cents: number | null
++  readonly evidence_refs: readonly string[]
++  readonly snapshot_id: string
++}
++
++/** Referência governada. O detector não inventa baseline. */
++export interface Baseline {
++  readonly share_count_bp: number
++  /** De onde veio: período anterior, meta, histórico. Precisa ser identificável. */
++  readonly source: string
++  readonly evidence_ref: string
++}
++
++export interface UnitCoverage {
++  readonly expected_units: number
++  readonly reporting_units: number
++  readonly ratio_bp: number
++}
++
++export interface InstallmentDetectorInput {
++  readonly detected_at: string
++  readonly period_start: string
++  readonly period_end: string
++  readonly contracts: readonly ContractRecord[]
++  /** Conjunto governado que sustenta os refs. Não é o store inteiro. */
++  readonly snapshots: readonly Snapshot[]
++  readonly evidence: readonly Evidence[]
++  /** Evidência `computed` que sustenta os agregados. Obrigatória. */
++  readonly aggregate_evidence_ref: string
++  readonly baseline?: Baseline
++  /** Cobertura de UNIDADES — dimensão diferente da elegibilidade de contratos. */
++  readonly unit_coverage?: UnitCoverage
++}
++
++// ─── Saída ────────────────────────────────────────────────────────────────────
++
++/** Por que um contrato saiu do denominador. Nenhum vira zero. */
++export type ExclusionReason = "MISSING_INSTALLMENT_COUNT" | "NON_POSITIVE_INSTALLMENT_COUNT"
++
++export interface Population {
++  readonly total_records: number
++  readonly eligible_contracts: number
++  readonly contracts_above_threshold: number
++  readonly excluded: Readonly<Record<ExclusionReason, number>>
++  /** Elegíveis ÷ total, em basis points. Dimensão distinta da cobertura de unidades. */
++  readonly eligibility_ratio_bp: Metric<number>
++}
++
++export interface ConcentrationMetrics {
++  readonly share_count_bp: Metric<number>
++  readonly amount_above_cents: Metric<number>
++  readonly amount_eligible_cents: Metric<number>
++  readonly share_amount_bp: Metric<number>
++}
++
++export interface ConcentrationSummary {
++  readonly event_id: string
++  readonly population: Population
++  readonly metrics: ConcentrationMetrics
++  readonly severity: Severity
++  readonly quality_status: "ok" | "degraded" | "conflicted" | "insufficient"
++  readonly material: boolean
++  /** Por que não foi material, quando não foi. */
++  readonly non_material_reason?: string
++}
++
++export interface ConcentrationResult {
++  /** Emitido apenas quando material. Já validado contra o contrato. */
++  readonly event: IntelligenceEvent | null
++  readonly summary: ConcentrationSummary
++}
++
++// ─── Precondições ─────────────────────────────────────────────────────────────
++
++interface EscopoGovernado {
++  readonly source_system: string
++  readonly dataset_id: string
++}
++
++function assertPrecondicoes(input: InstallmentDetectorInput): Map<string, EscopoGovernado> {
++  const problemas: string[] = []
++  const snapshotPorId = new Map(input.snapshots.map((s) => [s.snapshot_id, s]))
++  const evidencePorId = new Map(input.evidence.map((e) => [e.evidence_id, e]))
++  const escopos = new Map<string, EscopoGovernado>()
++
++  const conferirRef = (ref: string, snapshotId: string, onde: string): void => {
++    const ev = evidencePorId.get(ref)
++    if (ev === undefined) {
++      problemas.push(`${onde}: evidência inexistente: ${ref}`)
++      return
++    }
++    if (ev.snapshot_id !== snapshotId) {
++      problemas.push(
++        `${onde}: evidência ${ref} pertence ao snapshot ${ev.snapshot_id}, não a ${snapshotId}`,
++      )
++      return
++    }
++    const snap = snapshotPorId.get(snapshotId)
++    if (snap !== undefined && ev.locator.dataset_id !== snap.dataset_id) {
++      problemas.push(
++        `${onde}: evidência ${ref} localiza o dataset "${ev.locator.dataset_id}" mas o snapshot é do dataset "${snap.dataset_id}"`,
++      )
++    }
++  }
++
++  for (const c of input.contracts) {
++    const onde = `contrato ${c.subject_ref}`
++
++    if (!/^subj_[a-f0-9]{16}$/.test(c.subject_ref)) {
++      problemas.push(`${onde}: subject_ref precisa ser pseudônimo estável`)
++    }
++
++    const snap = snapshotPorId.get(c.snapshot_id)
++    if (snap === undefined) {
++      problemas.push(`${onde}: snapshot inexistente no conjunto governado: ${c.snapshot_id}`)
++      continue
++    }
++
++    if (c.evidence_refs.length === 0) {
++      problemas.push(`${onde}: sem evidência — nenhum número individual sem lastro`)
++    }
++    for (const ref of c.evidence_refs) conferirRef(ref, c.snapshot_id, onde)
++
++    escopos.set(c.snapshot_id, {
++      source_system: snap.source_system,
++      dataset_id: snap.dataset_id,
++    })
++  }
++
++  // A evidência dos AGREGADOS precisa existir e ser do tipo certo: um número
++  // consolidado não pode se ancorar numa célula individual.
++  const agregada = evidencePorId.get(input.aggregate_evidence_ref)
++  if (agregada === undefined) {
++    problemas.push(`agregados: evidência inexistente: ${input.aggregate_evidence_ref}`)
++  } else if (agregada.kind !== "computed" && agregada.kind !== "aggregate") {
++    problemas.push(
++      `agregados: evidência ${input.aggregate_evidence_ref} é do tipo "${agregada.kind}"; agregado exige computed ou aggregate`,
++    )
++  } else if (agregada.kind === "computed" && agregada.formula === undefined) {
++    problemas.push(`agregados: evidência computed sem fórmula`)
++  }
++
++  if (input.baseline !== undefined) {
++    const evBase = evidencePorId.get(input.baseline.evidence_ref)
++    if (evBase === undefined) {
++      problemas.push(`baseline: evidência inexistente: ${input.baseline.evidence_ref}`)
++    }
++    if (input.baseline.source.trim() === "") {
++      problemas.push(`baseline: a origem precisa ser identificável`)
++    }
++  }
++
++  if (problemas.length > 0) {
++    throw new GatewayError("SCHEMA_INVALID", "Lastro insuficiente para detectar concentração", problemas)
++  }
++
++  return escopos
++}
++
++// ─── População ────────────────────────────────────────────────────────────────
++
++interface Particao {
++  readonly elegiveis: readonly ContractRecord[]
++  readonly acima: readonly ContractRecord[]
++  readonly population: Population
++}
++
++function particionar(input: InstallmentDetectorInput, limiar: number): Particao {
++  const elegiveis: ContractRecord[] = []
++  let semContagem = 0
++  let naoPositivo = 0
++
++  for (const c of input.contracts) {
++    if (c.installment_count === null) {
++      // Ausência NÃO é zero parcelas. O contrato sai do denominador e a exclusão
++      // é contada — descarte silencioso é indistinguível de bug de coleta.
++      semContagem += 1
++      continue
++    }
++    if (!Number.isSafeInteger(c.installment_count) || c.installment_count <= 0) {
++      // Regra governada: `installments_grau > 0` no schema `ceo`. Zero é a
++      // assinatura das linhas-fantasma da planilha real.
++      naoPositivo += 1
++      continue
++    }
++    elegiveis.push(c)
++  }
++
++  // ESTRITAMENTE maior. 19 parcelas não entra na faixa.
++  const acima = elegiveis.filter((c) => (c.installment_count ?? 0) > limiar)
++
++  const total = input.contracts.length
++  const eligibilityRatio =
++    total === 0
++      ? gap<number>("EMPTY_DENOMINATOR", "calculated", "nenhum registro para avaliar")
++      : toBp(ratio(observed(elegiveis.length), observed(total), "count(elegiveis) / count(registros)"))
++
++  return {
++    elegiveis,
++    acima,
++    population: {
++      total_records: total,
++      eligible_contracts: elegiveis.length,
++      contracts_above_threshold: acima.length,
++      excluded: {
++        MISSING_INSTALLMENT_COUNT: semContagem,
++        NON_POSITIVE_INSTALLMENT_COUNT: naoPositivo,
++      },
++      eligibility_ratio_bp: eligibilityRatio,
++    },
++  }
++}
++
++function toBp(m: Metric<{ bps: number }>): Metric<number> {
++  return isOk(m) ? observed(m.value.bps) : m
++}
++
++/** Soma exata; ausência em QUALQUER parcela torna o total uma lacuna, não zero. */
++function somarValores(contratos: readonly ContractRecord[], detalhe: string): Metric<number> {
++  if (contratos.some((c) => c.amount_cents === null)) {
++    return gap<number>("DATA_NOT_AVAILABLE", "calculated", detalhe)
++  }
++  const total = sumCents(contratos.map((c) => c.amount_cents ?? 0))
++  return total === null
++    ? gap<number>("DATA_NOT_AVAILABLE", "calculated", "soma fora da faixa exata")
++    : observed(total)
++}
++
++// ─── Métricas ─────────────────────────────────────────────────────────────────
++
++const FORMULA_SHARE_COUNT = "count(elegiveis where installments > 19) / count(elegiveis)"
++const FORMULA_AMOUNT_ABOVE = "sum(amount_cents where installments > 19)"
++const FORMULA_SHARE_AMOUNT =
++  "sum(amount_cents where installments > 19) / sum(amount_cents elegiveis)"
++
++function calcular(p: Particao): ConcentrationMetrics {
++  const shareCount =
++    p.elegiveis.length === 0
++      ? gap<number>("EMPTY_DENOMINATOR", "calculated", "nenhum contrato elegível")
++      : toBp(
++          ratio(
++            observed(p.acima.length),
++            observed(p.elegiveis.length),
++            FORMULA_SHARE_COUNT,
++          ),
++        )
++
++  const amountAbove = somarValores(
++    p.acima,
++    "valor ausente em ao menos um contrato da faixa",
++  )
++  const amountEligible = somarValores(
++    p.elegiveis,
++    "valor ausente em ao menos um contrato elegível",
++  )
++
++  /**
++   * A participação em VALOR só é participação quando o volume se comporta como
++   * um todo: denominador positivo e numerador dentro dele.
++   *
++   * Estorno é dado legítimo e quebra isso. Uma faixa com estorno líquido produz
++   * numerador negativo; estornos fora da faixa podem fazer o volume da faixa
++   * superar o volume elegível; e um período de estornos pode zerar ou inverter o
++   * denominador. Aritmeticamente a divisão existe — como leitura executiva,
++   * "a faixa acima de 19 parcelas representa -37% do volume" não significa nada.
++   *
++   * Como tratar concentração sob volume líquido negativo é regra de negócio que
++   * o CEO ainda não definiu. Então é lacuna nomeada, não número. O volume da
++   * faixa e o volume elegível continuam sendo publicados em cents, exatos e com
++   * sinal — quem decidir a regra terá os dois lados à mão.
++   */
++  const shareAmount =
++    !isOk(amountAbove) || !isOk(amountEligible)
++      ? gap<number>("DATA_NOT_AVAILABLE", "calculated", "volume indisponível")
++      : amountEligible.value === 0
++        ? gap<number>("EMPTY_DENOMINATOR", "calculated", "volume elegível zero")
++        : amountEligible.value < 0 ||
++            amountAbove.value < 0 ||
++            amountAbove.value > amountEligible.value
++          ? gap<number>(
++              "BUSINESS_RULE_PENDING",
++              "calculated",
++              "volume com sinal misto (estorno): participação em valor exige regra do CEO",
++            )
++          : toBp(
++              ratio(
++                observed(amountAbove.value),
++                observed(amountEligible.value),
++                FORMULA_SHARE_AMOUNT,
++              ),
++            )
++
++  return {
++    share_count_bp: shareCount,
++    amount_above_cents: amountAbove,
++    amount_eligible_cents: amountEligible,
++    share_amount_bp: shareAmount,
++  }
++}
++
++// ─── Qualidade ────────────────────────────────────────────────────────────────
++
++type Quality = "ok" | "degraded" | "conflicted" | "insufficient"
++
++const ORDEM_QUALIDADE: Readonly<Record<Quality, number>> = {
++  ok: 0,
++  degraded: 1,
++  insufficient: 2,
++  conflicted: 3,
++}
++
++/**
++ * A qualidade do agregado é a MAIS FRACA das dependências.
++ *
++ * Mesmo princípio do `Metric<T>` do motor: um total que depende de uma entrada
++ * degradada é degradado. O detector não pode esconder exclusão, unidade não
++ * resolvida, cobertura baixa nem conflito do snapshot.
++ */
++function resolverQualidade(
++  input: InstallmentDetectorInput,
++  p: Particao,
++  m: ConcentrationMetrics,
++  config: DetectorConfig,
++): Quality {
++  const cfg = config.installmentConcentration
++  const candidatas: Quality[] = ["ok"]
++
++  for (const s of input.snapshots) candidatas.push(s.quality_status)
++
++  const excluidos =
++    p.population.excluded.MISSING_INSTALLMENT_COUNT +
++    p.population.excluded.NON_POSITIVE_INSTALLMENT_COUNT
++  if (excluidos > 0) candidatas.push("degraded")
++
++  if (!isOk(m.amount_above_cents) || !isOk(m.share_amount_bp)) candidatas.push("degraded")
++
++  // Identidade não resolvida é falha de qualidade, não de cobertura.
++  for (const c of input.contracts) {
++    if (c.unit.status === "unknown") candidatas.push("degraded")
++    else if (c.unit.status === "ambiguous") candidatas.push("conflicted")
++  }
++
++  if (input.unit_coverage !== undefined && input.unit_coverage.ratio_bp < cfg.minimum_coverage_bp) {
++    candidatas.push("insufficient")
++  }
++
++  if (p.elegiveis.length < cfg.minimum_sample_size) candidatas.push("insufficient")
++
++  let pior: Quality = "ok"
++  for (const q of candidatas) {
++    if (ORDEM_QUALIDADE[q] > ORDEM_QUALIDADE[pior]) pior = q
++  }
++  return pior
++}
++
++// ─── Casos contribuintes ──────────────────────────────────────────────────────
++
++interface CasoContribuinte {
++  readonly subject_ref: string
++  /**
++   * Nome de exibição vindo do CATÁLOGO governado, nunca da fonte.
++   *
++   * O contrato v1 tem `unit` (nome), não `unit_id`. O rename está na proposta
++   * de schema v2 e aguarda o bloqueio B1 — ativá-lo agora exigiria o enum de
++   * `UnitId`, que depende do catálogo que o CEO ainda não confirmou. Enquanto
++   * isso, o que atravessa é o `display_name` do catálogo: governado, e omitido
++   * quando D13 não resolveu. É o resíduo R1 já registrado no THREAT_MODEL.
++   */
++  readonly unit?: string
++  readonly contribution: { amount_cents?: number; count?: number; share_of_event_bp?: number }
++  readonly evidence_refs: readonly string[]
++}
++
++/**
++ * Seleção determinística dos casos que movem o número.
++ *
++ * Ordenação: valor decrescente, e `subject_ref` como desempate — sem ele, dois
++ * contratos de mesmo valor poderiam trocar de posição conforme a ordem de
++ * entrada, e a saída deixaria de ser determinística.
++ *
++ * `unit_id` só entra quando D13 resolveu. Unidade `unknown`/`ambiguous` é
++ * OMITIDA — nunca o texto cru da fonte.
++ */
++function selecionarCasos(
++  acima: readonly ContractRecord[],
++  totalFaixa: Metric<number>,
++  config: DetectorConfig,
++): CasoContribuinte[] {
++  const regra = config.installmentConcentration.contributing_case_rule
++
++  const ordenados = [...acima].sort((a, b) => {
++    const va = a.amount_cents ?? 0
++    const vb = b.amount_cents ?? 0
++    if (va !== vb) return vb - va
++    return compareCodeUnits(a.subject_ref, b.subject_ref)
++  })
++
++  /**
++   * Participação de um caso no volume da faixa — quando isso significa algo.
++   *
++   * "Parte de um todo" pressupõe que a parte tenha o mesmo sinal do todo e caiba
++   * dentro dele. Estorno é dado legítimo e pode quebrar as duas condições: um
++   * total de faixa negativo ou próximo de zero produz participação negativa ou
++   * acima de 100%, e um estorno entre os contribuintes faz um caso positivo
++   * ultrapassar o total. Nesses casos não existe participação — existe um valor.
++   *
++   * Não clampar: 10000 bp num caso que vale três vezes o total seria um número
++   * inventado, e o consumidor não teria como saber. Omitida a participação, o
++   * `amount_cents` continua ali, exato.
++   */
++  const shareDe = (valor: number | null): number | undefined => {
++    if (valor === null || !isOk(totalFaixa) || totalFaixa.value <= 0) return undefined
++    if (valor < 0 || valor > totalFaixa.value) return undefined
++    const r = ratio(observed(valor), observed(totalFaixa.value), "contribuicao / volume_da_faixa")
++    return isOk(r) ? r.value.bps : undefined
++  }
++
++  const montar = (c: ContractRecord): CasoContribuinte => {
++    const share = shareDe(c.amount_cents)
++    return {
++      subject_ref: c.subject_ref,
++      ...(c.unit.status === "matched" ? { unit: c.unit.display_name } : {}),
++      contribution: {
++        ...(c.amount_cents === null ? { count: 1 } : { amount_cents: c.amount_cents }),
++        ...(share === undefined ? {} : { share_of_event_bp: share }),
++      },
++      evidence_refs: c.evidence_refs,
++    }
++  }
++
++  if (regra.mode === "top_n") return ordenados.slice(0, regra.n).map(montar)
++
++  if (regra.mode === "min_individual_share_bp") {
++    return ordenados.filter((c) => (shareDe(c.amount_cents) ?? 0) >= regra.share_bp).map(montar)
++  }
++
++  // until_share_bp: acumula até cobrir a participação pedida.
++  const escolhidos: ContractRecord[] = []
++  let acumulado = 0
++  for (const c of ordenados) {
++    if (acumulado >= regra.share_bp) break
++    escolhidos.push(c)
++    acumulado += shareDe(c.amount_cents) ?? 0
++  }
++  return escolhidos.map(montar)
++}
++
++// ─── Detector ─────────────────────────────────────────────────────────────────
++
++export function detectInstallmentConcentration(
++  input: InstallmentDetectorInput,
++  config: DetectorConfig,
++): ConcentrationResult {
++  const escopos = assertPrecondicoes(input)
++  const cfg = config.installmentConcentration
++
++  const particao = particionar(input, cfg.installment_threshold)
++  const metrics = calcular(particao)
++  const quality = resolverQualidade(input, particao, metrics, config)
++
++  // Severidade sobre a dimensão que a CONFIGURAÇÃO escolheu. Sem dimensão
++  // declarada a config é recusada, então aqui não há caminho implícito.
++  const dimensao =
++    cfg.severity_dimension === "share_count_bp" ? metrics.share_count_bp : metrics.share_amount_bp
++  const severity = classifySeverity(cfg.severity_scale, isOk(dimensao) ? dimensao.value : 0)
++
++  const shareCount = isOk(metrics.share_count_bp) ? metrics.share_count_bp.value : undefined
++  const shareAmount = isOk(metrics.share_amount_bp) ? metrics.share_amount_bp.value : undefined
++  const volumeFaixa = isOk(metrics.amount_above_cents) ? metrics.amount_above_cents.value : undefined
++
++  const naoMaterial = motivoNaoMaterial(particao, cfg.minimum_sample_size)
++  const material =
++    naoMaterial === undefined &&
++    (particao.acima.length >= cfg.material_count_above ||
++      (shareCount !== undefined && shareCount >= cfg.material_share_count_bp) ||
++      (shareAmount !== undefined && shareAmount >= cfg.material_share_amount_bp) ||
++      (volumeFaixa !== undefined && volumeFaixa >= cfg.material_amount_cents))
++
++  const eventId = identidadeDoEvento(input, escopos, cfg.installment_threshold)
++
++  const summary: ConcentrationSummary = Object.freeze({
++    event_id: eventId,
++    population: particao.population,
++    metrics,
++    severity,
++    quality_status: quality,
++    material,
++    ...(material
++      ? {}
++      : { non_material_reason: naoMaterial ?? "abaixo de todos os limiares configurados" }),
++  })
++
++  return {
++    event: material ? construirEvento(input, particao, metrics, summary, config) : null,
++    summary,
++  }
++}
++
++function motivoNaoMaterial(p: Particao, minimo: number): string | undefined {
++  if (p.elegiveis.length === 0) return "nenhum contrato elegível"
++  if (p.elegiveis.length < minimo) {
++    return `amostra de ${p.elegiveis.length} abaixo do mínimo de ${minimo}`
++  }
++  if (p.acima.length === 0) return "nenhum contrato acima do limiar"
++  return undefined
++}
++
++/**
++ * Identidade lógica do evento.
++ *
++ * Estruturada, nunca por gramática de delimitador — o gate da Fase 2.2 mostrou
++ * o que essa gramática custa. Composta pelo fato, não pela execução: reingerir
++ * os mesmos datasets no mesmo período produz o mesmo evento, ainda que os
++ * `snapshot_id` mudem.
++ */
++function identidadeDoEvento(
++  input: InstallmentDetectorInput,
++  escopos: Map<string, EscopoGovernado>,
++  limiar: number,
++): string {
++  const datasets = [...escopos.values()]
++    .map((e) => ({ source_system: e.source_system, dataset_id: e.dataset_id }))
++    .sort(
++      (a, b) =>
++        compareCodeUnits(a.source_system, b.source_system) ||
++        compareCodeUnits(a.dataset_id, b.dataset_id),
++    )
++
++  return structuralId(
++    "creditum:installment_concentration:v1",
++    {
++      event_type: "installment_concentration",
++      installment_threshold: limiar,
++      period_start: input.period_start,
++      period_end: input.period_end,
++      datasets,
++    },
++    "evt",
++  )
++}
++
++function construirEvento(
++  input: InstallmentDetectorInput,
++  p: Particao,
++  m: ConcentrationMetrics,
++  s: ConcentrationSummary,
++  config: DetectorConfig,
++): IntelligenceEvent {
++  const snapshotIds = [...new Set(p.elegiveis.map((c) => c.snapshot_id))].sort(compareCodeUnits)
++
++  const refsIndividuais = p.acima.flatMap((c) => [...c.evidence_refs])
++  const evidenceRefs = [...new Set([input.aggregate_evidence_ref, ...refsIndividuais])].sort(
++    compareCodeUnits,
++  )
++
++  const casos = selecionarCasos(p.acima, m.amount_above_cents, config)
++
++  const bruto: unknown = {
++    event_id: s.event_id,
++    event_type: "installment_concentration",
++    detector_id: DETECTOR_ID,
++    detector_version: DETECTOR_VERSION,
++    snapshot_ids: snapshotIds,
++    period_start: input.period_start,
++    period_end: input.period_end,
++    detected_at: input.detected_at,
++    severity: s.severity,
++    materiality: materialidade(p, m),
++    observed_metric: metricaDeContrato(m.share_count_bp),
++    reference_metric: metricaDeBaseline(input.baseline),
++    ...(casos.length === 0 ? {} : { contributing_cases: casos }),
++    evidence_refs: evidenceRefs,
++    data_quality: {
++      quality_status: s.quality_status,
++      ...(input.unit_coverage === undefined
++        ? {}
++        : { coverage_ratio_bp: input.unit_coverage.ratio_bp }),
++    },
++  }
++
++  return toEvent(bruto, { now: new Date(input.detected_at) })
++}
++
++function materialidade(p: Particao, m: ConcentrationMetrics): unknown {
++  const share = isOk(m.share_amount_bp) ? { share_of_total_bp: m.share_amount_bp.value } : {}
++
++  // Base `amount_cents` quando o volume existe; senão `count`. Nunca declarar
++  // uma base sem o campo correspondente.
++  if (isOk(m.amount_above_cents)) {
++    return {
++      basis: "amount_cents",
++      amount_cents: m.amount_above_cents.value,
++      count: p.acima.length,
++      ...share,
++    }
++  }
++  return { basis: "count", count: p.acima.length, ...share }
++}
++
++function metricaDeContrato(share: Metric<number>): unknown {
++  if (!isOk(share)) {
++    return {
++      name: "share_contratos_acima_do_limiar",
++      data_class: "gap",
++      gap_reason: share.gap === "EMPTY_DENOMINATOR" ? "EMPTY_DENOMINATOR" : "DATA_NOT_AVAILABLE",
++    }
++  }
++  return {
++    name: "share_contratos_acima_do_limiar",
++    data_class: "calculated",
++    unit: "basis_points",
++    value: share.value,
++    formula: FORMULA_SHARE_COUNT,
++  }
++}
++
++/**
++ * Baseline ausente vira LACUNA, nunca zero.
++ *
++ * O valor `2800 bp` que a fixture da Fase 1 trazia como referência não tem
++ * lastro em política de produção. Não é default aqui nem em lugar nenhum.
++ */
++function metricaDeBaseline(baseline: Baseline | undefined): unknown {
++  if (baseline === undefined) {
++    return {
++      name: "share_contratos_acima_do_limiar_referencia",
++      data_class: "gap",
++      gap_reason: "DATA_NOT_AVAILABLE",
++    }
++  }
++  return {
++    name: "share_contratos_acima_do_limiar_referencia",
++    data_class: "observed",
++    unit: "basis_points",
++    value: baseline.share_count_bp,
++  }
++}
++
++export { FORMULA_SHARE_COUNT, FORMULA_AMOUNT_ABOVE, FORMULA_SHARE_AMOUNT }
+diff --git a/intelligence/detectors/src/structural-id.ts b/intelligence/detectors/src/structural-id.ts
+new file mode 100644
+index 0000000..6de743f
+--- /dev/null
++++ b/intelligence/detectors/src/structural-id.ts
+@@ -0,0 +1,54 @@
++/**
++ * Identidade determinística a partir de estrutura.
++ *
++ * Extraído de `conflict-id.ts` depois do gate da Fase 2.2, para que os
++ * detectores seguintes não repitam o erro que aquele gate encontrou: **nenhuma
++ * gramática manual de delimitador**.
++ *
++ * Qualquer separador escolhido à mão permite que duas estruturas diferentes
++ * produzam a mesma string, desde que o conteúdo possa conter o separador. Trocar
++ * o caractere só muda qual deles é o problema. A estrutura chega inteira ao
++ * codificador, e o codificador é `JSON.stringify` — serialização padrão que
++ * escapa caractere de controle, aspas e barra invertida, e delimita string,
++ * array e objeto.
++ *
++ * `stableContent` do motor NÃO serve aqui: ele foi escrito para conteúdo plano
++ * de linha de planilha e aplica `String(v)` em cada valor, o que colapsa array
++ * de objetos em `"[object Object]"`. Ver `tests/conflict-id.test.ts`.
++ */
++
++import { createHash } from "node:crypto"
++
++/**
++ * Comparação por unidade de código, não por locale.
++ *
++ * `localeCompare` depende do locale do runtime — o mesmo fato receberia ids
++ * diferentes em máquinas diferentes, e o ledger perderia a correlação.
++ */
++export function compareCodeUnits(a: string, b: string): number {
++  return a < b ? -1 : a > b ? 1 : 0
++}
++
++/**
++ * Serializa a estrutura de forma inequívoca.
++ *
++ * A ordem das chaves é a do objeto que o chamador monta — literal fixo no
++ * código, nunca derivado de entrada.
++ */
++export function structuralMaterial(payload: unknown): string {
++  return JSON.stringify(payload)
++}
++
++/**
++ * `<prefixo>_<16 hex>` — casa com o padrão de identificador dos contratos.
++ *
++ * O `domain` separa espaços de identidade: dois fatos diferentes com o mesmo
++ * payload não colidem por acaso.
++ */
++export function structuralId(domain: string, payload: unknown, prefix: string): string {
++  const hash = createHash("sha256")
++    .update(`${domain}:${structuralMaterial(payload)}`, "utf8")
++    .digest("hex")
++    .slice(0, 16)
++  return `${prefix}_${hash}`
++}
+diff --git a/intelligence/detectors/tests/config.test.ts b/intelligence/detectors/tests/config.test.ts
+new file mode 100644
+index 0000000..436e335
+--- /dev/null
++++ b/intelligence/detectors/tests/config.test.ts
+@@ -0,0 +1,237 @@
++/**
++ * Configuração fail-closed.
++ *
++ * O que estes testes protegem: um threshold ausente não pode cair para um valor
++ * "razoável". Se caísse, o número escolhido pelo engenheiro viraria política da
++ * Creditum no dia em que alguém o encontrasse num arquivo e assumisse aprovação.
++ */
++
++import { describe, expect, it } from "vitest"
++import { APPROVED_THRESHOLDS, BUSINESS_TIMEZONE, isValidTimezone, validateDetectorConfig } from "../src/config"
++import { GatewayError } from "../../gateway/src/errors"
++import { TEST_CONFIG } from "./test-config"
++
++function semCampo(caminho: readonly string[]): unknown {
++  const copia = structuredClone(TEST_CONFIG) as unknown as Record<string, unknown>
++  let alvo: Record<string, unknown> = copia
++  for (const parte of caminho.slice(0, -1)) {
++    alvo = alvo[parte] as Record<string, unknown>
++  }
++  delete alvo[caminho[caminho.length - 1] as string]
++  return copia
++}
++
++describe("valores com lastro", () => {
++  it("installment_threshold aprovado é 19 — briefing do Bloco 1, §14 Caso A", () => {
++    expect(APPROVED_THRESHOLDS.installment_threshold).toBe(19)
++  })
++
++  it("limiar de similaridade é o do motor, em basis points", () => {
++    expect(APPROVED_THRESHOLDS.similarity_threshold_bp).toBe(8000)
++  })
++
++  it("os aprovados são congelados — não viram default mutável", () => {
++    expect(Object.isFrozen(APPROVED_THRESHOLDS)).toBe(true)
++  })
++
++  it("o fuso da operação é explícito, não o da máquina", () => {
++    expect(BUSINESS_TIMEZONE).toBe("America/Sao_Paulo")
++  })
++})
++
++describe("não existe configuração de produção neste repositório", () => {
++  it("a config sintética usa versão 0.0.0 — nunca uma versão publicável", () => {
++    // Se algum dia um `PRODUCTION_CONFIG` aparecer, ele terá passado por
++    // aprovação de threshold. Hoje não há: o único conjunto completo de valores
++    // no repositório é o sintético, e ele se declara 0.0.0.
++    expect(TEST_CONFIG.config_version).toBe("0.0.0")
++  })
++
++  it("`src/config.ts` não exporta nenhum conjunto pronto de thresholds", async () => {
++    const modulo = (await import("../src/config")) as Record<string, unknown>
++    const exportados = Object.keys(modulo)
++    expect(exportados).not.toContain("DEFAULT_CONFIG")
++    expect(exportados).not.toContain("PRODUCTION_CONFIG")
++    expect(exportados).not.toContain("CREDITUM_CONFIG")
++  })
++})
++
++describe("config válida", () => {
++  it("aceita a configuração sintética completa", () => {
++    expect(() => validateDetectorConfig(TEST_CONFIG)).not.toThrow()
++  })
++
++  it("devolve o objeto congelado", () => {
++    expect(Object.isFrozen(validateDetectorConfig(TEST_CONFIG))).toBe(true)
++  })
++})
++
++describe("threshold ausente falha fechado", () => {
++  const obrigatorios: readonly (readonly string[])[] = [
++    ["installmentConcentration", "installment_threshold"],
++    ["installmentConcentration", "minimum_sample_size"],
++    ["installmentConcentration", "material_share_count_bp"],
++    ["installmentConcentration", "material_share_amount_bp"],
++    ["installmentConcentration", "material_amount_cents"],
++    ["installmentConcentration", "material_count_above"],
++    ["installmentConcentration", "contributing_case_rule"],
++    ["installmentConcentration", "severity_dimension"],
++    ["installmentConcentration", "severity_scale"],
++    ["installmentConcentration", "minimum_coverage_bp"],
++    ["crossSourceConflict", "material_absolute_count"],
++    ["crossSourceConflict", "material_share_bp"],
++    ["crossSourceConflict", "material_amount_cents"],
++    ["crossSourceConflict", "structural_fields"],
++    ["firstDueConcentration", "window"],
++    ["firstDueConcentration", "material_share_bp"],
++    ["materialSingleCase", "min_delta_bp"],
++    ["materialSingleCase", "min_share_of_total_bp"],
++    ["materialSingleCase", "min_population_after_removal"],
++    ["coverage", "degraded_below_bp"],
++    ["coverage", "emit_event_below_bp"],
++    ["similarity_threshold_bp"],
++    ["businessTimezone"],
++    ["config_version"],
++  ]
++
++  for (const caminho of obrigatorios) {
++    it(`recusa sem ${caminho.join(".")}`, () => {
++      expect(() => validateDetectorConfig(semCampo(caminho))).toThrowError(GatewayError)
++    })
++  }
++
++  it("recusa seção inteira ausente", () => {
++    const copia = structuredClone(TEST_CONFIG) as unknown as Record<string, unknown>
++    delete copia["materialSingleCase"]
++    expect(() => validateDetectorConfig(copia)).toThrowError(/materialSingleCase/)
++  })
++
++  it("recusa entrada que não é objeto", () => {
++    for (const entrada of [null, undefined, 42, "config", []]) {
++      expect(() => validateDetectorConfig(entrada)).toThrowError(GatewayError)
++    }
++  })
++
++  it("a mensagem nomeia TODOS os campos faltantes, não só o primeiro", () => {
++    try {
++      validateDetectorConfig({ config_version: "1.0.0" })
++      expect.unreachable("deveria ter recusado")
++    } catch (e) {
++      expect((e as GatewayError).details.length).toBeGreaterThan(4)
++    }
++  })
++})
++
++describe("timezone", () => {
++  it("aceita zona IANA real", () => {
++    expect(isValidTimezone("America/Sao_Paulo")).toBe(true)
++    expect(isValidTimezone("UTC")).toBe(true)
++  })
++
++  it("recusa zona inventada", () => {
++    expect(isValidTimezone("America/Nao_Existe")).toBe(false)
++    expect(isValidTimezone("BRT")).toBe(false)
++    expect(isValidTimezone("")).toBe(false)
++    expect(isValidTimezone(null)).toBe(false)
++    expect(isValidTimezone(-3)).toBe(false)
++  })
++
++  it("config com timezone inválido é recusada", () => {
++    expect(() =>
++      validateDetectorConfig({ ...TEST_CONFIG, businessTimezone: "America/Nao_Existe" }),
++    ).toThrowError(/businessTimezone/)
++  })
++})
++
++describe("valores fora de faixa", () => {
++  it("recusa basis points acima de 10000", () => {
++    expect(() =>
++      validateDetectorConfig({ ...TEST_CONFIG, similarity_threshold_bp: 10001 }),
++    ).toThrowError(/similarity_threshold_bp/)
++  })
++
++  it("recusa inteiro não exato", () => {
++    expect(() =>
++      validateDetectorConfig({ ...TEST_CONFIG, similarity_threshold_bp: 8000.5 }),
++    ).toThrowError(/similarity_threshold_bp/)
++  })
++
++  it("recusa threshold de parcelas menor que 1", () => {
++    const c = structuredClone(TEST_CONFIG)
++    ;(c.installmentConcentration as { installment_threshold: number }).installment_threshold = 0
++    expect(() => validateDetectorConfig(c)).toThrowError(/installment_threshold/)
++  })
++
++  it("recusa versão de config fora do formato semver", () => {
++    expect(() => validateDetectorConfig({ ...TEST_CONFIG, config_version: "v1" })).toThrowError(
++      /config_version/,
++    )
++  })
++})
++
++describe("escala de severidade", () => {
++  const comEscala = (escala: unknown): unknown => {
++    const c = structuredClone(TEST_CONFIG) as unknown as Record<string, Record<string, unknown>>
++    c["installmentConcentration"]!["severity_scale"] = escala
++    return c
++  }
++
++  it("recusa escala vazia", () => {
++    expect(() => validateDetectorConfig(comEscala([]))).toThrowError(/severity_scale/)
++  })
++
++  it("recusa escala que não começa em 0 — deixaria valores sem classificação", () => {
++    expect(() =>
++      validateDetectorConfig(comEscala([{ at_least: 100, severity: "low" }])),
++    ).toThrowError(/at_least/)
++  })
++
++  it("recusa escala não crescente — classificação dependeria da ordem de avaliação", () => {
++    expect(() =>
++      validateDetectorConfig(
++        comEscala([
++          { at_least: 0, severity: "info" },
++          { at_least: 5000, severity: "high" },
++          { at_least: 2500, severity: "medium" },
++        ]),
++      ),
++    ).toThrowError(/crescentes/)
++  })
++
++  it("recusa banda repetida no mesmo limite", () => {
++    expect(() =>
++      validateDetectorConfig(
++        comEscala([
++          { at_least: 0, severity: "info" },
++          { at_least: 0, severity: "high" },
++        ]),
++      ),
++    ).toThrowError(/crescentes/)
++  })
++
++  it("recusa severidade inventada", () => {
++    expect(() =>
++      validateDetectorConfig(comEscala([{ at_least: 0, severity: "catastrofico" }])),
++    ).toThrowError(/severity/)
++  })
++})
++
++describe("coerência entre campos", () => {
++  it("recusa emitir evento com cobertura maior do que a que já degrada", () => {
++    const c = structuredClone(TEST_CONFIG)
++    ;(c.coverage as { emit_event_below_bp: number }).emit_event_below_bp = 9800
++    expect(() => validateDetectorConfig(c)).toThrowError(/incoerente/)
++  })
++
++  it("recusa regra de caso contribuinte com modo desconhecido", () => {
++    const c = structuredClone(TEST_CONFIG) as unknown as Record<string, Record<string, unknown>>
++    c["installmentConcentration"]!["contributing_case_rule"] = { mode: "aleatorio" }
++    expect(() => validateDetectorConfig(c)).toThrowError(/contributing_case_rule/)
++  })
++
++  it("recusa janela com modo desconhecido", () => {
++    const c = structuredClone(TEST_CONFIG) as unknown as Record<string, Record<string, unknown>>
++    c["firstDueConcentration"]!["window"] = { mode: "trimestre" }
++    expect(() => validateDetectorConfig(c)).toThrowError(/window/)
++  })
++})
+diff --git a/intelligence/detectors/tests/installment-concentration.test.ts b/intelligence/detectors/tests/installment-concentration.test.ts
+new file mode 100644
+index 0000000..943b759
+--- /dev/null
++++ b/intelligence/detectors/tests/installment-concentration.test.ts
+@@ -0,0 +1,764 @@
++/**
++ * Detector A — concentração de parcelamento.
++ *
++ * THRESHOLD APROVADO: `installment_threshold = 19`, do briefing do Bloco 1 §14
++ * Caso A. Comparação estritamente maior.
++ *
++ * TODOS os demais números destes testes vêm da `TEST_CONFIG` sintética e **não
++ * são política da Creditum**. O baseline `2800 bp` que a fixture da Fase 1
++ * trazia também não tem lastro — aqui ele nunca é default.
++ *
++ * O Detector A não produz inferência nem previsão: só `observed`, `calculated`
++ * e `gap`.
++ */
++
++import { readFileSync } from "node:fs"
++import { fileURLToPath } from "node:url"
++import { dirname, join } from "node:path"
++import { describe, expect, it } from "vitest"
++import {
++  DETECTOR_ID,
++  DETECTOR_VERSION,
++  detectInstallmentConcentration,
++} from "../src/installment-concentration"
++import type {
++  Baseline,
++  ContractRecord,
++  InstallmentDetectorInput,
++} from "../src/installment-concentration"
++import { APPROVED_THRESHOLDS } from "../src/config"
++import type { DetectorConfig } from "../src/config"
++import { isOk } from "../src/engine"
++import { assertValid } from "../../gateway/src/contracts"
++import { GatewayError } from "../../gateway/src/errors"
++import type { CanonicalUnitResult } from "../src/canonical-units"
++import type { Evidence, Snapshot } from "../../gateway/src/types"
++import { TEST_CONFIG } from "./test-config"
++import { rawEvidence, rawSnapshot } from "../../gateway/tests/helpers"
++
++const DETECTED_AT = "2026-08-16T09:05:00.000Z"
++const LIMIAR = APPROVED_THRESHOLDS.installment_threshold
++
++const snapshots = [
++  rawSnapshot({ snapshot_id: "snap_vendas", source_system: "google_sheets", dataset_id: "ds_vendas" }),
++] as unknown as Snapshot[]
++
++const evidence = [
++  rawEvidence({
++    evidence_id: "ev_linha",
++    snapshot_id: "snap_vendas",
++    kind: "row",
++    locator: { dataset_id: "ds_vendas", sheet: "Vendas", row_key: "a".repeat(64) },
++  }),
++  rawEvidence({
++    evidence_id: "ev_agregado",
++    snapshot_id: "snap_vendas",
++    kind: "computed",
++    locator: { dataset_id: "ds_vendas", sheet: "Vendas", column: "Total de parcelas" },
++    formula: "count(elegiveis where installments > 19) / count(elegiveis)",
++  }),
++  rawEvidence({
++    evidence_id: "ev_baseline",
++    snapshot_id: "snap_vendas",
++    kind: "aggregate",
++    locator: { dataset_id: "ds_vendas", sheet: "Vendas" },
++  }),
++] as unknown as Evidence[]
++
++const MATCHED: CanonicalUnitResult = {
++  status: "matched",
++  unit_id: "mogi_das_cruzes",
++  display_name: "Mogi das Cruzes",
++}
++
++let seq = 0
++function subjectRef(): string {
++  seq += 1
++  return `subj_${seq.toString(16).padStart(16, "0")}`
++}
++
++function contrato(
++  installment_count: number | null,
++  amount_cents: number | null = 100_000,
++  unit: CanonicalUnitResult = MATCHED,
++): ContractRecord {
++  return {
++    subject_ref: subjectRef(),
++    unit,
++    installment_count,
++    amount_cents,
++    evidence_refs: ["ev_linha"],
++    snapshot_id: "snap_vendas",
++  }
++}
++
++function entrada(
++  contracts: readonly ContractRecord[],
++  extra: Partial<InstallmentDetectorInput> = {},
++): InstallmentDetectorInput {
++  return {
++    detected_at: DETECTED_AT,
++    period_start: "2026-08-01",
++    period_end: "2026-08-31",
++    contracts,
++    snapshots,
++    evidence,
++    aggregate_evidence_ref: "ev_agregado",
++    ...extra,
++  }
++}
++
++const detectar = (
++  contracts: readonly ContractRecord[],
++  extra: Partial<InstallmentDetectorInput> = {},
++  config: DetectorConfig = TEST_CONFIG,
++): ReturnType<typeof detectInstallmentConcentration> =>
++  detectInstallmentConcentration(entrada(contracts, extra), config)
++
++/** Suficiente para passar do `minimum_sample_size` sintético. */
++const preencher = (n: number, parcelas = 5, valor = 100_000): ContractRecord[] =>
++  Array.from({ length: n }, () => contrato(parcelas, valor))
++
++// ═════════════════════════════════════════════════════════════════════════════
++
++describe("A/B/C — o limiar é ESTRITAMENTE maior que 19", () => {
++  it("o threshold aprovado é 19", () => {
++    expect(LIMIAR).toBe(19)
++  })
++
++  it("exatamente 19 parcelas NÃO entra na faixa", () => {
++    const r = detectar([contrato(19), ...preencher(4)])
++    expect(r.summary.population.contracts_above_threshold).toBe(0)
++  })
++
++  it("20 parcelas entra", () => {
++    const r = detectar([contrato(20), ...preencher(4)])
++    expect(r.summary.population.contracts_above_threshold).toBe(1)
++  })
++
++  it("boundary 18 / 19 / 20", () => {
++    for (const [parcelas, esperado] of [[18, 0], [19, 0], [20, 1]] as const) {
++      const r = detectar([contrato(parcelas), ...preencher(4)])
++      expect(r.summary.population.contracts_above_threshold, `${parcelas} parcelas`).toBe(esperado)
++    }
++  })
++})
++
++describe("D/E/F — denominador e extremos", () => {
++  it("nenhum contrato elegível: EMPTY_DENOMINATOR, nunca 0%", () => {
++    const r = detectar([contrato(null), contrato(0)])
++    expect(r.summary.population.eligible_contracts).toBe(0)
++    expect(isOk(r.summary.metrics.share_count_bp)).toBe(false)
++    if (!isOk(r.summary.metrics.share_count_bp)) {
++      expect(r.summary.metrics.share_count_bp.gap).toBe("EMPTY_DENOMINATOR")
++    }
++    expect(r.event).toBeNull()
++  })
++
++  it("todos acima do limiar: 10000 bp", () => {
++    const r = detectar(preencher(5, 24))
++    expect(isOk(r.summary.metrics.share_count_bp) && r.summary.metrics.share_count_bp.value).toBe(10000)
++  })
++
++  it("nenhum acima, mas com denominador: 0 bp — e é um fato, não lacuna", () => {
++    const r = detectar(preencher(5, 12))
++    const s = r.summary.metrics.share_count_bp
++    expect(isOk(s)).toBe(true)
++    expect(isOk(s) && s.value).toBe(0)
++    expect(r.event).toBeNull()
++  })
++})
++
++describe("G — installment_count ausente não vira zero parcelas", () => {
++  const r = detectar([contrato(null), contrato(null), ...preencher(4, 24)])
++
++  it("sai do denominador em vez de contar como 0 parcelas", () => {
++    expect(r.summary.population.total_records).toBe(6)
++    expect(r.summary.population.eligible_contracts).toBe(4)
++    expect(r.summary.population.excluded.MISSING_INSTALLMENT_COUNT).toBe(2)
++  })
++
++  it("a exclusão é contada, não escondida", () => {
++    expect(r.summary.population.eligibility_ratio_bp).toBeDefined()
++    const e = r.summary.population.eligibility_ratio_bp
++    expect(isOk(e) && e.value).toBe(6667)
++  })
++
++  it("contamina a qualidade", () => {
++    expect(r.summary.quality_status).not.toBe("ok")
++  })
++})
++
++describe("15 — zero e negativo são inválidos no domínio", () => {
++  // Lastro: `check (installments_grau is null or installments_grau > 0)` no
++  // schema `ceo`, e `classifyRow` tratando `total > 0` como dado material.
++  it("zero parcelas é excluído como inválido, não como faixa baixa", () => {
++    const r = detectar([contrato(0), ...preencher(4, 24)])
++    expect(r.summary.population.excluded.NON_POSITIVE_INSTALLMENT_COUNT).toBe(1)
++    expect(r.summary.population.eligible_contracts).toBe(4)
++  })
++
++  it("negativo também", () => {
++    const r = detectar([contrato(-5), ...preencher(4, 24)])
++    expect(r.summary.population.excluded.NON_POSITIVE_INSTALLMENT_COUNT).toBe(1)
++  })
++
++  it("as duas exclusões são contadas separadamente", () => {
++    const r = detectar([contrato(null), contrato(0), ...preencher(4, 24)])
++    expect(r.summary.population.excluded).toEqual({
++      MISSING_INSTALLMENT_COUNT: 1,
++      NON_POSITIVE_INSTALLMENT_COUNT: 1,
++    })
++  })
++})
++
++describe("H — valor ausente: contagem sim, volume não", () => {
++  const r = detectar([contrato(24, null), ...preencher(4, 24)])
++
++  it("share em quantidade continua calculável", () => {
++    expect(isOk(r.summary.metrics.share_count_bp)).toBe(true)
++  })
++
++  it("volume da faixa vira lacuna, nunca zero", () => {
++    expect(isOk(r.summary.metrics.amount_above_cents)).toBe(false)
++  })
++
++  it("share financeiro vira lacuna", () => {
++    expect(isOk(r.summary.metrics.share_amount_bp)).toBe(false)
++  })
++
++  it("a materialidade cai para base `count`, sem declarar valor que não existe", () => {
++    expect(r.event?.materiality.basis).toBe("count")
++    expect(r.event?.materiality.amount_cents).toBeUndefined()
++  })
++})
++
++describe("I/J — negativos e overflow", () => {
++  it("valor negativo é somado corretamente (estorno é dado legítimo)", () => {
++    const r = detectar([contrato(24, -50_000), contrato(24, 150_000), ...preencher(3, 5)])
++    expect(isOk(r.summary.metrics.amount_above_cents) && r.summary.metrics.amount_above_cents.value).toBe(100_000)
++  })
++
++  it("com estorno na faixa, a participação do caso é OMITIDA — não clampada", () => {
++    // Faixa = -50.000 + 150.000 = 100.000. O caso de 150.000 vale 150% do total
++    // e o estorno vale -50%. Nenhum dos dois é "parte de um todo". Clampar para
++    // 10000 bp e 0 bp seria inventar dois números que o consumidor não teria
++    // como distinguir de participações reais.
++    const r = detectar([contrato(24, -50_000), contrato(24, 150_000), ...preencher(3, 5)])
++    const casos = r.event?.contributing_cases ?? []
++    expect(casos.length).toBeGreaterThan(0)
++    for (const c of casos) {
++      expect(c.contribution.share_of_event_bp).toBeUndefined()
++    }
++  })
++
++  it("mas o valor exato de cada caso continua lá, com sinal", () => {
++    const r = detectar([contrato(24, -50_000), contrato(24, 150_000), ...preencher(3, 5)])
++    const valores = (r.event?.contributing_cases ?? []).map((c) => c.contribution.amount_cents)
++    expect(valores).toContain(150_000)
++    expect(valores).toContain(-50_000)
++  })
++
++  it("sem estorno, a participação volta a existir normalmente", () => {
++    const r = detectar([contrato(24, 300_000), contrato(24, 100_000), ...preencher(3, 5)])
++    expect(r.event?.contributing_cases?.[0]?.contribution.share_of_event_bp).toBe(7500)
++  })
++
++  it("volume com sinal misto: share em VALOR vira lacuna de regra pendente", () => {
++    // O numerador fica negativo. A divisão existe, a leitura não: "a faixa
++    // representa -X% do volume" não é participação. Quem decide como tratar
++    // volume líquido negativo é o CEO — até lá, lacuna nomeada.
++    const r = detectar([contrato(24, -100_000), contrato(24, -20_000), ...preencher(3, 5, 200_000)])
++    const s = r.summary.metrics.share_amount_bp
++    expect(isOk(s)).toBe(false)
++    if (!isOk(s)) expect(s.gap).toBe("BUSINESS_RULE_PENDING")
++  })
++
++  it("mas os dois volumes continuam publicados, exatos e com sinal", () => {
++    const r = detectar([contrato(24, -100_000), contrato(24, -20_000), ...preencher(3, 5, 200_000)])
++    const acima = r.summary.metrics.amount_above_cents
++    const elegivel = r.summary.metrics.amount_eligible_cents
++    expect(isOk(acima) && acima.value).toBe(-120_000)
++    expect(isOk(elegivel) && elegivel.value).toBe(480_000)
++  })
++
++  it("share em QUANTIDADE não é afetado — contagem não tem sinal", () => {
++    const r = detectar([contrato(24, -100_000), contrato(24, -20_000), ...preencher(3, 5, 200_000)])
++    expect(isOk(r.summary.metrics.share_count_bp) && r.summary.metrics.share_count_bp.value).toBe(4000)
++  })
++
++  it("overflow vira lacuna via guarda do motor, não número aproximado", () => {
++    const r = detectar([
++      contrato(24, Number.MAX_SAFE_INTEGER),
++      contrato(24, Number.MAX_SAFE_INTEGER),
++      ...preencher(3, 5),
++    ])
++    expect(isOk(r.summary.metrics.amount_above_cents)).toBe(false)
++  })
++})
++
++describe("K — share em QUANTIDADE e share em VALOR são distintos", () => {
++  it("poucos contratos grandes: share de valor alto, share de contagem baixo", () => {
++    const r = detectar([
++      contrato(24, 9_000_000),
++      ...Array.from({ length: 9 }, () => contrato(6, 100_000)),
++    ])
++    const count = r.summary.metrics.share_count_bp
++    const amount = r.summary.metrics.share_amount_bp
++    expect(isOk(count) && count.value).toBe(1000) // 1 de 10
++    expect(isOk(amount) && amount.value).toBe(9091) // 9M de 9,9M
++  })
++
++  it("muitos contratos pequenos: o inverso", () => {
++    const r = detectar([
++      ...Array.from({ length: 9 }, () => contrato(24, 100_000)),
++      contrato(6, 9_000_000),
++    ])
++    const count = r.summary.metrics.share_count_bp
++    const amount = r.summary.metrics.share_amount_bp
++    expect(isOk(count) && count.value).toBe(9000)
++    expect(isOk(amount) && amount.value).toBe(909)
++  })
++
++  it("as duas nunca são a mesma métrica", () => {
++    const r = detectar([contrato(24, 9_000_000), ...Array.from({ length: 9 }, () => contrato(6, 100_000))])
++    expect(r.summary.metrics.share_count_bp).not.toEqual(r.summary.metrics.share_amount_bp)
++  })
++})
++
++describe("L — casos contribuintes determinísticos e sem PII", () => {
++  const grandes = [
++    contrato(24, 500_000),
++    contrato(24, 300_000),
++    contrato(24, 200_000),
++    contrato(24, 100_000),
++    ...preencher(4, 5),
++  ]
++  const r = detectar(grandes)
++
++  it("respeita a regra top_n da config sintética", () => {
++    expect(r.event?.contributing_cases).toHaveLength(3)
++  })
++
++  it("ordena por valor decrescente", () => {
++    const valores = r.event?.contributing_cases?.map((c) => c.contribution.amount_cents)
++    expect(valores).toEqual([500_000, 300_000, 200_000])
++  })
++
++  it("share individual é sobre o volume da FAIXA", () => {
++    // 500000 / 1100000 = 4545 bp
++    expect(r.event?.contributing_cases?.[0]?.contribution.share_of_event_bp).toBe(4545)
++  })
++
++  it("usa pseudônimo, nunca identidade", () => {
++    for (const c of r.event?.contributing_cases ?? []) {
++      expect(c.subject_ref).toMatch(/^subj_[a-f0-9]{16}$/)
++    }
++  })
++
++  it("desempate por subject_ref torna a ordem estável", () => {
++    const iguais = [contrato(24, 100_000), contrato(24, 100_000), contrato(24, 100_000), ...preencher(4, 5)]
++    const a = detectar(iguais)
++    const b = detectar([...iguais].reverse())
++    expect(a.event?.contributing_cases?.map((c) => c.subject_ref)).toEqual(
++      b.event?.contributing_cases?.map((c) => c.subject_ref),
++    )
++  })
++})
++
++describe("Q/R — D13: identidade não resolvida nunca vira nome livre", () => {
++  const desconhecida: CanonicalUnitResult = { status: "unknown", raw_fingerprint: "a".repeat(16) }
++  const ambigua: CanonicalUnitResult = {
++    status: "ambiguous",
++    candidates: ["alecrim"],
++    raw_fingerprint: "b".repeat(16),
++  }
++
++  it("unidade unknown: `unit_id` é OMITIDO do caso contribuinte", () => {
++    const r = detectar([contrato(24, 500_000, desconhecida), ...preencher(4, 5)])
++    expect(r.event?.contributing_cases?.[0]?.unit).toBeUndefined()
++  })
++
++  it("unidade ambígua não vira UnitId inventado", () => {
++    const r = detectar([contrato(24, 500_000, ambigua), ...preencher(4, 5)])
++    expect(r.event?.contributing_cases?.[0]?.unit).toBeUndefined()
++    expect(r.summary.quality_status).toBe("conflicted")
++  })
++
++  it("nenhum texto cru de unidade atravessa o evento", () => {
++    const r = detectar([contrato(24, 500_000, desconhecida), ...preencher(4, 5)])
++    const serializado = JSON.stringify(r.event)
++    expect(serializado).not.toContain("Maria Silva")
++    expect(serializado).not.toContain("Presidente P.")
++    expect(serializado).not.toContain("raw_fingerprint")
++  })
++
++  it("unidade resolvida entra com o display_name do CATÁLOGO, não da fonte", () => {
++    const r = detectar([contrato(24, 500_000), ...preencher(4, 5)])
++    expect(r.event?.contributing_cases?.[0]?.unit).toBe("Mogi das Cruzes")
++  })
++})
++
++describe("S/T — baseline", () => {
++  const baseline: Baseline = {
++    share_count_bp: 2800,
++    source: "periodo_anterior:2026-07",
++    evidence_ref: "ev_baseline",
++  }
++
++  it("com baseline governado: reference é `observed`", () => {
++    const r = detectar(preencher(5, 24), { baseline })
++    expect(r.event?.reference_metric?.data_class).toBe("observed")
++    expect(r.event?.reference_metric?.value).toBe(2800)
++  })
++
++  it("sem baseline: reference é gap, NUNCA zero", () => {
++    const r = detectar(preencher(5, 24))
++    expect(r.event?.reference_metric?.data_class).toBe("gap")
++    expect(r.event?.reference_metric?.value).toBeUndefined()
++    expect(r.event?.reference_metric?.gap_reason).toBe("DATA_NOT_AVAILABLE")
++  })
++
++  it("2800 não é default — o detector não o produz sozinho", () => {
++    const r = detectar(preencher(5, 24))
++    expect(JSON.stringify(r.event)).not.toContain("2800")
++  })
++
++  it("baseline sem origem identificável falha fechado", () => {
++    expect(() => detectar(preencher(5, 24), { baseline: { ...baseline, source: "  " } })).toThrowError(
++      /origem precisa ser identificável/,
++    )
++  })
++})
++
++describe("U/V — qualidade não pode virar ok", () => {
++  it("cobertura abaixo do mínimo configurado: insufficient", () => {
++    const r = detectar(preencher(5, 24), {
++      unit_coverage: { expected_units: 20, reporting_units: 15, ratio_bp: 7500 },
++    })
++    expect(r.summary.quality_status).toBe("insufficient")
++  })
++
++  it("snapshot conflitado contamina o evento", () => {
++    const conflitado = [
++      rawSnapshot({
++        snapshot_id: "snap_vendas",
++        source_system: "google_sheets",
++        dataset_id: "ds_vendas",
++        quality_status: "conflicted",
++      }),
++    ] as unknown as Snapshot[]
++    const r = detectar(preencher(5, 24), { snapshots: conflitado })
++    expect(r.summary.quality_status).toBe("conflicted")
++    expect(r.event?.data_quality.quality_status).toBe("conflicted")
++  })
++
++  it("a qualidade é a MAIS FRACA das dependências", () => {
++    const r = detectar([contrato(null), contrato(24, null), ...preencher(4, 24)], {
++      unit_coverage: { expected_units: 20, reporting_units: 15, ratio_bp: 7500 },
++    })
++    expect(r.summary.quality_status).toBe("insufficient")
++  })
++
++  it("cobertura de unidades e elegibilidade de contratos são dimensões separadas", () => {
++    const r = detectar([contrato(null), ...preencher(4, 24)], {
++      unit_coverage: { expected_units: 20, reporting_units: 19, ratio_bp: 9500 },
++    })
++    // 9500 bp de unidades; 8000 bp de elegibilidade. Números diferentes.
++    expect(r.event?.data_quality.coverage_ratio_bp).toBe(9500)
++    const e = r.summary.population.eligibility_ratio_bp
++    expect(isOk(e) && e.value).toBe(8000)
++  })
++})
++
++describe("O/P — lastro falha fechado", () => {
++  it("contrato sem evidência é recusado", () => {
++    const semLastro: ContractRecord = { ...contrato(24), evidence_refs: [] }
++    expect(() => detectar([semLastro, ...preencher(4)])).toThrowError(/sem evidência/)
++  })
++
++  it("evidência inexistente é recusada", () => {
++    const ruim: ContractRecord = { ...contrato(24), evidence_refs: ["ev_fantasma"] }
++    expect(() => detectar([ruim, ...preencher(4)])).toThrowError(/evidência inexistente/)
++  })
++
++  it("evidência de outro snapshot é recusada", () => {
++    const outro = [
++      ...evidence,
++      rawEvidence({
++        evidence_id: "ev_alheia",
++        snapshot_id: "snap_outro",
++        kind: "row",
++        locator: { dataset_id: "ds_vendas", sheet: "V", row_key: "b".repeat(64) },
++      }),
++    ] as unknown as Evidence[]
++    const ruim: ContractRecord = { ...contrato(24), evidence_refs: ["ev_alheia"] }
++    expect(() => detectar([ruim, ...preencher(4)], { evidence: outro })).toThrowError(
++      /pertence ao snapshot snap_outro/,
++    )
++  })
++
++  it("evidência de outro dataset é recusada", () => {
++    const outro = [
++      ...evidence,
++      rawEvidence({
++        evidence_id: "ev_dataset_errado",
++        snapshot_id: "snap_vendas",
++        kind: "row",
++        locator: { dataset_id: "ds_outro", sheet: "V", row_key: "c".repeat(64) },
++      }),
++    ] as unknown as Evidence[]
++    const ruim: ContractRecord = { ...contrato(24), evidence_refs: ["ev_dataset_errado"] }
++    expect(() => detectar([ruim, ...preencher(4)], { evidence: outro })).toThrowError(
++      /localiza o dataset "ds_outro"/,
++    )
++  })
++
++  it("evidência de agregado do tipo errado é recusada", () => {
++    expect(() => detectar(preencher(5, 24), { aggregate_evidence_ref: "ev_linha" })).toThrowError(
++      /agregado exige computed ou aggregate/,
++    )
++  })
++
++  it("subject_ref que não é pseudônimo é recusado", () => {
++    const comNome: ContractRecord = { ...contrato(24), subject_ref: "maria_silva" }
++    expect(() => detectar([comNome, ...preencher(4)])).toThrowError(/pseudônimo/)
++  })
++
++  it("snapshot fora do conjunto governado é recusado", () => {
++    const fora: ContractRecord = { ...contrato(24), snapshot_id: "snap_inexistente" }
++    expect(() => detectar([fora, ...preencher(4)])).toThrowError(GatewayError)
++  })
++})
++
++describe("M/N — determinismo e independência de ordem", () => {
++  const contratos = [contrato(24, 500_000), contrato(20, 300_000), contrato(6, 100_000), ...preencher(3, 8)]
++
++  it("mesma entrada, mesma config, mesmo detected_at: deepEqual", () => {
++    expect(detectar(contratos)).toEqual(detectar(contratos))
++  })
++
++  it("ordem dos contratos não altera o agregado", () => {
++    const a = detectar(contratos)
++    const b = detectar([...contratos].reverse())
++    expect(a.summary.metrics).toEqual(b.summary.metrics)
++    expect(a.summary.population).toEqual(b.summary.population)
++  })
++
++  it("ordem dos contratos não altera a identidade do evento", () => {
++    expect(detectar(contratos).summary.event_id).toBe(
++      detectar([...contratos].reverse()).summary.event_id,
++    )
++  })
++
++  it("o resumo é congelado", () => {
++    expect(Object.isFrozen(detectar(contratos).summary)).toBe(true)
++  })
++
++  it("não muta a entrada", () => {
++    const copia = structuredClone(contratos)
++    detectar(contratos)
++    expect(contratos).toEqual(copia)
++  })
++})
++
++describe("22 — identidade do evento é estrutural", () => {
++  it("o id casa com o padrão de identificador do contrato", () => {
++    expect(detectar(preencher(5, 24)).summary.event_id).toMatch(/^evt_[a-f0-9]{16}$/)
++  })
++
++  it("período diferente produz id diferente", () => {
++    const agosto = detectar(preencher(5, 24)).summary.event_id
++    const setembro = detectCrossPeriod()
++    expect(agosto).not.toBe(setembro)
++  })
++
++  it("reingestão com outro snapshot_id, mesmo dataset: MESMO id", () => {
++    const outroSnapshot = [
++      rawSnapshot({ snapshot_id: "snap_vendas_v2", source_system: "google_sheets", dataset_id: "ds_vendas" }),
++    ] as unknown as Snapshot[]
++    const outraEvidencia = [
++      rawEvidence({
++        evidence_id: "ev_linha",
++        snapshot_id: "snap_vendas_v2",
++        kind: "row",
++        locator: { dataset_id: "ds_vendas", sheet: "Vendas", row_key: "a".repeat(64) },
++      }),
++      rawEvidence({
++        evidence_id: "ev_agregado",
++        snapshot_id: "snap_vendas_v2",
++        kind: "computed",
++        locator: { dataset_id: "ds_vendas", sheet: "Vendas", column: "Total de parcelas" },
++        formula: "f",
++      }),
++    ] as unknown as Evidence[]
++
++    const original = detectar(preencher(5, 24)).summary.event_id
++    const reingerido = detectInstallmentConcentration(
++      {
++        ...entrada(preencher(5, 24).map((c) => ({ ...c, snapshot_id: "snap_vendas_v2" }))),
++        snapshots: outroSnapshot,
++        evidence: outraEvidencia,
++      },
++      TEST_CONFIG,
++    ).summary.event_id
++
++    expect(reingerido).toBe(original)
++  })
++})
++
++function detectCrossPeriod(): string {
++  return detectInstallmentConcentration(
++    { ...entrada(preencher(5, 24)), period_start: "2026-09-01", period_end: "2026-09-30" },
++    TEST_CONFIG,
++  ).summary.event_id
++}
++
++describe("17 — fato verdadeiro vs fato material", () => {
++  it("um contrato acima do limiar não basta para emitir evento", () => {
++    // 1 de 10 = 1000 bp, abaixo dos 3000 sintéticos; volume 100k abaixo do
++    // material_amount_cents; contagem 1 abaixo de material_count_above.
++    const r = detectar([contrato(24, 100_000), ...Array.from({ length: 9 }, () => contrato(6, 100_000))])
++    expect(r.event).toBeNull()
++    expect(r.summary.material).toBe(false)
++  })
++
++  it("o não material é registrado com motivo, não descartado", () => {
++    const r = detectar(preencher(5, 12))
++    expect(r.summary.non_material_reason).toContain("nenhum contrato acima")
++    expect(r.summary.population.eligible_contracts).toBe(5)
++  })
++
++  it("amostra abaixo do mínimo não emite, e diz por quê", () => {
++    const r = detectar(preencher(2, 24))
++    expect(r.event).toBeNull()
++    expect(r.summary.non_material_reason).toContain("abaixo do mínimo")
++  })
++})
++
++describe("W — boundary de materialidade (TEST_CONFIG sintética)", () => {
++  const limiar = TEST_CONFIG.installmentConcentration.material_count_above // 3
++
++  const comAcima = (n: number): ReturnType<typeof detectar> => {
++    // Base grande mantém os shares abaixo dos limiares, isolando a dimensão de
++    // CONTAGEM. Volume individual pequeno mantém o volume abaixo do limiar.
++    const acima = Array.from({ length: n }, () => contrato(24, 1000))
++    const abaixo = Array.from({ length: 200 - n }, () => contrato(6, 1000))
++    return detectar([...acima, ...abaixo])
++  }
++
++  it(`limiar−1 (${limiar - 1}) não emite`, () => {
++    expect(comAcima(limiar - 1).event).toBeNull()
++  })
++
++  it(`limiar (${limiar}) emite`, () => {
++    expect(comAcima(limiar).event).not.toBeNull()
++  })
++
++  it(`limiar+1 (${limiar + 1}) emite`, () => {
++    expect(comAcima(limiar + 1).event).not.toBeNull()
++  })
++})
++
++describe("X — boundary de severidade (TEST_CONFIG sintética)", () => {
++  it("a dimensão usada é a declarada na config", () => {
++    expect(TEST_CONFIG.installmentConcentration.severity_dimension).toBe("share_count_bp")
++  })
++
++  it("share de contagem governa a severidade, não o de valor", () => {
++    // 1 de 10 acima (1000 bp de contagem) mas com 90% do volume. Se a
++    // severidade viesse do valor, seria muito mais alta.
++    const r = detectar([
++      contrato(24, 9_000_000),
++      ...Array.from({ length: 9 }, () => contrato(6, 100_000)),
++    ])
++    expect(r.summary.severity).toBe("low") // 1000 bp na escala sintética
++  })
++
++  it("boundaries da escala sintética", () => {
++    const comShare = (acima: number, total: number): string => {
++      const c = [
++        ...Array.from({ length: acima }, () => contrato(24, 1000)),
++        ...Array.from({ length: total - acima }, () => contrato(6, 1000)),
++      ]
++      return detectar(c).summary.severity
++    }
++    expect(comShare(0, 100)).toBe("info") // 0 bp
++    expect(comShare(10, 100)).toBe("low") // 1000 bp
++    expect(comShare(25, 100)).toBe("medium") // 2500 bp
++    expect(comShare(50, 100)).toBe("high") // 5000 bp
++    expect(comShare(75, 100)).toBe("critical") // 7500 bp
++  })
++})
++
++describe("16 — evento válido contra o contrato", () => {
++  const r = detectar(preencher(5, 24))
++
++  it("passa por schema e semântica", () => {
++    expect(() => assertValid("event", r.event)).not.toThrow()
++  })
++
++  it("carrega proveniência de detector", () => {
++    expect(r.event?.detector_id).toBe(DETECTOR_ID)
++    expect(r.event?.detector_version).toBe(DETECTOR_VERSION)
++    expect(DETECTOR_VERSION).toMatch(/^\d+\.\d+\.\d+$/)
++  })
++
++  it("o tipo é installment_concentration", () => {
++    expect(r.event?.event_type).toBe("installment_concentration")
++  })
++
++  it("a evidência agregada acompanha o evento", () => {
++    expect(r.event?.evidence_refs).toContain("ev_agregado")
++  })
++
++  it("a métrica observada é calculated com fórmula", () => {
++    expect(r.event?.observed_metric?.data_class).toBe("calculated")
++    expect(r.event?.observed_metric?.formula).toContain("installments > 19")
++  })
++
++  it("não produz inferência nem previsão", () => {
++    const classes = [r.event?.observed_metric?.data_class, r.event?.reference_metric?.data_class]
++    expect(classes).not.toContain("inferred")
++    expect(classes).not.toContain("forecast")
++  })
++})
++
++describe("19 — golden do Caso A, derivado do cálculo", () => {
++  const raiz = join(dirname(fileURLToPath(import.meta.url)), "..", "..")
++  const evtA = JSON.parse(
++    readFileSync(join(raiz, "fixtures", "synthetic", "events", "evt_a_parcelamento.json"), "utf8"),
++  ) as { materiality: { amount_cents: number; share_of_total_bp: number } }
++  const salesPayload = JSON.parse(
++    readFileSync(join(raiz, "fixtures", "synthetic", "snapshots", "snap_2026_08_sales.json"), "utf8"),
++  ) as { payload: { volume_contracted_cents: number; installments_histogram: Record<string, number> } }
++
++  it("share_of_total_bp da fixture é o valor calculado", () => {
++    const total = salesPayload.payload.volume_contracted_cents
++    const faixa = evtA.materiality.amount_cents
++    expect(Math.round((faixa / total) * 10000)).toBe(evtA.materiality.share_of_total_bp)
++    expect(evtA.materiality.share_of_total_bp).toBe(5209)
++  })
++
++  it("o histograma de vendas sustenta 5000 bp de share em contagem", () => {
++    const h = salesPayload.payload.installments_histogram
++    const total = Object.values(h).reduce((a, b) => a + b, 0)
++    const acima = (h["de_20_a_24"] ?? 0) + (h["acima_de_24"] ?? 0)
++    expect(total).toBe(14)
++    expect(acima).toBe(7)
++    expect(Math.round((acima / total) * 10000)).toBe(5000)
++  })
++})
++
++describe("21 — pureza", () => {
++  it("o módulo não lê relógio, rede, env nem sorteia", () => {
++    const fonte = readFileSync(
++      join(dirname(fileURLToPath(import.meta.url)), "..", "src", "installment-concentration.ts"),
++      "utf8",
++    )
++    expect(fonte).not.toMatch(/Date\.now\(\)/)
++    expect(fonte).not.toMatch(/new Date\(\)/)
++    expect(fonte).not.toMatch(/Math\.random/)
++    expect(fonte).not.toMatch(/fetch\(|process\.env|readFileSync/)
++  })
++})
+diff --git a/intelligence/detectors/tests/test-config.ts b/intelligence/detectors/tests/test-config.ts
+new file mode 100644
+index 0000000..28b7ddc
+--- /dev/null
++++ b/intelligence/detectors/tests/test-config.ts
+@@ -0,0 +1,172 @@
++/**
++ * ┌───────────────────────────────────────────────────────────────────────────┐
++ * │  CONFIGURAÇÃO SINTÉTICA — NÃO É POLÍTICA DA CREDITUM                      │
++ * │                                                                           │
++ * │  Os números aqui existem para exercitar limites em teste. NENHUM deles foi │
++ * │  aprovado pelo CEO ou pelo arquiteto, e nenhum tem lastro no projeto —     │
++ * │  exceto `installment_threshold` e `similarity_threshold_bp`, que vêm de    │
++ * │  `APPROVED_THRESHOLDS`.                                                    │
++ * │                                                                           │
++ * │  Este arquivo vive em `tests/`, fora de `src/`, justamente para que código │
++ * │  de produção não consiga importá-lo por engano.                            │
++ * └───────────────────────────────────────────────────────────────────────────┘
++ */
++
++import { APPROVED_THRESHOLDS, BUSINESS_TIMEZONE } from "../src/config"
++import type { DetectorConfig, SeverityScale } from "../src/config"
++import type { CanonicalUnit, UnitCatalog, UnitNormalizerPort } from "../src/canonical-units"
++
++const ESCALA_SINTETICA: SeverityScale = [
++  { at_least: 0, severity: "info" },
++  { at_least: 1000, severity: "low" },
++  { at_least: 2500, severity: "medium" },
++  { at_least: 5000, severity: "high" },
++  { at_least: 7500, severity: "critical" },
++]
++
++/** Sintética. Ver aviso no topo do arquivo. */
++export const TEST_CONFIG: DetectorConfig = {
++  config_version: "0.0.0",
++  businessTimezone: BUSINESS_TIMEZONE,
++  similarity_threshold_bp: APPROVED_THRESHOLDS.similarity_threshold_bp,
++  installmentConcentration: {
++    installment_threshold: APPROVED_THRESHOLDS.installment_threshold,
++    minimum_sample_size: 4,
++    material_count_above: 3,
++    material_share_count_bp: 3000,
++    material_share_amount_bp: 4000,
++    material_amount_cents: 1_000_000,
++    contributing_case_rule: { mode: "top_n", n: 3 },
++    severity_dimension: "share_count_bp",
++    severity_scale: ESCALA_SINTETICA,
++    minimum_coverage_bp: 9000,
++  },
++  crossSourceConflict: {
++    material_absolute_count: 3,
++    material_amount_cents: 100_000,
++    material_absolute_basis_points: 1500,
++    material_relative_difference_bp: 4000,
++    material_share_bp: 2000,
++    structural_fields: ["sales_count", "sale_date"],
++    structural_severity: "high",
++    severity_by_relative_bp: ESCALA_SINTETICA,
++  },
++  firstDueConcentration: {
++    window: { mode: "calendar_month", months_ahead: 1 },
++    material_share_bp: 5000,
++    severity_by_share_bp: ESCALA_SINTETICA,
++  },
++  materialSingleCase: {
++    min_delta_bp: 500,
++    min_share_of_total_bp: 1000,
++    min_population_after_removal: 2,
++    severity_by_delta_bp: ESCALA_SINTETICA,
++  },
++  coverage: {
++    degraded_below_bp: 9500,
++    emit_event_below_bp: 8000,
++  },
++}
++
++export { ESCALA_SINTETICA }
++
++// Escapes, nunca o caractere literal: zero-width é invisível no editor e um
++// `git diff` inocente pode apagá-lo sem ninguém notar. Mesma razão documentada
++// em `src/lib/ceo/parse.ts`.
++const ZERO_WIDTH = new RegExp("\\u200B|\\u200C|\\u200D|\\uFEFF", "gu")
++const NBSP = new RegExp("\\u00A0", "gu")
++const DIACRITICOS = new RegExp("[\\u0300-\\u036F]", "gu")
++
++/**
++ * Normalizador de TESTE.
++ *
++ * Mínimo deliberado: acento, caixa, espaço, prefixo `grau`. **Não** é a
++ * implementação de produção — essa é `canonicalSchoolKey`/`similarity` de
++ * `src/lib/ceo/normalize.ts`, cuja fiação está bloqueada (ver relatório da
++ * Fase 2.1). O motor recebe a porta justamente para não depender de qual das
++ * duas está do outro lado.
++ */
++export const TEST_NORMALIZER: UnitNormalizerPort = {
++  comparableKey(raw: unknown): string | null {
++    // Só string e número entram. Um objeto viraria "[object Object]" e
++    // produziria chave sem significado que ainda assim pareceria válida.
++    if (typeof raw !== "string" && typeof raw !== "number") return null
++
++    const s = String(raw)
++      .replace(ZERO_WIDTH, "")
++      .replace(NBSP, " ")
++      .normalize("NFD")
++      .replace(DIACRITICOS, "")
++      .replace(/\s+/g, " ")
++      .trim()
++      .toLowerCase()
++
++    if (!s) return null
++    const tokens = s.split(" ").filter(Boolean)
++    if (tokens.length === 0) return null
++    const semPrefixo = tokens.length > 1 && tokens[0] === "grau" ? tokens.slice(1) : tokens
++    return semPrefixo.join(" ")
++  },
++
++  similarity(a: string, b: string): number {
++    if (!a || !b) return 0
++    if (a === b) return 1
++    const ta = a.split(" ").filter(Boolean)
++    const tb = b.split(" ").filter(Boolean)
++    const sa = new Set(ta)
++    let comuns = 0
++    for (const t of new Set(tb)) if (sa.has(t)) comuns++
++    // Mesmo veto estrutural de D12: contagem de palavras diferente e nenhuma
++    // palavra em comum são lugares diferentes.
++    if (comuns === 0 && ta.length !== tb.length) return 0
++    const maior = Math.max(a.length, b.length)
++    return maior === 0 ? 0 : 1 - levenshtein(a, b) / maior
++  },
++}
++
++function levenshtein(a: string, b: string): number {
++  if (a === b) return 0
++  if (!a.length) return b.length
++  if (!b.length) return a.length
++  let prev = Array.from({ length: b.length + 1 }, (_, i) => i)
++  let curr = new Array<number>(b.length + 1).fill(0)
++  for (let i = 1; i <= a.length; i++) {
++    curr[0] = i
++    for (let j = 1; j <= b.length; j++) {
++      const custo = a[i - 1] === b[j - 1] ? 0 : 1
++      curr[j] = Math.min((curr[j - 1] ?? 0) + 1, (prev[j] ?? 0) + 1, (prev[j - 1] ?? 0) + custo)
++    }
++    const troca = prev
++    prev = curr
++    curr = troca
++  }
++  return prev[b.length] ?? 0
++}
++
++/**
++ * Catálogo de TESTE — subconjunto pequeno, escolhido para exercitar o motor.
++ *
++ * **Não é o catálogo canônico da Creditum.** Aquele depende da validação em
++ * `docs/D13_CATALOG_VALIDATION.md` e da decisão do CEO (bloqueio B1).
++ * As unidades abaixo cobrem os casos difíceis reais: `santos` vs `santo amaro`
++ * (armadilha de fusão) e `alecrim` (erro de digitação).
++ */
++export function testCatalog(overrides: readonly CanonicalUnit[] = []): UnitCatalog {
++  return {
++    catalog_version: "0.0.0",
++    units: [
++      { unit_id: "sumare", display_name: "Sumaré", aliases: ["Grau Sumaré"], active: true },
++      { unit_id: "santos", display_name: "Santos", aliases: [], active: true },
++      { unit_id: "santo_amaro", display_name: "Santo Amaro", aliases: [], active: true },
++      { unit_id: "alecrim", display_name: "Alecrim", aliases: [], active: true },
++      {
++        unit_id: "mogi_das_cruzes",
++        display_name: "Mogi das Cruzes",
++        aliases: ["Mogi", "Grau Mogi"],
++        active: true,
++      },
++      { unit_id: "limeira", display_name: "Limeira", aliases: [], active: false },
++      ...overrides,
++    ],
++  }
++}
