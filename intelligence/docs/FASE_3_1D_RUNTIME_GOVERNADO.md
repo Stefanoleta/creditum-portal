@@ -2817,3 +2817,628 @@ por AST" mais "o livro-razão aceita raiz mas não pode produzir capacidade".
 
 `npm run verify` exit 0 · **2878 TS** · 429 Python · lint 0/0 · typecheck 0 · d1 30/32+2
 · c6 23/23 · r6 10/10 e 15/15. D1 e Python de produção intocados; artefato inalterado.
+
+---
+
+## §33 — D2C: costura privada de execução PRECALL (TS → Python)
+
+### O que esta fase é, e onde ela para
+
+A D2C constrói o **único caminho** pelo qual uma capacidade d2b vira um processo
+filho, e para **antes** de qualquer chamada real de modelo. Não há chamada a
+provedor, não há rede, não há `--live`, não há modo de ativação. O worker Python
+executa a sonda PRECALL já existente e devolve **um** documento fechado com
+hashes e contagens.
+
+A pergunta que a D2C responde é estreita de propósito:
+
+> Dada uma capacidade autêntica e de uso único, existe exatamente um processo
+> filho, com executável fixo, módulo fixo e ambiente fixo, cujo resultado só é
+> aceito se estiver amarrado a esta execução — e nada disso concede LIVE?
+
+### Fronteiras de módulo
+
+O `creditum_hermes_reasoning` **não foi tocado**. A D2C vive em um pacote novo,
+`creditum_hermes_precall`, justamente para que o pacote congelado permaneça
+byte-idêntico ao artefato que o selou. O ledger, o supervisor e o
+`live-execution.ts` também seguem intocados — verificado por hash contra o
+commit `6383374`, não por afirmação.
+
+Por isso a EV2-13 da d2b continua correta ao exigir zero `spawn` no ledger e no
+supervisor: o `spawn` da D2C nasce em `precall-execution.ts`, um módulo distinto,
+coberto pelas checagens C4, C5, C10 e C12.
+
+### Ordem da ativação
+
+1. **consumo síncrono** da capacidade, antes de qualquer `await`;
+2. **orçamento restante** derivado da mesma linhagem monotônica da d1 — sem
+   relógio novo, sem reinício de prazo;
+3. **`ATTEMPT_COMMITTED` durável** gravado **antes** do spawn: se o commit não
+   for durável, nenhum filho nasce;
+4. **um** filho, `spawn` de executável e módulo fixos, ambiente mínimo;
+5. **amarração** do resultado: `execution_id`, `execution_fingerprint` e
+   `request_nonce` conferidos contra o que foi enviado;
+6. **terminal write-once**, que é auditoria e nunca devolve o id ao pool.
+
+O passo 3 vem antes do 4 por uma razão só: um filho que nasce sem commit durável
+é um filho cuja tentativa pode ser reexecutada após uma queda. A durabilidade
+precede a atividade.
+
+### Duas correções que o lint encontrou e que eram substantivas
+
+Nenhuma das duas foi cosmética, e vale registrar porque ambas repetem a mesma
+lição da d2b — **dado vindo de baixo não é autoridade**.
+
+**(a) Coerção silenciosa de campos opcionais.** `leResultado` conferia o tipo dos
+campos obrigatórios, mas dos opcionais conferia só a pertinência ao conjunto
+permitido. Um filho que mandasse `"mode": {}` faria `String({})` gravar
+`"[object Object]"` **dentro da evidência governada**. A correção não foi
+melhorar a coerção: foi tipar na fronteira e recusar o documento inteiro quando
+um campo presente tem o tipo errado. Coberto por C7.
+
+**(b) Vocabulário de recusa aberto.** O tipo era `PrecallDefect | string`, e o
+defeito devolvido vinha do filho. Isso deixava um worker comprometido **escolher
+como esta camada classifica a própria recusa**. Agora o vocabulário é fechado, a
+recusa semântica é sempre `PRECALL_SEMANTIC_REJECTED`, e o texto do filho
+sobrevive apenas como `child_detail` — auditoria, nunca classificação. Coberto
+por C7.
+
+### Evidência
+
+`gateway/tests/d2c-ev.test.ts` — C1 a C13, 46 checagens diretas. Mesma forma da
+EV2: comportamento observado ou asserção pequena de AST, sem framework, sem
+mutação, sem oráculo.
+
+`bridge/tests/test_d2c_precall_worker.py` — 8 provas no nível do processo, com o
+worker rodando de verdade e o protocolo fechado ponta a ponta.
+
+Uma nota de precisão sobre o teste Python: produção usa `python3 -I` porque lá o
+pacote está instalado no `/opt/venv`. `-I` descarta `PYTHONPATH`, e este
+repositório não é instalado; o teste local roda sem `-I`, com o repositório como
+`cwd`. A diferença é de **localização do módulo**, não de comportamento do
+worker.
+
+### C10 — o que a checagem realmente afirma
+
+A primeira versão de C10 exigia zero laços no módulo e falhou: existem dois, em
+`leResultado`, percorrendo campos do protocolo. A asserção estava errada, não o
+código. A invariante real é que **nenhum laço envolve a invocação do filho** —
+hoje é isso que a AST verifica, junto com a contagem única de chamadas.
+
+Vale nomear o padrão porque esta fase já pagou por ele oito vezes: varredura de
+texto acusa a prosa que documenta uma ausência. A resposta certa é sempre AST.
+
+### O que continua NÃO construído
+
+A costura que poria o worker em modo LIVE não existe. Não há
+`__spawnForTests`, não há executável, módulo, ambiente, prazo ou protocolo
+selecionáveis pelo chamador. A primeira execução LIVE segue não autorizada.
+
+---
+
+## §33.1 — D2C-R1: instantâneo imutável, prazo absoluto, contrato exato
+
+O Codex bloqueou a D2C com três achados. Todos os três eram reais, todos em
+`precall-execution.ts`, e nenhum exigiu tocar módulo congelado.
+
+### (A) `readonly` é do compilador, não do runtime
+
+A capacidade era autêntica — `instanceof` mais `WeakSet` — mas suas propriedades
+continuavam graváveis por `Object.defineProperty`. E a via **relia** essas
+propriedades depois do `await` do commit. Duas rotas saíam disso:
+
+1. `execution_key` adulterado antes da invocação: `join(raiz, "attempts", chave)`
+   com `../../../../../tmp/owned` aponta para fora da reserva governada.
+2. `execution_id` ou `execution_fingerprint` mutados **durante** o commit: o
+   `attempt-committed.json` no disco registra uma identidade, e o pedido ao
+   filho, a conferência de vínculo, o terminal e a evidência usam outra.
+
+A correção é a mesma disciplina que a d1-R1 pagou para aprender: **ler uma vez,
+antes do primeiro `await`, e derivar tudo da cópia própria**. `instantaneoDaCapacidade`
+lê cada campo exatamente uma vez de forma síncrona — o JavaScript não preempta
+dentro de uma função síncrona, então nenhum `defineProperty` se intercala entre
+duas leituras — valida, e congela. Depois disso a capacidade não é mais lida; há
+uma checagem de AST que exige zero acessos a `attempt.*` dentro da via.
+
+O diretório nunca vem da propriedade. Vem de `executionKey(execution_id)`, a
+mesma derivação canônica da d2b. A propriedade é conferida contra a derivação e
+descartada.
+
+A validação é cruzada, não apenas de formato: mutar só o id quebra a spec; mutar
+só a spec quebra o fingerprint; mutar só o fingerprint quebra a derivação. Um
+chamador que mutasse os quatro coerentemente apontaria para uma execução que
+nunca foi reservada — e `recordAttemptCommitted` recusa com `ATTEMPT_NOT_RESERVED`,
+porque quem cria o diretório é a reserva, não o commit.
+
+Uma nota sobre o que **não** foi feito: não inventei um regex mais estreito para
+`execution_id`. A d1 exige texto não vazio e não impõe alfabeto; um regex mais
+apertado aqui rejeitaria identificadores que a d1 legitimamente emite. A
+segurança do caminho não depende do alfabeto, porque a chave é um sha256.
+
+### (B) O commit devolvia tempo ao orçamento
+
+O restante era calculado **antes** da escrita e dos dois `fsync`, e usado
+**depois**. Um commit de 30 s deixava o filho com quase os 180 s originais —
+cerca de 210 s de linhagem. Pior: um commit que terminasse já vencido ainda
+chegava ao `spawn`.
+
+A autoridade agora é o prazo **absoluto**. O restante é recalculado depois do
+commit; se venceu, o commit permanece — a tentativa está queimada, e isso é
+intencional — e nenhum filho nasce. O cronômetro do filho deriva do absoluto no
+instante do `spawn`, dentro de `rodaFilho`, em vez de receber uma duração
+pré-calculada.
+
+O decorrido do registro terminal também passou a derivar do relógio atual e da
+linhagem original, em vez de um restante obsoleto.
+
+### (C) Sucesso media três campos e presumia o resto
+
+O predicado antigo era `outcome + provider_calls + model_call_completed`, e o
+resto da evidência vinha com `?? -1` e `?? ""`. Um filho podia declarar
+`PRECALL_SUCCEEDED` com `mode: "LIVE"`, `client_constructions: 1`, veredito
+inventado, hashes ausentes e `rc: 137` — e a camada gravava `COMPLETED_ACCEPTED`.
+
+Agora há dois contratos, não um permissivo. O envelope mínimo vale para qualquer
+resultado. O sucesso exige o conjunto **exato** de treze campos com os valores
+exatos do worker congelado: `mode = "PRECALL_PROBE"`,
+`verdict = "PRECALL_PROBE_COMPLETE"`, `tool_count`/`client_constructions`/
+`provider_calls` iguais a zero como inteiros de verdade, `model_call_completed`
+falso, e os dois hashes em `^[0-9a-f]{64}$`. Nada é opcional, nada tem default —
+**ausência nunca é zero**.
+
+O desfecho do processo precede a semântica: `rc != 0` ou sinal presente é
+`WORKER_FAILED`, e stdout impecável não converte processo morto em sucesso. O
+worker congelado sempre sai 0, até quando recusa, então saída diferente de zero
+só pode significar que o processo quebrou.
+
+E a evidência governada é construída pelo pai. As constantes vêm do módulo, não
+do documento; `execution_key` não existe no protocolo do filho, então sua
+presença na evidência é prova de que quem a montou foi esta camada. O texto do
+filho sobrevive apenas como `child_detail`, limitado a 128 caracteres, auditoria
+e nunca classificação.
+
+### Duas coisas que os testes revelaram sobre si mesmos
+
+O fixture usava `"r".repeat(64)` como `request_hash` — **`r` não é hexadecimal**.
+O contrato canônico o rejeitou de imediato. O fixture estava errado desde o
+início e nada media isso.
+
+E o fixture emitia `mode: "precall_probe"` enquanto o worker congelado emite
+`PRECALL_PROBE`, exatamente como o Codex apontou. A correção foi no teste. Tornar
+o comparador insensível a caixa teria acomodado o erro do fixture dentro da
+produção — o oposto do que a fase inteira vem construindo.
+
+A checagem C9 que varria o texto procurando a expressão do cálculo foi
+substituída por comportamento com relógio injetado: 180 s de orçamento, 30 s
+consumidos no commit, cronômetro do filho medido em 150 000 ms. A varredura
+antiga continuaria passando com o valor inflado, porque a expressão estava lá —
+só estava no lugar errado. Décima vez nesta fase que texto não prova estrutura.
+
+### Evidência
+
+`gateway/tests/d2c-ev.test.ts` — C1 a C13, **80 checagens** (eram 46). As novas
+cobrem instantâneo e travessia, mutação durante o commit, prazo absoluto sob
+relógio determinístico, os doze sucessos impossíveis, os oito campos ausentes, os
+três desfechos de processo quebrado, e a forma exata da evidência do pai.
+
+---
+
+## §33.2 — D2C-R2: estado privado de emissão e portão do prazo antes do spawn
+
+O Codex bloqueou a R1 com dois achados novos. O primeiro exigiu reabrir a D2B —
+mínima e justificadamente, porque a D2C não tem como derivar autoridade em
+segurança de propriedades públicas mutáveis.
+
+### (A) Coerência mútua não prova propriedade
+
+A R1 lia os campos públicos da capacidade **uma vez**, de forma síncrona, e os
+validava **entre si**: id contra spec, fingerprint contra a derivação, chave
+contra `executionKey(id)`. Achei que isso fechava a rota. Não fechava.
+
+O ataque que o Codex demonstrou: o chamador obtém **duas** capacidades
+autênticas, A e B, e reescreve em A todos os campos públicos com os valores de B.
+Esses valores são mutuamente coerentes — vêm de uma emissão real. A validação
+cruzada passa. A é consumida, e a execução acontece sob a identidade de B, no
+diretório já reservado de B, sem consumir B.
+
+Minha defesa declarada na R1 — "um id não reservado é recusado com
+`ATTEMPT_NOT_RESERVED`" — não cobria o caso, porque o alvo **está** reservado.
+
+A correção não é validar melhor. É não consultar. O supervisor passou a capturar
+o estado autoritativo no cunho, num `WeakMap` privado do módulo, e
+`consumeReservedExecutionAttempt` devolve esse estado. As três coisas acontecem
+juntas e de forma síncrona: autenticidade, uso único, entrega da identidade.
+Separá-las devolvia à D2C a tarefa de descobrir por si qual identidade vale — e
+foi disso que a rota A→B nasceu.
+
+`WeakMap` e não campo privado de classe por uma razão prática: campo privado
+ainda vive no objeto, e o objeto atravessa a fronteira. A chave aqui é a
+identidade da capacidade autêntica, que não se forja, copia nem reescreve.
+
+Os campos públicos permanecem, agora documentados como **observacionais**. E
+`safeAuditView()` passou a ler a emissão: uma visão de auditoria que o detentor
+pudesse reescrever seria auditoria de nada.
+
+Uma decisão que vale explicitar: **não** tornei as propriedades públicas
+não-graváveis. Seria barato e faria a mutação lançar. Mas isso converteria uma
+prova de *irrelevância* numa prova de *rejeição*, e irrelevância é a propriedade
+que sobrevive a alguém acrescentar um campo público novo daqui a três fases. As
+regressões da R2 afirmam exatamente isso: a mutação acontece, e não muda nada.
+
+O que devolvo do consumo é dado congelado, não uma segunda capacidade: sem selo,
+fora do registro, e passá-lo de volta a qualquer via governada falha em
+`instanceof`. Há checagem EV2 para isso.
+
+### (B) O portão do prazo estava do lado errado do `spawn`
+
+A R1 conferia o prazo na via, depois do commit, e recalculava **dentro** de
+`rodaFilho` — depois de `spawn` já ter sido chamado. Uma tentativa que vencesse
+entre as duas linhas criava um processo e só então agendava sua morte, com o
+`Math.max(1, ...)` ainda dando um milissegundo a quem não tinha nenhum.
+
+O portão mudou de lado: é a primeira coisa que `rodaFilho` faz, e nenhuma
+declaração `spawn` é alcançável antes dele — há checagem de AST comparando
+posições. A conferência da via permanece apenas como falha rápida, e está
+marcada como não autoritativa: se ela desaparecesse, a correção continuaria
+valendo pelo portão.
+
+O cronômetro é relido do mesmo prazo absoluto imediatamente após o `spawn`, sem
+mínimo artificial. Se o prazo venceu nesse intervalo, o atraso é zero e o filho
+morre no próximo tique — o caminho local mais curto, e não é retry.
+
+E o limite que não se pode fingir: entre ler o relógio e o sistema operacional
+criar o processo existe um intervalo que nenhum código de espaço de usuário
+fecha. A afirmação honesta é que a **permissão** para chamar `spawn` é decidida
+imediatamente antes da chamada, pelo prazo absoluto. Não há atomicidade entre
+leitura de relógio e criação de processo, e o comentário no código existe para
+não sugerir que haja.
+
+### O que as regressões afirmam agora
+
+A decisiva: duas capacidades autênticas, A reescrita com os valores reais de B,
+e então (i) a evidência é de A, (ii) o pedido ao filho é de A, (iii) A tem commit
+e terminal, (iv) o diretório de B contém **só a própria reserva**, (v) B segue
+consumível por si, (vi) um filho por capacidade.
+
+Para o portão: relógio com fila de leituras encadeadas, positivo nas duas
+conferências da via e vencido na terceira — a leitura do portão. `spawn` count 0.
+
+Quatro testes da R1 tiveram de ser reescritos, e isso é o sinal de que a
+correção é real: eles exigiam que a mutação fosse **rejeitada**; agora ela é
+**irrelevante**.
+
+### Dois detalhes que os testes revelaram
+
+D1 recusou a segunda capacidade com `INVALID_APPROVAL_REQUEST`: uma aprovação
+emite uma autorização, então A e B precisam de aprovações distintas. E o `$defs.identifier`
+do contrato só aceita minúsculas — meu `d2c-exec-000B` tinha um `B` maiúsculo.
+Ambos eram erros do teste, corrigidos no teste.
+
+### Evidência
+
+`gateway/tests/d2c-ev.test.ts` — **86 checagens** (eram 80).
+`gateway/tests/d2b-ev2.test.ts` — **45 checagens** (eram 42), 13/13 invariantes.
+
+---
+
+## §33.3 — D2C-R3: o uso único sai do objeto
+
+O Codex bloqueou a R2 com um achado só, e certeiro. Eu havia tirado a
+**identidade** das propriedades públicas e deixado o **uso único** onde estava:
+num campo booleano do objeto, decidido por um método público `_consumeOnce`.
+
+Três consequências, todas alcançáveis com capacidades autênticas:
+
+```
+A._consumeOnce = B._consumeOnce.bind(B)
+  → consumir A autenticava A, recuperava a emissão de A, e marcava B como gasta.
+    B era recusada depois sem nunca ter executado.
+
+A._consumeOnce = () => true
+  → o uso único desaparecia: toda chamada "vencia", e uma aprovação rendia N filhos.
+```
+
+E a terceira, que o relato não precisou citar porque as duas primeiras já
+bastavam: a chamada passava `SELO_TENTATIVA` como argumento para uma função
+escolhida pelo portador. **O selo do módulo vazava.** Não é suficiente para
+forjar capacidade — o construtor também exige um recibo durável autêntico, que
+vive num `WeakSet` do livro-razão — mas entregar o selo é entregar metade.
+
+O modelo de autoridade agora é simétrico e inteiro:
+
+| Fato | Onde mora |
+|---|---|
+| **QUEM** é esta capacidade | `WeakMap` privado `EMISSAO` |
+| **SE** já foi consumida | `WeakSet` privado `CONSUMIDAS` |
+
+Nenhum campo nem método público controla qualquer um dos dois. `_consumeOnce` foi
+**removido**, não renomeado nem marcado — não existem dois mecanismos competindo.
+`isConsumed` e `safeAuditView().consumed` passaram a ler o `WeakSet`: são
+observação, não autoridade.
+
+O uso único é atômico por construção. Entre o `has` e o `add` não há `await` nem
+chamada externa, e o JavaScript não preempta dentro de uma função síncrona. Isso
+não é mutex; é a garantia do modelo de execução, e é a mesma que a D1 já usava —
+só que agora sem despacho dinâmico no meio.
+
+Emissão ausente recusa **antes** de marcar como consumida: um bug interno não
+deve queimar a capacidade de quem não fez nada errado.
+
+### O padrão idêntico continua aberto na D1
+
+`live-execution.ts:552` faz exatamente o que o supervisor fazia:
+
+```ts
+if (!auth._consumeOnce(SELO)) { … }
+```
+
+`LiveExecutionAuthorization` tem `private consumida`, um `_consumeOnce` público e
+o mesmo despacho dinâmico. As duas rotas do relato do Codex valem lá sem
+alteração: rebinding entre duas autorizações autênticas queima a errada, e
+`() => true` derruba o uso único da autorização — que é a autoridade de Stefano,
+não a reserva.
+
+Esta fase tinha instrução explícita de não tocar `live-execution.ts`, e não
+toquei. Fica registrado como defeito conhecido, com localização exata, esperando
+fase própria. A D2C não depende dele para estar correta: o supervisor recusa
+autorização já consumida por `EMITIDAS` e TTL, e a unicidade global do
+`execution_id` é garantida pelo `mkdir` atômico do livro-razão. Mas o defeito é
+real e da mesma classe.
+
+### Evidência
+
+`gateway/tests/d2b-ev2.test.ts` — **49 checagens** (eram 45), 13/13 invariantes.
+As quatro novas: função injetada não consome outra capacidade; função que sempre
+"vence" não repete o consumo; estado de consumo vem do registro privado e
+injetar `consumida` não desconsome; nenhum export desfaz, reseta ou clona
+consumo, e `_consumeOnce` não existe mais no protótipo.
+
+`gateway/tests/d2c-ev.test.ts` — **88 checagens** (eram 86). As duas novas provam
+o efeito na ponta: método injetado não gera segundo filho, e consumo injetado de
+A não queima B.
+
+---
+
+## §33.4 — D2C-R4: autoridade em campos privados de linguagem
+
+A R3 tirou a autoridade do objeto e a pôs num `WeakMap` e num `WeakSet` privados
+do módulo. O Codex mostrou que privado do módulo não é suficiente, porque o
+**acesso** continuava sendo despacho comum:
+
+```
+EMISSAO.get(attempt)   →   WeakMap.prototype.get
+CONSUMIDAS.has(...)    →   WeakSet.prototype.has
+RESERVADAS.has(...)    →   WeakSet.prototype.has
+attempt instanceof X   →   X[Symbol.hasInstance]
+```
+
+Todos com descritor `writable: true, configurable: true` — medido, não presumido.
+O ataque: depois de os módulos governados já estarem inicializados, o chamador
+guarda o `get` original e o substitui por um invólucro que, chamado com a chave
+A, chama o original com a chave B. `EMISSAO.get(A)` devolve a emissão de B sem
+que ninguém jamais tenha alcançado o `WeakMap`. A é marcada como gasta e a
+execução acontece sob a identidade de B, que segue não consumida. `WeakSet.has`
+mentindo "nunca consumida" derruba o uso único pelo mesmo mecanismo.
+
+A classe do defeito tem nome: **autoridade por despacho mutável**. Corrigir uma
+primitiva de cada vez não a fecha.
+
+### O que fecha
+
+Campos privados de classe. `this.#emissao` não é propriedade procurada num
+protótipo — é referência resolvida lexicalmente, sem método que se possa
+substituir. E `#emissao in obj` é uma marca que só o construtor real instala:
+não se forja, não se acrescenta e não se intercepta.
+
+| Fato | R3 | R4 |
+|---|---|---|
+| QUEM é a capacidade | `WeakMap` privado | `#emissao` |
+| SE já foi consumida | `WeakSet` privado | `#consumida` |
+| É emissão autêntica | `instanceof` + `WeakSet` | `#emissao in obj` |
+
+O consumidor vive num bloco `static {}` da própria classe, onde os campos
+privados são visíveis, e o módulo exporta apenas uma função que o chama. Nenhum
+selo atravessa fronteira; nenhum retorno de chamada é escolhido pelo chamador.
+`RESERVADAS`, `EMISSAO` e `CONSUMIDAS` foram removidos — a marca de linguagem já
+é a prova de emissão, e ela foi instalada por um construtor que exige o selo do
+módulo e um recibo durável autêntico.
+
+Há checagem de AST sobre o bloco estático: nenhum `instanceof`, nenhuma chamada
+a `get`/`has`/`add`/`set`.
+
+### O que este desenho não promete
+
+**Dentro** do modelo de ameaça: o chamador reescreve campos públicos, acrescenta
+ou substitui métodos, adultera protótipos globais **depois** da inicialização dos
+módulos governados, e tem múltiplas capacidades autênticas em mão.
+
+**Fora**: código hostil arbitrário do mesmo realm executando **antes** da
+inicialização destes módulos, ou substituição do próprio Node/V8. Quem controla o
+bootstrap substitui a classe, o `import`, o `crypto` — e nenhuma dureza
+incremental neste arquivo responde a isso. A resposta a essa ameaça é isolamento
+de processo.
+
+Uma verificação que fiz em vez de assumir: o caminho do diretório usa `join`
+importado de `node:path`, e um binding nomeado de ESM **não** é interceptável —
+substituir `path.join` depois do import não afeta a chamada. Medido.
+
+E uma honestidade sobre proporção: `HEX256.test(...)`, `Number.isFinite` e
+`Object.freeze` também são substituíveis, e não os capturei. Eles validam
+valores que já vêm do estado privado, criado no cunho a partir de material
+autêntico — são defesa em profundidade, não autoridade. Capturar todo intrínseco
+que o módulo toca seria trocar um risco real por muito ruído.
+
+### Evidência
+
+`gateway/tests/d2b-ev2.test.ts` — **52 checagens** (eram 49), 13/13 invariantes.
+As três novas: patch em `WeakMap.prototype.get`/`has` e `WeakSet.prototype.has`/
+`add` não redireciona A para B nem derruba o uso único, com restauração no
+`finally` e janela mínima; `Symbol.hasInstance` forjado faz `instanceof` devolver
+`true` e ainda assim não cria capacidade; e a prova de AST do bloco estático.
+
+`gateway/tests/d2c-ev.test.ts` — **89 checagens** (eram 88). A nova prova o
+efeito na ponta: com os protótipos adulterados, A executa como A, o diretório de
+B fica só com a própria reserva, e nasce um único filho.
+
+---
+
+## §33.5 — D2C-R5: a autoridade não é valor de retorno
+
+A R4 pôs a autoridade em campos privados de linguagem. O Codex encontrou o que
+ficou de fora: a linha que **preenchia** o campo.
+
+```ts
+this.#emissao = Object.freeze({ … })   // frágil
+```
+
+`Object.freeze` é `writable: true, configurable: true`. O campo privado é
+inviolável, mas o que se atribui a ele era o **valor de retorno de uma função
+substituível**. Um invólucro hostil instalado depois da inicialização devolve o
+estado de outra emissão, e a capacidade A nasce com a identidade de B — A
+consome como B, escreve no diretório de B, e B segue independentemente
+consumível.
+
+Na R4 eu havia escrito, sobre `Object.freeze`, que era "defesa em profundidade,
+não autoridade". Estava errado no caso do construtor: ali o retorno **era** a
+autoridade.
+
+### As duas medidas, e qual importa mais
+
+1. O intrínseco é capturado na inicialização do módulo: `const CONGELA = Object.freeze`.
+2. O retorno nunca é a autoridade. O objeto é construído localmente, congelado
+   no lugar, e o **local** é atribuído:
+
+```ts
+const emitido: IssuedExecutionState = { … }
+CONGELA(emitido)
+this.#emissao = emitido
+```
+
+A segunda importa mais. Só a captura deixaria a forma frágil: bastaria alguém
+reescrever a linha como `= CONGELA(...)` e o defeito volta sem que nada observe.
+Há checagem de AST exigindo zero atribuições de retorno de chamada a `#emissao`.
+
+### O mesmo padrão estava na D2C, e também era autoridade
+
+`instantaneoDaEmissao` fazia `return Object.freeze({...})`, e é esse objeto que
+define o diretório da tentativa, a identidade do pedido ao filho e o registro
+terminal. Um `freeze` hostil substituiria o instantâneo inteiro e a execução iria
+para outro diretório. Corrigi nos dois arquivos pela mesma regra, porque a regra
+é sobre autoridade, não sobre qual arquivo o relato citou.
+
+`safeAuditView()` e a evidência devolvida também passaram a construir local e
+congelar no lugar. Essas duas são observacionais — quem adultera o `freeze`
+engana a si mesmo — mas deixar `return CONGELA(...)` ali convida a próxima linha
+de autoridade a copiar a forma.
+
+### O que continua não capturado, e por quê
+
+`HEX256.test`, `Number.isFinite` e `join` seguem sem captura. Os dois primeiros
+validam valores que já vêm do estado privado criado no cunho; nenhum retorno
+deles se torna autoridade. E `join` vem de um binding nomeado de ESM, que não é
+interceptável — medido na R4. Capturar intrínseco porque é mutável, sem efeito
+de autoridade alcançável, seria trocar risco real por ruído.
+
+### Evidência
+
+`gateway/tests/d2b-ev2.test.ts` — **54 checagens** (eram 52), 13/13 invariantes.
+As duas novas: `Object.freeze` hostil instalado após a inicialização, montado dos
+campos públicos de B; A é cunhada nessa janela e ainda consome como A, com o
+contador provando que o invólucro **nunca foi alcançado** pela emissão; e a
+checagem de AST contra a forma frágil.
+
+`gateway/tests/d2c-ev.test.ts` — **91 checagens** (eram 89). A nova cunha **e**
+executa A com o intrínseco hostil no lugar: commit e terminal no diretório de A,
+diretório de B só com a própria reserva, um único filho.
+
+---
+
+## §34 — D1-R3: a autoridade de Stefano em campos privados de linguagem
+
+A §33.3 registrou um defeito conhecido em `live-execution.ts` e o deixou pendente
+por instrução. A D2C fechou; esta rodada fecha a D1 pela mesma construção que o
+Codex aprovou lá.
+
+O que estava aberto, exatamente:
+
+```ts
+if (!(auth instanceof LiveExecutionAuthorization) || !EMITIDAS.has(auth)) { … }
+if (!auth._consumeOnce(SELO)) { … }
+```
+
+Quatro rotas, todas alcançáveis dentro do modelo de ameaça declarado:
+
+```
+A._consumeOnce = B._consumeOnce.bind(B)        → consumir A queimava B
+A._consumeOnce = () => true                    → o uso único desaparecia
+WeakSet.prototype.has = () => true             → objeto qualquer virava emissão
+Object.defineProperty(C, Symbol.hasInstance, …) → `instanceof` mentia
+```
+
+E a quinta, que não é rota de bypass mas é vazamento: `_consumeOnce(SELO)`
+entregava o selo do módulo a uma função escolhida pelo detentor.
+
+O peso aqui é maior que na D2B. A reserva responde "este `execution_id` já foi
+gasto"; esta classe responde **"Stefano autorizou exatamente isto"**. Derrubar o
+uso único da autorização é reusar uma aprovação humana.
+
+### A correção
+
+| Fato | Antes | Agora |
+|---|---|---|
+| O que Stefano autorizou | campos públicos + `EMITIDAS` | `#emissao` |
+| Já foi gasta | `private consumida` via `_consumeOnce` | `#consumida` |
+| É emissão autêntica | `instanceof` + `EMITIDAS.has` | `#emissao in auth` |
+
+`_consumeOnce`, `private consumida` e `EMITIDAS` foram **removidos** — sem
+renomear, sem `@internal`, sem dois mecanismos competindo. O consumidor vive num
+bloco `static {}` da classe e a função exportada apenas o chama.
+
+A ordem não mudou: **marca → TTL → uso único**. Uma autorização expirada não é
+consumida, e isso é deliberado: exigir aprovação nova é o desfecho certo, e
+queimá-la ali esconderia a expiração atrás de "já usada". Há teste exigindo que a
+segunda tentativa de uma expirada continue dizendo `AUTHORIZATION_EXPIRED`.
+
+O TTL e o prazo agora vivem em `#emissao`, não em campo público relido. Mutar
+`issued_at_monotonic` não estende nada — há regressão empurrando o instante de
+emissão para o presente e exigindo `AUTHORIZATION_EXPIRED`.
+
+### Um caminho concreto que encontrei ao aplicar a regra da R5
+
+`deepFreeze` devolve o **próprio** objeto, não o retorno de `Object.freeze` — já
+seguia a regra, e portanto um `freeze` adulterado não substitui a spec. Mas podia
+deixá-la **não congelada**, e a spec própria é publicada em `auth.spec`. O
+detentor então mutaria `model` **depois** de Stefano ter aprovado um fingerprint
+que descrevia outra coisa.
+
+Fechado com o intrínseco capturado: `deepFreeze(proprio)` para o contrato
+profundo, `CONGELA(proprio)` para a garantia rasa confiável, e o **local** é o que
+se registra e devolve. Raso basta, e é demonstrável: `especificacaoValida` e
+`politicaDeControleExata` juntas exigem que os vinte campos da spec sejam
+primitivos.
+
+### O que segue sem captura, e por quê
+
+`PROPRIAS.has(spec)` continua sendo um `WeakSet`. Não é rota alcançável: só o
+construtor o consulta, e o construtor exige o selo — que não é exportado e, agora
+que `_consumeOnce` sumiu, não vaza. Adulterar `has` para sempre-verdadeiro só
+ajudaria quem pudesse chamar o construtor. Adulterar `add` faz a emissão falhar
+fechada.
+
+`Reflect.ownKeys` e `CHAVES_GOVERNADAS.has` também são mutáveis. Ambos só
+recusam chaves desconhecidas; a cópia lê os vinte campos nomeados e descarta o
+resto, então derrubá-los não muda o que é armazenado.
+
+### Evidência
+
+`gateway/tests/live-execution.test.ts` — **77 checagens** (eram 64). As treze
+novas cobrem: campos públicos de A reescritos com os de B; `_consumeOnce`
+religado a B nunca invocado; `() => true` sem segundo consumo; ausência no
+protótipo; patch de `WeakMap`/`WeakSet`; `Symbol.hasInstance` forjado; `freeze`
+adulterado não deixa a spec mutável; TTL a partir da emissão; auditoria a partir
+da emissão; objeto simples/de mesma forma/de protótipo/serializado recusados;
+nenhum export desfaz ou reemite; e duas checagens de AST — selo nunca entregue a
+método de objeto, `#emissao` nunca recebendo retorno de chamada.
+
+As duas últimas nasceram como regex e a segunda **falhou acusando a própria prosa
+que documenta a ausência do padrão**. Décima vez nesta fase. Convertidas para AST.

@@ -10,6 +10,7 @@
  */
 
 import { readFileSync } from "node:fs"
+import ts from "typescript"
 import { describe, expect, it } from "vitest"
 import {
   LIVE_ATTEMPT_DEADLINE_SECONDS,
@@ -28,6 +29,12 @@ import {
 import type { LiveExecutionSpecV1 } from "../src/live-execution"
 
 const EXECUTION_ID = "live-exec-0001"
+/** A fonte de produção, para as duas checagens estruturais da r3. */
+const D1 = new URL("../src/live-execution.ts", import.meta.url)
+function fonteTS(): ts.SourceFile {
+  return ts.createSourceFile(
+    "live-execution.ts", readFileSync(D1, "utf8"), ts.ScriptTarget.ES2022, true)
+}
 
 /**
  * Os tipos literais de `LiveExecutionSpecV1` (`tool_count: 0`, `stream: false`)
@@ -111,6 +118,31 @@ function decisao(over: Record<string, unknown> = {}) {
 
 function emitir(s = spec(), p = pedido({}, s), d: unknown[] = [decisao()]) {
   return issueLiveExecutionAuthorization(s, p, d)
+}
+
+/**
+ * Protótipos globais como registros opacos. Adulterar intrínsecos é sair do contrato
+ * de tipo; passar pelo registro deixa a hostilidade explícita.
+ */
+type MetodoQualquer = (this: unknown, ...args: unknown[]) => unknown
+interface MetodosFracos {
+  get: MetodoQualquer
+  has: MetodoQualquer
+  add: MetodoQualquer
+  set: MetodoQualquer
+}
+function comoRegistro(o: object): MetodosFracos {
+  return o as unknown as MetodosFracos
+}
+
+/** Duas autorizações AUTÊNTICAS e distintas. Uma aprovação emite uma autorização. */
+function autentica(id: string): LiveExecutionAuthorization {
+  const s = spec({ execution_id: id })
+  const p = pedido({ approval_id: `ap-${id}`, decision_ref: `dec-${id}` }, s)
+  const d = [decisao({ decision_id: `dec-${id}`, approval_id: `ap-${id}` })]
+  const r = issueLiveExecutionAuthorization(s, p, d)
+  if (r.status !== "authorized") throw new Error(`d1 recusou: ${r.defect}`)
+  return r.authorization
 }
 
 function defeito(r: ReturnType<typeof issueLiveExecutionAuthorization>): string {
@@ -600,5 +632,247 @@ describe("3.1d-D1-R2 nenhuma representação posterior da spec", () => {
       expect(liveExecutionFingerprint(r.authorization.spec)).toBe(p.subject_content_hash)
       expect(r.authorization.spec.execution_id).toBe(id)
     }
+  })
+})
+
+// ═════════════════════════════════════════════════════════════════════════════
+// D1-R3 — autoridade em campos privados de linguagem
+// ═════════════════════════════════════════════════════════════════════════════
+//
+// A d2b/d2c pagaram quatro rodadas para fechar a classe "autoridade por despacho
+// mutável". Este bloco prova que o módulo que guarda a autoridade de STEFANO — não a
+// reserva, não a costura — está fechado pela mesma construção.
+
+describe("D1-R3 a autoridade não mora em nada que o detentor possa reescrever", () => {
+  it("R3 campos públicos de A reescritos com os de B: nenhum efeito", () => {
+    const A = autentica("live-exec-000a")
+    const B = autentica("live-exec-000b")
+    for (const campo of ["spec", "execution_fingerprint", "decision_id",
+                         "issued_at_monotonic"] as const) {
+      Object.defineProperty(A, campo,
+        { configurable: true, value: (B as unknown as Record<string, unknown>)[campo] })
+    }
+    const c = consumeLiveExecutionAuthorization(A, monotonicSeconds())
+    expect(c.status).toBe("consumed")
+    if (c.status === "consumed") {
+      // O fingerprint entregue é o de A, não o de B.
+      expect(c.execution_fingerprint)
+        .toBe(liveExecutionFingerprint(spec({ execution_id: "live-exec-000a" })))
+      expect(c.execution_fingerprint).not.toBe(B.execution_fingerprint)
+    }
+    // B intacta e independente.
+    expect(B.isConsumed).toBe(false)
+    expect(consumeLiveExecutionAuthorization(B, monotonicSeconds()).status)
+      .toBe("consumed")
+  })
+
+  it("R3 `_consumeOnce` religado a B nunca é invocado e não queima B", () => {
+    const A = autentica("live-exec-000c")
+    const B = autentica("live-exec-000d")
+    let invocada = false
+    Object.defineProperty(A, "_consumeOnce", {
+      configurable: true, writable: true,
+      value: () => { invocada = true; return true },
+    })
+    expect(consumeLiveExecutionAuthorization(A, monotonicSeconds()).status)
+      .toBe("consumed")
+    expect(invocada, "a produção chamou o método do detentor").toBe(false)
+    expect(B.isConsumed).toBe(false)
+    expect(consumeLiveExecutionAuthorization(B, monotonicSeconds()).status)
+      .toBe("consumed")
+  })
+
+  it("R3 `_consumeOnce = () => true` não permite segundo consumo", () => {
+    const A = autentica("live-exec-000e")
+    Object.defineProperty(A, "_consumeOnce", {
+      configurable: true, writable: true, value: () => true,
+    })
+    expect(consumeLiveExecutionAuthorization(A, monotonicSeconds()).status)
+      .toBe("consumed")
+    const dois = consumeLiveExecutionAuthorization(A, monotonicSeconds())
+    expect(dois.status).toBe("refused")
+    if (dois.status === "refused") expect(dois.defect).toBe("AUTHORIZATION_ALREADY_CONSUMED")
+  })
+
+  it("R3 `_consumeOnce` não existe mais no protótipo", () => {
+    expect("_consumeOnce" in LiveExecutionAuthorization.prototype).toBe(false)
+  })
+
+  it("R3 patch em WeakMap/WeakSet.prototype não redireciona A para B", () => {
+    const A = autentica("live-exec-000f")
+    const B = autentica("live-exec-000g")
+    const wm = comoRegistro(WeakMap.prototype)
+    const ws = comoRegistro(WeakSet.prototype)
+    const oGet = wm.get
+    const oSHas = ws.has
+    const oSAdd = ws.add
+    let c1: ReturnType<typeof consumeLiveExecutionAuthorization>
+    let c2: ReturnType<typeof consumeLiveExecutionAuthorization>
+    const agora = monotonicSeconds()
+    try {
+      wm.get = function (this: unknown, k: unknown) {
+        return oGet.call(this, k === A ? B : k)
+      }
+      ws.has = () => false // "nunca emitida" e "nunca consumida"
+      ws.add = function (this: unknown) {
+        return this
+      }
+      c1 = consumeLiveExecutionAuthorization(A, agora)
+      c2 = consumeLiveExecutionAuthorization(A, agora)
+    } finally {
+      wm.get = oGet
+      ws.has = oSHas
+      ws.add = oSAdd
+    }
+    expect(c1.status).toBe("consumed")
+    if (c1.status === "consumed") {
+      expect(c1.execution_fingerprint)
+        .toBe(liveExecutionFingerprint(spec({ execution_id: "live-exec-000f" })))
+    }
+    expect(c2.status).toBe("refused")
+    expect(B.isConsumed).toBe(false)
+    expect(consumeLiveExecutionAuthorization(B, monotonicSeconds()).status)
+      .toBe("consumed")
+  })
+
+  it("R3 `Symbol.hasInstance` forjado não cria autorização", () => {
+    const impostor = { spec: spec(), execution_fingerprint: "f".repeat(64) }
+    const desc = Object.getOwnPropertyDescriptor(
+      LiveExecutionAuthorization, Symbol.hasInstance)
+    try {
+      Object.defineProperty(LiveExecutionAuthorization, Symbol.hasInstance, {
+        configurable: true, value: () => true,
+      })
+      expect(impostor instanceof LiveExecutionAuthorization).toBe(true)
+      const r = consumeLiveExecutionAuthorization(impostor, monotonicSeconds())
+      expect(r.status).toBe("refused")
+      if (r.status === "refused") expect(r.defect).toBe("AUTHORIZATION_NOT_OWNED")
+    } finally {
+      if (desc === undefined) {
+        delete (LiveExecutionAuthorization as unknown as Record<symbol, unknown>)[
+          Symbol.hasInstance]
+      } else {
+        Object.defineProperty(LiveExecutionAuthorization, Symbol.hasInstance, desc)
+      }
+    }
+  })
+
+  it("R3 patch em Object.freeze não deixa a spec aprovada mutável", () => {
+    // O caminho concreto: `auth.spec` é PÚBLICA. Se o congelamento não valer, o
+    // detentor muda `model` DEPOIS de Stefano ter aprovado outro fingerprint.
+    const original = Object.freeze
+    let A: LiveExecutionAuthorization
+    try {
+      Object.defineProperty(Object, "freeze", {
+        configurable: true, writable: true, value: (o: unknown) => o, // não congela
+      })
+      A = autentica("live-exec-000h")
+    } finally {
+      Object.defineProperty(Object, "freeze", {
+        configurable: true, writable: true, value: original,
+      })
+    }
+    expect(Object.isFrozen(A.spec), "a spec aprovada ficou mutável").toBe(true)
+    const modeloAprovado = A.spec.model
+    try {
+      (A.spec as unknown as Record<string, unknown>).model = "modelo-do-atacante"
+    } catch {
+      // modo estrito lança; o que importa é o valor não mudar
+    }
+    expect(A.spec.model).toBe(modeloAprovado)
+    const c = consumeLiveExecutionAuthorization(A, monotonicSeconds())
+    expect(c.status).toBe("consumed")
+    if (c.status === "consumed") {
+      expect(c.execution_fingerprint)
+        .toBe(liveExecutionFingerprint(spec({ execution_id: "live-exec-000h" })))
+    }
+  })
+
+  it("R3 TTL vem da EMISSÃO: mutar `issued_at_monotonic` não estende", () => {
+    const agora = monotonicSeconds()
+    const A = autentica("live-exec-000i")
+    // Empurra o instante de emissão para o futuro: se o TTL lesse o campo público,
+    // uma autorização expirada voltaria a valer.
+    Object.defineProperty(A, "issued_at_monotonic", { configurable: true, value: agora })
+    const r = consumeLiveExecutionAuthorization(
+      A, agora + LIVE_AUTHORIZATION_TTL_SECONDS + 1)
+    expect(r.status).toBe("refused")
+    if (r.status === "refused") expect(r.defect).toBe("AUTHORIZATION_EXPIRED")
+    // E expirada NÃO é consumida: a segunda tentativa segue dizendo EXPIRED, não USED.
+    const dois = consumeLiveExecutionAuthorization(
+      A, agora + LIVE_AUTHORIZATION_TTL_SECONDS + 2)
+    expect(dois.status).toBe("refused")
+    if (dois.status === "refused") expect(dois.defect).toBe("AUTHORIZATION_EXPIRED")
+  })
+
+  it("R3 a auditoria vem da EMISSÃO, não dos campos públicos", () => {
+    const A = autentica("live-exec-000j")
+    Object.defineProperty(A, "decision_id", { configurable: true, value: "dec-forjada" })
+    expect(A.safeAuditView().decision_id).toBe("dec-live-exec-000j")
+  })
+
+  it("R3 objeto simples, de mesma forma ou de protótipo não é autorização", () => {
+    const s = spec()
+    const forjadas: unknown[] = [
+      { spec: s, execution_fingerprint: liveExecutionFingerprint(s),
+        decision_id: "dec-live-0001", issued_at_monotonic: monotonicSeconds(),
+        isConsumed: false, _consumeOnce: () => true },
+      Object.create(LiveExecutionAuthorization.prototype),
+      JSON.parse(JSON.stringify(autentica("live-exec-000k").safeAuditView())),
+      null,
+      "nao-sou-autorizacao",
+    ]
+    for (const f of forjadas) {
+      const r = consumeLiveExecutionAuthorization(f, monotonicSeconds())
+      expect(r.status).toBe("refused")
+      if (r.status === "refused") expect(r.defect).toBe("AUTHORIZATION_NOT_OWNED")
+    }
+  })
+
+  it("R3 nenhum export desfaz, reseta, clona ou reemite autorização", async () => {
+    const mod = await import("../src/live-execution")
+    expect(Object.keys(mod).filter((k) =>
+      /unconsume|reset|clear|release|clone|reissue|restore|revive|deserialize/i.test(k)))
+      .toEqual([])
+  })
+
+  it("R3 fonte: o selo NUNCA é passado para código do chamador", () => {
+    // ESTRUTURAL, via AST. A primeira versão desta checagem era uma regex e ela
+    // acusou a PROSA que explica por que o padrão saiu — o mesmo falso positivo que
+    // esta fase já pagou dez vezes. Nomes CHAMADOS, nunca texto.
+    const src = fonteTS()
+    const passagens: string[] = []
+    const anda = (n: ts.Node): void => {
+      if (ts.isCallExpression(n)) {
+        const recebeSelo = n.arguments.some(
+          (a) => ts.isIdentifier(a) && a.text === "SELO")
+        // `new LiveExecutionAuthorization(SELO, …)` é o construtor do módulo e é
+        // legítimo; o proibido é entregar o selo a um MÉTODO de objeto, que o
+        // detentor pode substituir.
+        if (recebeSelo && ts.isPropertyAccessExpression(n.expression)) {
+          passagens.push(n.expression.name.text)
+        }
+      }
+      ts.forEachChild(n, anda)
+    }
+    anda(src)
+    expect(passagens, "selo entregue a método de objeto").toEqual([])
+  })
+
+  it("R3 fonte: a emissão não vem do retorno de uma função", () => {
+    const src = fonteTS()
+    let fragil = 0
+    const anda = (n: ts.Node): void => {
+      if (ts.isBinaryExpression(n) &&
+          n.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+          ts.isPropertyAccessExpression(n.left) &&
+          n.left.name.getText(src) === "#emissao" &&
+          ts.isCallExpression(n.right)) {
+        fragil++
+      }
+      ts.forEachChild(n, anda)
+    }
+    anda(src)
+    expect(fragil, "#emissao recebe o retorno de uma chamada").toBe(0)
   })
 })

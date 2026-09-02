@@ -36,6 +36,63 @@
  * Não existe `loadReservedExecutionAttempt`, `restoreAttempt` nem
  * `deserializeAttempt`. Depois de um reinício, toda capacidade em memória se foi para
  * sempre. Estado serializado é auditoria, nunca capacidade.
+ *
+ * ─── R2: as propriedades públicas são OBSERVACIONAIS ─────────────────────────
+ *
+ * `readonly` é do compilador. Em runtime, `Object.defineProperty` reescreve qualquer
+ * campo público desta classe, e a d2c-R1 derivava autoridade justamente deles.
+ *
+ * O ataque concreto: o chamador obtém DUAS capacidades autênticas, A e B, e reescreve
+ * em A todos os campos públicos com os valores de B — internamente coerentes, porque
+ * são de uma emissão real. A é consumida, e a execução acontece sob a identidade de B,
+ * no diretório já reservado de B, sem consumir B. Coerência mútua não distingue
+ * "minha identidade" de "identidade de outra emissão real".
+ *
+ * A correção não é validar melhor os campos públicos: é não os consultar. Os campos
+ * públicos permanecem para diagnóstico e continuam legíveis, mas nenhuma decisão de
+ * produção depende deles.
+ *
+ * ─── R4: nem `WeakMap` privado basta ────────────────────────────────────────
+ *
+ * A r3 guardou identidade num `WeakMap` e uso único num `WeakSet`, ambos privados do
+ * módulo. O acesso, porém, era `EMISSAO.get(attempt)` — despacho comum por
+ * `WeakMap.prototype.get`, cujo descritor é `writable: true, configurable: true`.
+ *
+ * O ataque: depois de o módulo já ter sido inicializado, o chamador guarda o `get`
+ * original e o substitui por um invólucro que, ao ser chamado com a chave A, chama o
+ * original com a chave B. `EMISSAO.get(A)` devolve a emissão de B sem que ninguém
+ * jamais tenha alcançado o `WeakMap`. A é marcada como gasta e a execução acontece sob
+ * a identidade de B, que segue não consumida.
+ *
+ * O mesmo vale para `WeakSet.prototype.has`/`add` — `has` mentindo "nunca consumida"
+ * derruba o uso único — e para `instanceof`, porque `Symbol.hasInstance` também é
+ * gravável na classe exportada.
+ *
+ * A classe inteira do defeito é a mesma: AUTORIDADE POR DESPACHO MUTÁVEL. Fechá-la
+ * exige estado que a linguagem — não uma convenção de biblioteca — torne inalcançável:
+ * campos privados de classe. `this.#emissao` não é uma propriedade que se procure num
+ * protótipo; é uma referência resolvida lexicalmente, sem método que se possa
+ * substituir. E `#emissao in obj` é uma marca que só o construtor real instala: não se
+ * forja, não se acrescenta, e não se intercepta.
+ *
+ * O consumidor vive num bloco `static {}` da própria classe, e o módulo exporta apenas
+ * uma função que o chama. Não há selo atravessando fronteira, nem retorno de chamada
+ * escolhido pelo chamador.
+ *
+ * ─── O que este desenho NÃO promete ────────────────────────────────────────
+ *
+ * DENTRO do modelo de ameaça: o chamador reescreve campos públicos, acrescenta ou
+ * substitui métodos, e adultera protótipos globais DEPOIS de os módulos governados
+ * terem sido inicializados. Com múltiplas capacidades autênticas em mão.
+ *
+ * FORA: código hostil arbitrário do MESMO realm executando ANTES da inicialização
+ * destes módulos, ou substituição do próprio Node/V8. Quem controla o bootstrap
+ * substitui a classe, o `import`, o `crypto` — e nenhuma dureza incremental aqui
+ * responde a isso. A resposta a essa ameaça é isolamento de processo, não este arquivo.
+ *
+ * O caminho do diretório é derivado por `join` importado de `node:path`. Um binding
+ * nomeado de ESM não é interceptável: substituir `path.join` depois do import não
+ * afeta esta chamada — medido, não presumido.
  */
 
 import {
@@ -62,8 +119,46 @@ export type ReservedAttemptDefect = (typeof RESERVED_ATTEMPT_DEFECTS)[number]
 /** Selo do MÓDULO. Não exportado: sem ele não se constrói nem se falsifica a capacidade. */
 const SELO_TENTATIVA: unique symbol = Symbol("creditum.reserved_execution_attempt")
 
-/** As tentativas REALMENTE preparadas aqui. `instanceof` sozinho não responde isto. */
-const RESERVADAS = new WeakSet<ReservedExecutionAttempt>()
+/**
+ * O consumidor LEXICAL do módulo. Atribuído no bloco `static {}` da classe, onde os
+ * campos privados são visíveis. Não é exportado, não recebe retorno de chamada, e não
+ * atravessa fronteira nenhuma.
+ */
+/**
+ * O `Object.freeze` confiável, capturado na INICIALIZAÇÃO do módulo.
+ *
+ * `Object.freeze` é `writable: true, configurable: true`. Escrever
+ * `this.#emissao = Object.freeze({...})` fazia a autoridade ser o VALOR DE RETORNO de
+ * uma função substituível: um invólucro hostil, instalado depois da inicialização,
+ * devolvia o estado de outra emissão e a capacidade A nascia com a identidade de B.
+ *
+ * Duas medidas, e a segunda importa mais que a primeira:
+ *
+ *   1. capturar o intrínseco aqui, antes de qualquer capacidade escapar;
+ *   2. NUNCA usar o retorno como autoridade — construir o objeto localmente,
+ *      congelar ESSE objeto, e atribuir o local.
+ *
+ * Só a (1) ainda deixaria a forma frágil: bastaria alguém reescrever a linha para
+ * `= CONGELA(...)` e o defeito volta sem que nada observe.
+ */
+const CONGELA = Object.freeze
+
+/**
+ * O consumidor LEXICAL do módulo. Atribuído no bloco `static {}` da classe, onde os
+ * campos privados são visíveis. Não é exportado, não recebe retorno de chamada, e não
+ * atravessa fronteira nenhuma.
+ */
+let consumirTentativaReservada!: (attempt: unknown) => AttemptConsumptionResult
+
+export interface IssuedExecutionState {
+  readonly execution_id: string
+  readonly execution_key: string
+  readonly execution_fingerprint: string
+  /** O MESMO instantâneo próprio e congelado da d1. Nunca uma segunda representação. */
+  readonly spec: LiveExecutionSpecV1
+  readonly attempt_deadline_monotonic: number
+  readonly attempt_deadline_seconds: number
+}
 
 /**
  * A capacidade local ao processo. NÃO é autoridade de decisão humana, NÃO é
@@ -71,8 +166,24 @@ const RESERVADAS = new WeakSet<ReservedExecutionAttempt>()
  * d1 já foi gasta, e uma reserva bem-sucedida não pode virar dois workers.
  */
 export class ReservedExecutionAttempt {
-  private consumida = false
+  /**
+   * ─── A AUTORIDADE ────────────────────────────────────────────────────────
+   *
+   * Campos privados de LINGUAGEM. `#emissao` responde "quem é esta capacidade" e
+   * `#consumida` responde "ela já foi gasta". Nenhum dos dois é alcançável por
+   * propriedade, protótipo, `Reflect`, `Object.keys` ou serialização, e nenhum
+   * depende de método substituível.
+   */
+  readonly #emissao: IssuedExecutionState
+  #consumida = false
 
+  /**
+   * ─── OBSERVACIONAIS, não autoritativos ──────────────────────────────────
+   *
+   * `readonly` é do compilador; em runtime estes campos são graváveis. A autoridade
+   * está em `#emissao`, e sai por `consumeReservedExecutionAttempt`. Não leia daqui
+   * para decidir nada — foi exatamente esse caminho que a d2c-R1 pagou para fechar.
+   */
   readonly execution_id: string
   readonly execution_fingerprint: string
   /** O MESMO instantâneo próprio e congelado da d1. Nunca uma segunda representação. */
@@ -103,6 +214,33 @@ export class ReservedExecutionAttempt {
     if (receipt.execution_id !== spec.execution_id) {
       throw new Error("RESERVED_ATTEMPT_NOT_DURABLE")
     }
+    // Um prazo não finito viraria orçamento infinito na d2c. Conferido aqui, no cunho.
+    if (!Number.isFinite(attemptDeadlineMonotonic)) {
+      throw new Error("RESERVED_ATTEMPT_NOT_DURABLE")
+    }
+    // ─── O estado AUTORITATIVO, capturado antes de qualquer campo público ────
+    //
+    // Das fontes que já foram validadas: o recibo durável e a spec selada da d1.
+    // Fica no `WeakMap` do módulo, e é ele que a d2c consome. Ficar no construtor —
+    // e não em `prepareGovernedExecution` — torna estrutural que toda instância
+    // construída TEM estado: não existe capacidade autêntica sem emissão registrada.
+    // Objeto construído LOCALMENTE. A autoridade é este `emitido`, não o que uma
+    // função devolve — nem mesmo a função capturada.
+    const emitido: IssuedExecutionState = {
+      execution_id: receipt.execution_id,
+      execution_key: receipt.execution_key,
+      execution_fingerprint: receipt.execution_fingerprint,
+      spec,
+      attempt_deadline_monotonic: attemptDeadlineMonotonic,
+      attempt_deadline_seconds: spec.attempt_deadline_seconds,
+    }
+    CONGELA(emitido)
+    this.#emissao = emitido
+
+    // ─── Daqui para baixo: OBSERVACIONAL ────────────────────────────────────
+    //
+    // Estes campos existem para diagnóstico e para as leituras que já existiam antes
+    // da r2. São graváveis em runtime, e por isso nenhuma decisão de produção os lê.
     this.execution_id = receipt.execution_id
     this.execution_fingerprint = receipt.execution_fingerprint
     this.spec = spec
@@ -110,22 +248,9 @@ export class ReservedExecutionAttempt {
     this.attempt_deadline_monotonic = attemptDeadlineMonotonic
   }
 
+  /** Leitura, não autoridade — e vem do campo privado. */
   get isConsumed(): boolean {
-    return this.consumida
-  }
-
-  /**
-   * Consumo atômico de uso único. Como na d1: o JavaScript não preempta dentro de uma
-   * função síncrona, então duas tentativas concorrentes não conseguem ambas ver
-   * `false`. Não é mutex — é a garantia do modelo de execução.
-   *
-   * @internal
-   */
-  _consumeOnce(selo: typeof SELO_TENTATIVA): boolean {
-    if (selo !== SELO_TENTATIVA) return false
-    if (this.consumida) return false
-    this.consumida = true
-    return true
+    return this.#consumida
   }
 
   /** Serializar produziria algo que PARECE capacidade. Recusa. */
@@ -133,17 +258,55 @@ export class ReservedExecutionAttempt {
     throw new Error("RESERVED_ATTEMPT_NOT_SERIALIZABLE")
   }
 
-  /** Primitivos governados para auditoria. NUNCA aceito de volta como capacidade. */
+  /**
+   * Primitivos governados para auditoria. NUNCA aceito de volta como capacidade.
+   *
+   * Lê a EMISSÃO, não os campos públicos: uma visão de auditoria que o detentor
+   * pudesse reescrever seria auditoria de nada.
+   */
   safeAuditView(): Readonly<Record<string, string | number | boolean>> {
-    return Object.freeze({
-      execution_id: this.execution_id,
-      execution_key: this.execution_key,
-      execution_fingerprint: this.execution_fingerprint,
-      model: this.spec.model,
-      api_mode: this.spec.api_mode,
-      attempt_deadline_seconds: this.spec.attempt_deadline_seconds,
-      consumed: this.consumida,
-    })
+    const e = this.#emissao
+    // Local, congelado no lugar. A visão é observacional, mas a FORMA importa: deixar
+    // um `return CONGELA(...)` aqui convida a próxima linha de autoridade a copiá-la.
+    const visao = {
+      execution_id: e.execution_id,
+      execution_key: e.execution_key,
+      execution_fingerprint: e.execution_fingerprint,
+      model: e.spec.model,
+      api_mode: e.spec.api_mode,
+      attempt_deadline_seconds: e.attempt_deadline_seconds,
+      consumed: this.#consumida,
+    }
+    CONGELA(visao)
+    return visao
+  }
+
+  /**
+   * Autenticidade, identidade e uso único — os três dentro da classe, onde os campos
+   * privados existem, e sem uma única chamada que o chamador possa substituir.
+   *
+   * `#emissao in attempt` é a MARCA: só o construtor real instala um campo privado.
+   * `Object.create(prototype)` não a tem; objeto de mesma forma não a tem; registro
+   * lido do disco não a tem. Substitui `instanceof` — que passa por
+   * `Symbol.hasInstance`, gravável — e substitui o `WeakSet` de registro, que passava
+   * por `WeakSet.prototype.has`.
+   *
+   * O uso único é atômico por construção: entre a leitura e a escrita de `#consumida`
+   * não há `await`, chamada externa nem despacho, e o JavaScript não preempta dentro de
+   * uma função síncrona.
+   */
+  static {
+    consumirTentativaReservada = (attempt: unknown): AttemptConsumptionResult => {
+      if (attempt === null || typeof attempt !== "object" ||
+          !(#emissao in attempt)) {
+        return { status: "refused", defect: "RESERVED_ATTEMPT_INVALID" }
+      }
+      if (attempt.#consumida) {
+        return { status: "refused", defect: "RESERVED_ATTEMPT_ALREADY_CONSUMED" }
+      }
+      attempt.#consumida = true
+      return { status: "consumed", state: attempt.#emissao }
+    }
   }
 }
 
@@ -195,7 +358,10 @@ export async function prepareGovernedExecution(
   }
   // A autorização é genuína: só um objeto emitido pela d1 chega aqui.
   const autorizada = auth as LiveExecutionAuthorization
-  const executionId = autorizada.spec.execution_id
+  // UMA leitura de `.spec`. Duas leituras de uma propriedade gravável podem devolver
+  // objetos diferentes — a mesma lição da d1-R1, aplicada a esta fronteira.
+  const spec = autorizada.spec
+  const executionId = spec.execution_id
   const prazo = consumo.attempt_deadline_monotonic
 
   // (C) Primeiro `await` do fluxo — depois do consumo, nunca antes.
@@ -219,34 +385,41 @@ export async function prepareGovernedExecution(
   const tentativa = new ReservedExecutionAttempt(
     SELO_TENTATIVA,
     reserva.receipt,
-    autorizada.spec,
+    spec,
     prazo,
   )
-  RESERVADAS.add(tentativa)
+  // Nada a registrar fora do objeto: a marca de linguagem JÁ é a prova de emissão, e
+  // ela foi instalada pelo construtor — que exige o selo e um recibo durável.
   return { status: "reserved", attempt: tentativa }
 }
 
 export type AttemptConsumptionResult =
-  | { readonly status: "consumed"; readonly attempt_deadline_monotonic: number }
+  | { readonly status: "consumed"; readonly state: IssuedExecutionState }
   | { readonly status: "refused"; readonly defect: ReservedAttemptDefect }
 
 /**
- * Consome a capacidade — o passo que a d2c fará imediatamente antes de escrever
- * `ATTEMPT_COMMITTED`. Exatamente um consumidor vence.
+ * Consome a capacidade e devolve o estado AUTORITATIVO da emissão. Exatamente um
+ * consumidor vence, e é ele que recebe a identidade — não quem lê as propriedades.
+ *
+ * ─── Tudo acontece AQUI, e nada por despacho dinâmico ───────────────────────
+ *
+ * Autenticidade, identidade e uso único são decididos dentro deste módulo, lendo
+ * `RESERVADAS`, `EMISSAO` e `CONSUMIDAS`. Nenhum campo nem método do objeto participa:
+ * a versão anterior chamava `attempt._consumeOnce(...)`, e um método público é
+ * regravável — o portador escolhia quem decidia o uso único, e recebia o selo de
+ * brinde.
+ *
+ * O uso único é atômico por construção: entre o `has` e o `add` não há `await` nem
+ * chamada externa, e o JavaScript não preempta dentro de uma função síncrona. Não é
+ * mutex — é a garantia do modelo de execução.
+ *
+ * O valor devolvido é DADO congelado, não uma segunda capacidade: não tem selo, não
+ * está em `RESERVADAS`, e devolvê-lo a qualquer via governada falha em `instanceof`.
  *
  * A d2b NÃO faz `spawn`, `fork` nem `exec`. Isto apenas fecha a semântica de uso único.
  */
 export function consumeReservedExecutionAttempt(
   attempt: unknown,
 ): AttemptConsumptionResult {
-  if (!(attempt instanceof ReservedExecutionAttempt) || !RESERVADAS.has(attempt)) {
-    return { status: "refused", defect: "RESERVED_ATTEMPT_INVALID" }
-  }
-  if (!attempt._consumeOnce(SELO_TENTATIVA)) {
-    return { status: "refused", defect: "RESERVED_ATTEMPT_ALREADY_CONSUMED" }
-  }
-  return {
-    status: "consumed",
-    attempt_deadline_monotonic: attempt.attempt_deadline_monotonic,
-  }
+  return consumirTentativaReservada(attempt)
 }

@@ -110,6 +110,25 @@ const {
 type Spec = import("../src/live-execution").LiveExecutionSpecV1
 
 const SUP = join(__dirname, "..", "src", "execution-supervisor.ts")
+
+/**
+ * Protótipos globais como registros opacos.
+ *
+ * Adulterar intrínsecos é justamente sair do contrato de tipo — e o tipo de método
+ * atrelado do TS reclama, com razão, de referência solta. Passar pelo registro deixa a
+ * hostilidade explícita em vez de espalhar supressões pelo teste.
+ */
+type MetodoQualquer = (this: unknown, ...args: unknown[]) => unknown
+/** Campos explícitos, não assinatura de índice: `| undefined` só atrapalharia aqui. */
+interface MetodosFracos {
+  get: MetodoQualquer
+  has: MetodoQualquer
+  add: MetodoQualquer
+  set: MetodoQualquer
+}
+function comoRegistro(o: object): MetodosFracos {
+  return o as unknown as MetodosFracos
+}
 const LED = join(__dirname, "..", "src", "execution-ledger.ts")
 const ID = "ev2-exec-0001"
 
@@ -141,20 +160,22 @@ function spec(over: Record<string, unknown> = {}): Spec {
 const txt = (content: string) => ({ untrusted: true as const, content })
 function pedido(s: Spec) {
   return {
-    approval_id: "ap-ev2", schema_version: "1.0.0", requested_at: "2026-09-01T12:00:00Z",
+    approval_id: `ap-${s.execution_id}`, schema_version: "1.0.0",
+    requested_at: "2026-09-01T12:00:00Z",
     requested_by: "HERMES", approver: "STEFANO", subject_type: "OTHER",
     subject_ref: s.execution_id, proposed_action: txt("executar uma chamada viva governada"),
     rationale: txt("perceber, sem agir"), supporting_refs: [],
     risk_and_uncertainty: [txt("o modelo pode recusar")], status: "DECIDED",
-    decision_ref: "dec-ev2", subject_content_hash: liveExecutionFingerprint(s),
+    decision_ref: `dec-${s.execution_id}`, subject_content_hash: liveExecutionFingerprint(s),
   }
 }
-const decisao = () => ({
-  decision_id: "dec-ev2", schema_version: "1.0.0", approval_id: "ap-ev2",
+const decisao = (s: Spec = spec()) => ({
+  decision_id: `dec-${s.execution_id}`, schema_version: "1.0.0",
+  approval_id: `ap-${s.execution_id}`,
   decided_by: "STEFANO", decision: "APPROVED", decided_at: "2026-09-01T12:05:00Z",
 })
 function autorizacao(s: Spec = spec()) {
-  const r = issueLiveExecutionAuthorization(s, pedido(s), [decisao()])
+  const r = issueLiveExecutionAuthorization(s, pedido(s), [decisao(s)])
   if (r.status !== "authorized") throw new Error(`d1 recusou: ${r.defect}`)
   return r.authorization
 }
@@ -463,6 +484,292 @@ describe("EV2-10 a capacidade é local ao processo", () => {
     const rs = Array.from({ length: 32 }, () => consumeReservedExecutionAttempt(r.attempt))
     expect(rs.filter((x) => x.status === "consumed").length).toBe(1)
   })
+  it("EV2-10 patch em Object.freeze não dá a A a identidade de B", async () => {
+    est.raiz = RAIZ
+    const rb = await prepareGovernedExecution(
+      autorizacao(spec({ execution_id: "ev2-exec-0002" })))
+    if (rb.status !== "reserved") throw new Error("esperava reserva de B")
+    const B = rb.attempt
+    // Um estado com a cara de emissão, montado dos campos PÚBLICOS de B.
+    const falso = {
+      execution_id: B.execution_id,
+      execution_key: B.execution_key,
+      execution_fingerprint: B.execution_fingerprint,
+      spec: B.spec,
+      attempt_deadline_monotonic: B.attempt_deadline_monotonic,
+      attempt_deadline_seconds: B.spec.attempt_deadline_seconds,
+    }
+
+    const original = Object.freeze
+    let tentativasDeTroca = 0
+    let ra: Awaited<ReturnType<typeof prepareGovernedExecution>>
+    try {
+      // Substituição DEPOIS da inicialização do módulo governado. Só troca objetos que
+      // pareçam emissão; o resto delega, para não quebrar o mundo na janela.
+      Object.defineProperty(Object, "freeze", {
+        configurable: true, writable: true,
+        value: (o: unknown) => {
+          if (o !== null && typeof o === "object" && "execution_key" in o &&
+              "spec" in o && "attempt_deadline_monotonic" in o) {
+            tentativasDeTroca++
+            return original(falso)
+          }
+          return original(o as object)
+        },
+      })
+      ra = await prepareGovernedExecution(autorizacao(spec()))
+    } finally {
+      Object.defineProperty(Object, "freeze", {
+        configurable: true, writable: true, value: original,
+      })
+    }
+
+    expect(ra.status).toBe("reserved")
+    if (ra.status !== "reserved") return
+    // A prova direta: o invólucro hostil NUNCA foi alcançado pela emissão, porque o
+    // intrínseco foi capturado na inicialização do módulo.
+    expect(tentativasDeTroca, "a emissão passou pelo Object.freeze global").toBe(0)
+
+    const ca = consumeReservedExecutionAttempt(ra.attempt)
+    expect(ca.status).toBe("consumed")
+    if (ca.status === "consumed") {
+      expect(ca.state.execution_id).toBe(ID)
+      expect(ca.state.execution_key).toBe(executionKey(ID))
+      expect(ca.state.attempt_deadline_monotonic)
+        .not.toBe(B.attempt_deadline_monotonic + 1) // sanidade do valor
+    }
+    // Segundo consumo de A recusado, e B segue independente.
+    expect(consumeReservedExecutionAttempt(ra.attempt).status).toBe("refused")
+    const cb = consumeReservedExecutionAttempt(B)
+    expect(cb.status).toBe("consumed")
+    if (cb.status === "consumed") expect(cb.state.execution_id).toBe("ev2-exec-0002")
+  })
+
+  it("EV2-10 fonte: a emissão não vem do retorno de uma função", () => {
+    // ESTRUTURAL. `this.#emissao = f(...)` é a forma frágil, qualquer que seja `f`.
+    const src = fonte(SUP)
+    let atribuicoesDeRetorno = 0
+    const anda = (n: ts.Node): void => {
+      if (ts.isBinaryExpression(n) &&
+          n.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+          ts.isPropertyAccessExpression(n.left) &&
+          n.left.name.getText(src) === "#emissao" &&
+          ts.isCallExpression(n.right)) {
+        atribuicoesDeRetorno++
+      }
+      ts.forEachChild(n, anda)
+    }
+    anda(src)
+    expect(atribuicoesDeRetorno, "#emissao recebe o retorno de uma chamada").toBe(0)
+  })
+
+  it("EV2-10 patch em WeakMap.prototype.get não redireciona A para B", async () => {
+    est.raiz = RAIZ
+    const ra = await prepareGovernedExecution(autorizacao(spec()))
+    const rb = await prepareGovernedExecution(
+      autorizacao(spec({ execution_id: "ev2-exec-0002" })))
+    if (ra.status !== "reserved" || rb.status !== "reserved") {
+      throw new Error("esperava duas reservas")
+    }
+    const A = ra.attempt
+    const B = rb.attempt
+
+    // Adulteração DEPOIS de os módulos governados estarem inicializados. A janela é
+    // mínima de propósito: `expect` também usa estas primitivas.
+    const wm = comoRegistro(WeakMap.prototype)
+    const ws = comoRegistro(WeakSet.prototype)
+    const oGet = wm.get
+    const oHas = wm.has
+    const oSHas = ws.has
+    const oSAdd = ws.add
+    let c1: ReturnType<typeof consumeReservedExecutionAttempt>
+    let c2: ReturnType<typeof consumeReservedExecutionAttempt>
+    try {
+      wm.get = function (this: unknown, k: unknown) {
+        return oGet.call(this, k === A ? B : k) // A → B
+      }
+      wm.has = function (this: unknown, k: unknown) {
+        return oHas.call(this, k === A ? B : k)
+      }
+      ws.has = () => false // "nunca consumida": derrubaria o uso único
+      ws.add = function (this: unknown) {
+        return this // não registra nada
+      }
+      c1 = consumeReservedExecutionAttempt(A)
+      c2 = consumeReservedExecutionAttempt(A)
+    } finally {
+      wm.get = oGet
+      wm.has = oHas
+      ws.has = oSHas
+      ws.add = oSAdd
+    }
+
+    // A executou como A, não como B.
+    expect(c1.status).toBe("consumed")
+    if (c1.status === "consumed") expect(c1.state.execution_id).toBe(ID)
+    // E o uso único sobreviveu ao `WeakSet.has` mentindo.
+    expect(c2.status).toBe("refused")
+    if (c2.status === "refused") {
+      expect(c2.defect).toBe("RESERVED_ATTEMPT_ALREADY_CONSUMED")
+    }
+    // B nunca foi substituída nem consumida.
+    expect(B.isConsumed).toBe(false)
+    const cb = consumeReservedExecutionAttempt(B)
+    expect(cb.status).toBe("consumed")
+    if (cb.status === "consumed") expect(cb.state.execution_id).toBe("ev2-exec-0002")
+  })
+
+  it("EV2-10 `Symbol.hasInstance` forjado não cria capacidade", () => {
+    // `instanceof` saiu do caminho de autoridade porque também é substituível.
+    const impostor = { execution_id: ID, spec: spec() }
+    const desc = Object.getOwnPropertyDescriptor(
+      ReservedExecutionAttempt, Symbol.hasInstance)
+    try {
+      Object.defineProperty(ReservedExecutionAttempt, Symbol.hasInstance, {
+        configurable: true, value: () => true,
+      })
+      expect(impostor instanceof ReservedExecutionAttempt).toBe(true)
+      expect(consumeReservedExecutionAttempt(impostor).status).toBe("refused")
+    } finally {
+      if (desc === undefined) {
+        delete (ReservedExecutionAttempt as unknown as Record<symbol, unknown>)[
+          Symbol.hasInstance]
+      } else {
+        Object.defineProperty(ReservedExecutionAttempt, Symbol.hasInstance, desc)
+      }
+    }
+  })
+
+  it("EV2-10 fonte: o consumo não usa despacho substituível", () => {
+    // ESTRUTURAL. Dentro do bloco estático da classe não pode haver `instanceof`,
+    // nem chamada a `get`/`has`/`add`, nem `Reflect`.
+    const src = fonte(SUP)
+    let bloco: ts.ClassStaticBlockDeclaration | undefined
+    const acha = (n: ts.Node): void => {
+      if (ts.isClassStaticBlockDeclaration(n)) bloco = n
+      ts.forEachChild(n, acha)
+    }
+    acha(src)
+    expect(bloco, "bloco estático não encontrado").toBeDefined()
+    const proibidos: string[] = []
+    const anda = (n: ts.Node): void => {
+      if (ts.isBinaryExpression(n) &&
+          n.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword) {
+        proibidos.push("instanceof")
+      }
+      if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) &&
+          ["get", "has", "add", "set"].includes(n.expression.name.text)) {
+        proibidos.push(n.expression.name.text)
+      }
+      ts.forEachChild(n, anda)
+    }
+    anda(bloco!)
+    expect(proibidos).toEqual([])
+  })
+
+  it("EV2-10 função injetada não consegue consumir OUTRA capacidade", async () => {
+    // O relato do Codex: `A._consumeOnce = B._consumeOnce.bind(B)`. O método sumiu,
+    // então o equivalente é injetar a propriedade — que não pode ter efeito nenhum.
+    est.raiz = RAIZ
+    const ra = await prepareGovernedExecution(autorizacao(spec()))
+    const rb = await prepareGovernedExecution(autorizacao(spec({ execution_id: "ev2-exec-0002" })))
+    if (ra.status !== "reserved" || rb.status !== "reserved") throw new Error("esperava reservas")
+    let invocada = false
+    Object.defineProperty(ra.attempt, "_consumeOnce", {
+      configurable: true, writable: true,
+      value: () => { invocada = true; return true },
+    })
+
+    const ca = consumeReservedExecutionAttempt(ra.attempt)
+    expect(ca.status).toBe("consumed")
+    if (ca.status === "consumed") expect(ca.state.execution_id).toBe(ID)
+    expect(invocada, "a produção chamou o método do chamador").toBe(false)
+    // B intocada: nem consumida, nem impersonada.
+    expect(rb.attempt.isConsumed).toBe(false)
+    const cb = consumeReservedExecutionAttempt(rb.attempt)
+    expect(cb.status).toBe("consumed")
+    if (cb.status === "consumed") expect(cb.state.execution_id).toBe("ev2-exec-0002")
+  })
+
+  it("EV2-10 função injetada que sempre 'vence' não repete o consumo", async () => {
+    est.raiz = RAIZ
+    const r = await prepareGovernedExecution(autorizacao())
+    if (r.status !== "reserved") throw new Error("esperava reserva")
+    Object.defineProperty(r.attempt, "_consumeOnce", {
+      configurable: true, writable: true, value: () => true,
+    })
+    expect(consumeReservedExecutionAttempt(r.attempt).status).toBe("consumed")
+    const dois = consumeReservedExecutionAttempt(r.attempt)
+    expect(dois.status).toBe("refused")
+    if (dois.status === "refused") {
+      expect(dois.defect).toBe("RESERVED_ATTEMPT_ALREADY_CONSUMED")
+    }
+  })
+
+  it("EV2-10 o estado de consumo vem do registro privado, não do objeto", async () => {
+    est.raiz = RAIZ
+    const r = await prepareGovernedExecution(autorizacao())
+    if (r.status !== "reserved") throw new Error("esperava reserva")
+    // Campos que a versão anterior usava como autoridade, agora só ruído injetado.
+    Object.defineProperty(r.attempt, "consumida", { configurable: true, value: true })
+    expect(r.attempt.isConsumed).toBe(false)
+    expect(r.attempt.safeAuditView().consumed).toBe(false)
+    expect(consumeReservedExecutionAttempt(r.attempt).status).toBe("consumed")
+    expect(r.attempt.isConsumed).toBe(true)
+    expect(r.attempt.safeAuditView().consumed).toBe(true)
+    // E "desconsumir" injetando de novo não existe.
+    Object.defineProperty(r.attempt, "consumida", { configurable: true, value: false })
+    expect(consumeReservedExecutionAttempt(r.attempt).status).toBe("refused")
+  })
+
+  it("EV2-10 nenhum export desfaz, reseta ou clona o consumo", async () => {
+    const sup = await import("../src/execution-supervisor")
+    expect(Object.keys(sup).filter((k) =>
+      /unconsume|reset|clear|release|mark|clone|revoke/i.test(k))).toEqual([])
+    // `_consumeOnce` deixou de existir: não há dois mecanismos competindo.
+    expect("_consumeOnce" in sup.ReservedExecutionAttempt.prototype).toBe(false)
+  })
+
+  it("EV2-10 o consumo devolve o estado de EMISSÃO, não as propriedades públicas", async () => {
+    const r = await (est.raiz = RAIZ, prepareGovernedExecution(autorizacao()))
+    if (r.status !== "reserved") throw new Error("esperava reserva")
+    const prazoReal = r.attempt.attempt_deadline_monotonic
+    // Toda propriedade pública reescrita para um valor absurdo mas bem tipado.
+    Object.defineProperty(r.attempt, "execution_id", { value: "outro-id" })
+    Object.defineProperty(r.attempt, "execution_key", { value: executionKey("outro-id") })
+    Object.defineProperty(r.attempt, "execution_fingerprint", { value: "a".repeat(64) })
+    Object.defineProperty(r.attempt, "attempt_deadline_monotonic", { value: 1e12 })
+
+    const c = consumeReservedExecutionAttempt(r.attempt)
+    expect(c.status).toBe("consumed")
+    if (c.status !== "consumed") return
+    expect(c.state.execution_id).toBe(ID)
+    expect(c.state.execution_key).toBe(executionKey(ID))
+    expect(c.state.attempt_deadline_monotonic).toBe(prazoReal)
+    expect(Object.isFrozen(c.state)).toBe(true)
+  })
+
+  it("EV2-10 o estado devolvido é DADO, não uma segunda capacidade", async () => {
+    const r = await (est.raiz = RAIZ, prepareGovernedExecution(autorizacao()))
+    if (r.status !== "reserved") throw new Error("esperava reserva")
+    const c = consumeReservedExecutionAttempt(r.attempt)
+    if (c.status !== "consumed") throw new Error("esperava consumo")
+    // Devolvê-lo a qualquer via governada falha: não tem selo, não está no registro.
+    expect(consumeReservedExecutionAttempt(c.state).status).toBe("refused")
+    expect(consumeReservedExecutionAttempt({ ...c.state }).status).toBe("refused")
+  })
+
+  it("EV2-10 nenhum export expõe o estado privado nem o consumo bruto", async () => {
+    const sup = await import("../src/execution-supervisor")
+    // A lição da costura de raiz: `@internal` e nome feio não são controle de acesso.
+    expect(Object.keys(sup).filter((k) =>
+      /ForTests|__|issuanceState|privateState|EMISSAO|SELO/i.test(k))).toEqual([])
+    expect(Object.keys(sup).sort()).toEqual([
+      "RESERVED_ATTEMPT_DEFECTS", "ReservedExecutionAttempt",
+      "consumeReservedExecutionAttempt", "prepareGovernedExecution",
+    ])
+  })
+
   it("EV2-10 nenhum export reconstrói capacidade a partir de dado", async () => {
     const sup = await import("../src/execution-supervisor")
     expect(Object.keys(sup).filter((k) => /^(from|parse|load|restore|deserialize|revive)/i.test(k)))

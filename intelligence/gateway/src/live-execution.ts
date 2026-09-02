@@ -158,6 +158,19 @@ const CHAVES_GOVERNADAS: ReadonlySet<string> = new Set(LIVE_EXECUTION_SPEC_KEYS)
 const PROPRIAS = new WeakSet<object>()
 
 /**
+ * O `Object.freeze` confiável, capturado na INICIALIZAÇÃO do módulo.
+ *
+ * `Object.freeze` é `writable: true, configurable: true`. A regra da d2c-r5 vale aqui
+ * igual: construir o objeto localmente, congelar ESSE objeto com o intrínseco
+ * capturado, e atribuir o local — nunca `x = freeze(...)`.
+ *
+ * Há um caminho concreto se isto faltar: com `Object.freeze` adulterado, a spec própria
+ * não fica realmente congelada, e ela é publicada em `auth.spec`. O detentor então muta
+ * `model` DEPOIS de Stefano ter aprovado um fingerprint que descrevia outra coisa.
+ */
+const CONGELA = Object.freeze
+
+/**
  * Instantâneo PRÓPRIO da spec — a fronteira de propriedade da d1-r1.
  *
  * ─── Por que ler cada campo EXATAMENTE UMA VEZ ───────────────────────────────
@@ -212,9 +225,16 @@ function toOwnedLiveExecutionSpec(raw: unknown): LiveExecutionSpecV1 | null {
 
   // Congelamento PROFUNDO, não raso. Hoje todos os campos são primitivos; a
   // imutabilidade não pode depender dessa propriedade acidental continuar valendo.
-  const congelado = deepFreeze(proprio)
-  PROPRIAS.add(congelado)
-  return congelado
+  //
+  // `deepFreeze` devolve o MESMO objeto — não o retorno de `Object.freeze` — então
+  // adulterar o intrínseco não substitui a spec. Mas poderia deixá-la NÃO congelada, e
+  // ela é publicada em `auth.spec`. Por isso o congelamento raso vem também do
+  // intrínseco capturado. Raso basta e isso é demonstrável: `especificacaoValida` e
+  // `politicaDeControleExata` juntas exigem que os vinte campos sejam primitivos.
+  deepFreeze(proprio)
+  CONGELA(proprio)
+  PROPRIAS.add(proprio)
+  return proprio
 }
 
 /** Só primitivos governados; nenhum campo aceita objeto do chamador. */
@@ -308,20 +328,57 @@ export function monotonicSeconds(): number {
 }
 
 /**
- * As autorizações REALMENTE emitidas por este módulo.
+ * O que a EMISSÃO fixou. Cópia própria, congelada, capturada das fontes já validadas.
  *
- * `instanceof` sozinho não basta: `Object.create(LiveExecutionAuthorization.prototype)`
- * produz um objeto que passa no teste, sem nunca ter passado pelo construtor — e sem
- * `spec`, o consumo estouraria em vez de recusar. O registro responde a pergunta
- * certa: este objeto foi emitido AQUI?
- *
- * `WeakSet`: não prolonga a vida de nada, e não é enumerável por quem não o tem.
+ * Isto NÃO é autoridade transferível: é dado. Não tem selo, não tem marca de classe, e
+ * devolvê-lo a qualquer via governada falha na conferência de marca.
  */
-const EMITIDAS = new WeakSet<LiveExecutionAuthorization>()
+export interface IssuedAuthorizationState {
+  /** O MESMO instantâneo próprio e congelado. Nunca uma segunda representação. */
+  readonly spec: LiveExecutionSpecV1
+  readonly execution_fingerprint: string
+  readonly decision_id: string
+  readonly issued_at_monotonic: number
+  /** O TTL e o prazo vêm da EMISSÃO — nunca de campo público relido. */
+  readonly authorization_ttl_seconds: number
+  readonly attempt_deadline_seconds: number
+}
+
+/**
+ * O consumidor LEXICAL do módulo. Atribuído no bloco `static {}` da classe, onde os
+ * campos privados são visíveis. Não é exportado e não recebe retorno de chamada.
+ */
+let consumirAutorizacaoViva!: (auth: unknown, agora: number) => LiveConsumptionResult
 
 export class LiveExecutionAuthorization {
-  private consumida = false
+  /**
+   * ─── A AUTORIDADE ────────────────────────────────────────────────────────
+   *
+   * Campos privados de LINGUAGEM. `#emissao` responde "o que Stefano autorizou" e
+   * `#consumida` responde "já foi gasta". Nenhum é alcançável por propriedade,
+   * protótipo, `Reflect` ou serialização, e nenhum depende de método substituível.
+   *
+   * Substituem `private consumida` + `_consumeOnce(SELO)` + `EMITIDAS.has(auth)` +
+   * `instanceof`. Os três últimos eram despacho MUTÁVEL no caminho de autoridade:
+   *
+   *   A._consumeOnce = B._consumeOnce.bind(B)  → consumir A queimava B
+   *   A._consumeOnce = () => true              → uso único desaparecia
+   *   WeakSet.prototype.has = () => true       → objeto qualquer virava emissão
+   *   Object.defineProperty(C, Symbol.hasInstance, …) → `instanceof` mentia
+   *
+   * E `_consumeOnce(SELO)` entregava o selo do módulo a uma função escolhida pelo
+   * detentor. A d2b/d2c pagaram quatro rodadas para fechar esta classe; aqui é a
+   * mesma correção, no módulo que guarda a autoridade de Stefano.
+   */
+  readonly #emissao: IssuedAuthorizationState
+  #consumida = false
 
+  /**
+   * ─── OBSERVACIONAIS, não autoritativos ──────────────────────────────────
+   *
+   * `readonly` é do compilador; em runtime são graváveis. Reescrevê-los não muda
+   * identidade da aprovação, vínculo de execução, TTL, prazo, fingerprint nem consumo.
+   */
   readonly spec: LiveExecutionSpecV1
   readonly execution_fingerprint: string
   readonly decision_id: string
@@ -365,28 +422,27 @@ export class LiveExecutionAuthorization {
     this.execution_fingerprint = fingerprint
     this.decision_id = decision_id
     this.issued_at_monotonic = issued_at_monotonic
+
+    // ─── O estado AUTORITATIVO, construído LOCALMENTE ───────────────────────
+    //
+    // Objeto local, congelado no lugar com o intrínseco capturado, e o LOCAL é o que
+    // se atribui. `this.#emissao = CONGELA(...)` faria a autoridade ser o valor de
+    // retorno de uma função substituível — o defeito que a d2c-r5 fechou.
+    const emitida: IssuedAuthorizationState = {
+      spec,
+      execution_fingerprint: fingerprint,
+      decision_id,
+      issued_at_monotonic,
+      authorization_ttl_seconds: spec.authorization_ttl_seconds,
+      attempt_deadline_seconds: spec.attempt_deadline_seconds,
+    }
+    CONGELA(emitida)
+    this.#emissao = emitida
   }
 
-  /** Já foi consumida? Leitura, não autoridade. */
+  /** Já foi consumida? Leitura, não autoridade — e vem do campo privado. */
   get isConsumed(): boolean {
-    return this.consumida
-  }
-
-  /**
-   * Consumo ATÔMICO de uso único.
-   *
-   * O JavaScript executa esta função inteira sem preempção: entre o teste e a
-   * atribuição nenhuma outra tarefa roda. Duas tentativas concorrentes não conseguem
-   * ambas ver `false`. Não é um mutex — é a garantia do modelo de execução, e vale
-   * dizer isso em vez de alegar exclusão mútua que não existe aqui.
-   *
-   * @internal
-   */
-  _consumeOnce(selo: typeof SELO): boolean {
-    if (selo !== SELO) return false
-    if (this.consumida) return false
-    this.consumida = true
-    return true
+    return this.#consumida
   }
 
   /**
@@ -399,25 +455,70 @@ export class LiveExecutionAuthorization {
     throw new Error("LIVE_AUTHORIZATION_NOT_SERIALIZABLE")
   }
 
-  /** Primitivos governados para auditoria. NUNCA aceito de volta como autoridade. */
+  /**
+   * Primitivos governados para auditoria. NUNCA aceito de volta como autoridade.
+   *
+   * Lê a EMISSÃO, não os campos públicos: uma visão que o detentor pudesse reescrever
+   * seria auditoria de nada.
+   */
   safeAuditView(): Readonly<Record<string, string | number | boolean>> {
-    return Object.freeze({
-      execution_id: this.spec.execution_id,
-      execution_fingerprint: this.execution_fingerprint,
-      decision_id: this.decision_id,
-      response_policy_id: this.spec.response_policy_id,
-      response_policy_version: this.spec.response_policy_version,
-      provider: this.spec.provider,
-      model: this.spec.model,
-      api_mode: this.spec.api_mode,
-      sdk_version: this.spec.sdk_version,
-      attempt_deadline_seconds: this.spec.attempt_deadline_seconds,
-      max_retries: this.spec.max_retries,
-      background: this.spec.background,
-      stream: this.spec.stream,
-      tool_count: this.spec.tool_count,
-      consumed: this.consumida,
-    })
+    const e = this.#emissao
+    const visao = {
+      execution_id: e.spec.execution_id,
+      execution_fingerprint: e.execution_fingerprint,
+      decision_id: e.decision_id,
+      response_policy_id: e.spec.response_policy_id,
+      response_policy_version: e.spec.response_policy_version,
+      provider: e.spec.provider,
+      model: e.spec.model,
+      api_mode: e.spec.api_mode,
+      sdk_version: e.spec.sdk_version,
+      attempt_deadline_seconds: e.attempt_deadline_seconds,
+      max_retries: e.spec.max_retries,
+      background: e.spec.background,
+      stream: e.spec.stream,
+      tool_count: e.spec.tool_count,
+      consumed: this.#consumida,
+    }
+    CONGELA(visao)
+    return visao
+  }
+
+  /**
+   * Marca, TTL e uso único — os três dentro da classe, onde os campos privados
+   * existem, e sem uma única chamada que o detentor possa substituir.
+   *
+   * `#emissao in auth` é a MARCA: só o construtor real instala um campo privado.
+   * `Object.create(prototype)` não a tem, objeto de mesma forma não a tem, registro
+   * lido do disco não a tem. Substitui `instanceof` e o `WeakSet` de emitidas.
+   *
+   * A ORDEM é a de sempre e não mudou: marca → TTL → uso único. Uma autorização
+   * expirada NÃO é consumida; exigir aprovação nova é o desfecho certo, e queimá-la
+   * aqui esconderia a expiração atrás de "já usada".
+   *
+   * Atômico por construção: entre ler e escrever `#consumida` não há `await`, chamada
+   * externa nem despacho, e o JavaScript não preempta dentro de função síncrona.
+   */
+  static {
+    consumirAutorizacaoViva = (auth: unknown, agora: number): LiveConsumptionResult => {
+      if (auth === null || typeof auth !== "object" || !(#emissao in auth)) {
+        return { status: "refused", defect: "AUTHORIZATION_NOT_OWNED" }
+      }
+      const e = auth.#emissao
+      const idade = agora - e.issued_at_monotonic
+      if (!Number.isFinite(idade) || idade >= e.authorization_ttl_seconds) {
+        return { status: "refused", defect: "AUTHORIZATION_EXPIRED" }
+      }
+      if (auth.#consumida) {
+        return { status: "refused", defect: "AUTHORIZATION_ALREADY_CONSUMED" }
+      }
+      auth.#consumida = true
+      return {
+        status: "consumed",
+        attempt_deadline_monotonic: agora + e.attempt_deadline_seconds,
+        execution_fingerprint: e.execution_fingerprint,
+      }
+    }
   }
 }
 
@@ -512,7 +613,8 @@ export function issueLiveExecutionAuthorization(
     efetiva.decision.decision_id,
     monotonicSeconds(),
   )
-  EMITIDAS.add(autorizacao)
+  // Nada a registrar fora do objeto: a marca de linguagem JÁ é a prova de emissão, e
+  // foi instalada pelo construtor — que exige o selo do módulo e uma spec própria.
   return { status: "authorized", authorization: autorizacao }
 }
 
@@ -540,23 +642,7 @@ export function consumeLiveExecutionAuthorization(
   auth: unknown,
   nowMonotonic: number = monotonicSeconds(),
 ): LiveConsumptionResult {
-  // Emissão REAL, não forma. Um objeto de mesma forma — ou um `Object.create` sobre o
-  // protótipo — não está no registro, e não é autorização.
-  if (!(auth instanceof LiveExecutionAuthorization) || !EMITIDAS.has(auth)) {
-    return { status: "refused", defect: "AUTHORIZATION_NOT_OWNED" }
-  }
-  const idade = nowMonotonic - auth.issued_at_monotonic
-  if (!Number.isFinite(idade) || idade >= auth.spec.authorization_ttl_seconds) {
-    return { status: "refused", defect: "AUTHORIZATION_EXPIRED" }
-  }
-  if (!auth._consumeOnce(SELO)) {
-    return { status: "refused", defect: "AUTHORIZATION_ALREADY_CONSUMED" }
-  }
-  return {
-    status: "consumed",
-    attempt_deadline_monotonic: nowMonotonic + auth.spec.attempt_deadline_seconds,
-    execution_fingerprint: auth.execution_fingerprint,
-  }
+  return consumirAutorizacaoViva(auth, nowMonotonic)
 }
 
 export type TimeoutDerivation =
