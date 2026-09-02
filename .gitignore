@@ -24,3 +24,6 @@ yarn-error.log*
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# Árvores sintéticas de teste (intelligence/gateway/tests/frozen-contracts.test.ts)
+.tmp-membership-*/

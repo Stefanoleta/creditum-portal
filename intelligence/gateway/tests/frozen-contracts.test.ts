@@ -12,7 +12,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, cpSync } f
 import { tmpdir } from "node:os"
 import { join, dirname } from "node:path"
 import { fileURLToPath } from "node:url"
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it } from "vitest"
 
 import { contractNames, verifyFrozenContracts } from "../../scripts/verify-frozen-contracts"
 
@@ -166,9 +166,25 @@ describe("portão de congelamento dos contratos canônicos", () => {
  * "falhou" e sai com 0 é um script que passa.
  */
 describe("associação canônica alcança a compilação de schema", () => {
+  /**
+   * Toda árvore sintética criada aqui fica registrada ANTES de qualquer outra
+   * operação. Sem isto, uma falha no meio do próprio `bancada()` — um `cpSync`
+   * que estoura, um schema que não serializa — deixava o diretório para trás
+   * dentro da árvore de trabalho, sujando `git status`. O `finally` de cada
+   * teste não alcança esse caso: naquele ponto o `bancada()` nem retornou.
+   */
+  const criados: string[] = []
+
+  afterEach(() => {
+    for (const dir of criados.splice(0)) {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   /** Árvore sintética DENTRO do repo — é o que resolve `node_modules`. */
   function bancada(nomeNovo: string, schemaNovo: unknown) {
     const dir = mkdtempSync(join(RAIZ, ".tmp-membership-"))
+    criados.push(dir)
     mkdirSync(join(dir, "scripts"), { recursive: true })
     mkdirSync(join(dir, "gateway", "src"), { recursive: true })
     cpSync(CONTRATOS, join(dir, "contracts"), { recursive: true })
