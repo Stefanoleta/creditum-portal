@@ -97,11 +97,14 @@ conflitado como se fosse limpo.
 
 ### Hermes → captura ⬜
 
-A saída é validada contra `recommendation.schema.json` **antes** de ser
-apresentada. Falha de schema não vira "recomendação parcial": vira registro de
-falha no ledger. O `provenance` (provedor, modelo, versão de prompt, hash de
-config) é preenchido pelo capturador a partir do que foi de fato invocado — não
-pelo que o agente afirma ter usado.
+A saída é validada contra `hermes-insight.schema.json` **antes** de ser
+apresentada — `recommendation.schema.json` foi retirado na Fase 3.0a. Falha de
+schema não vira "recomendação parcial": vira registro de falha no ledger.
+
+Uma recomendação canônica é `HermesInsightV1` com `kind: "RECOMMENDATION"`, e o
+schema exige `requires_stefano_approval: true`. Recomendar não é decidir: a ação
+depois disso passa por `ApprovalRequestV1` e só se realiza com `DecisionRecordV1`
+assinado por Stefano.
 
 ### Handoff do Aros ⬜
 

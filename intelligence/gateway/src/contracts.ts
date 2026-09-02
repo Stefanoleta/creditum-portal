@@ -13,16 +13,13 @@ import Ajv2020 from "ajv/dist/2020.js"
 import addFormats from "ajv-formats"
 import { GatewayError } from "./errors"
 
-export const CONTRACT_NAMES = [
-  "snapshot",
-  "event",
-  "evidence",
-  "recommendation",
-  "decision",
-  "aros-briefing",
-] as const
+import {
+  CONTRACT_NAMES,
+  WITHDRAWN_CONTRACT_NAMES,
+  type ContractName,
+} from "./contract-registry"
 
-export type ContractName = (typeof CONTRACT_NAMES)[number]
+export { CONTRACT_NAMES, WITHDRAWN_CONTRACT_NAMES, type ContractName }
 
 const CONTRACTS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "contracts")
 

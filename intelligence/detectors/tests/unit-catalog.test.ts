@@ -197,12 +197,20 @@ describe("§21 — decisões D13 aprovadas", () => {
     expect(new Set(ids).size).toBe(3)
   })
 
-  it("ACHADO: `Zona Norte` sozinho NÃO resolve — a planilha grafa `Zona Norte - RN`", () => {
-    // Registrado como pendência de qualidade, não corrigido por similaridade. Se
-    // as planilhas de venda escreverem `Zona Norte`, precisa de alias governado.
-    expect(idDe(resolver("Zona Norte"))).toBeNull()
-    // O apelido que a planilha DÁ para ela resolve.
+  it("`Zona Norte` resolve para Natal/RN — decisão D13 da Fase 2.10e", () => {
+    // Este teste afirmava o contrário até a 2.10e, e a pendência que ele registrava
+    // era a certa: "se as planilhas de venda escreverem `Zona Norte`, precisa de
+    // alias governado". As planilhas do Lucas escrevem, e o alias foi aprovado.
+    //
+    // A resolução vem do ARTEFATO, não de similaridade: a forma curta dava 6667 bp,
+    // abaixo do limiar de 8000, e continuaria dando. A ambiguidade geográfica com a
+    // zona norte de São Paulo não era solúvel por texto — foi decidida por humano.
+    expect(idDe(resolver("Zona Norte"))).toBe("zona_norte_rn")
+    // O apelido que a planilha de cadastro DÁ para ela continua resolvendo.
     expect(idDe(resolver("Natal Zona Norte"))).toBe("zona_norte_rn")
+    // E não colapsou com as duas vizinhas do mesmo grupo de nomes.
+    expect(idDe(resolver("Rio Centro"))).toBe("rio_centro")
+    expect(idDe(resolver("Madureira"))).toBe("madureira")
   })
 
   it("Carpina ≠ Limoeiro", () => {

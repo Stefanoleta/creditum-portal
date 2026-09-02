@@ -23,6 +23,18 @@
 export { sumCents, multiplyCents, parseCount, parseDateISO, parseText, toComparableKey } from "../../../src/lib/ceo/parse"
 export { CENTS_SANITY_CEILING } from "../../../src/lib/ceo/parse"
 
+// Dinheiro e CPF vindos de célula de planilha. Acrescentados na Fase 2.11, para a
+// fonte mensal do Lucas, e reexportados AQUI em vez de importados direto: este
+// arquivo é o único ponto de acoplamento com `src/lib/ceo`, e um import relativo
+// profundo em `integration/` reabriria a caça a acoplamento que ele existe para
+// evitar.
+//
+// `parseBRLToCents` devolve `null` para ausente E para inválido — nunca `0`. É o
+// que substitui o `Number("R$ 410,00") || 0` do workflow, que transforma um
+// contrato de R$ 410 em R$ 0 e o soma ao ticket médio.
+export { parseBRLToCents, parseCpf, isValidCpf } from "../../../src/lib/ceo/parse"
+export type { CpfResult, CpfConfidence } from "../../../src/lib/ceo/parse"
+
 // ─── Álgebra de métricas ──────────────────────────────────────────────────────
 export {
   observed,

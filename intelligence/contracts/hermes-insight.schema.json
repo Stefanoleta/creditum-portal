@@ -1,0 +1,305 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://creditum.internal/intelligence/contracts/hermes-insight.schema.json",
+  "title": "Insight do Hermes (fronteira epistêmica)",
+  "description": "Um enunciado do Hermes, com o TIPO no discriminador obrigatório. FACT, INFERENCE, ALERT e RECOMMENDATION têm exigências estruturais diferentes de propósito: um FACT sem referência governada não valida, uma INFERENCE sem limitação declarada não valida, e uma RECOMMENDATION sem exigir aprovação de Stefano não valida. A separação não é convenção de nomenclatura — é o schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "insight_id",
+    "schema_version",
+    "kind",
+    "generated_at",
+    "statement",
+    "audiences",
+    "requires_stefano_approval"
+  ],
+  "properties": {
+    "insight_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "schema_version": {
+      "$ref": "#/$defs/schema_version"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "kind": {
+      "description": "Vocabulário FECHADO. `kind` é obrigatório para que uma INFERENCE não possa ser serializada como FACT por omissão do discriminador — sem ele o objeto simplesmente não valida.",
+      "enum": [
+        "FACT",
+        "INFERENCE",
+        "ALERT",
+        "RECOMMENDATION"
+      ]
+    },
+    "statement": {
+      "$ref": "#/$defs/untrusted_text"
+    },
+    "supporting_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/identifier"
+      },
+      "maxItems": 512,
+      "description": "Referências de apoio (observações, insights anteriores). Não substitui evidência."
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/identifier"
+      },
+      "maxItems": 512,
+      "description": "Refs de Evidence governada. Obrigatório e não-vazio quando `kind` é FACT."
+    },
+    "limitations": {
+      "description": "O que este enunciado NÃO sustenta. Obrigatório e não-vazio para INFERENCE: uma inferência sem limite declarado é lida como fato.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/untrusted_text"
+      },
+      "maxItems": 32
+    },
+    "audiences": {
+      "description": "Allowlist explícita. Vazio = ninguém vê. Não existe ALL.",
+      "type": "array",
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "EXECUTIVE_STEFANO",
+          "COMMERCIAL_LUCAS",
+          "FINANCE_LEONARDO"
+        ]
+      }
+    },
+    "requires_stefano_approval": {
+      "type": "boolean"
+    },
+    "alert_basis": {
+      "description": "Só para ALERT. GOVERNED = o alerta vem de um fato governado (ex. P_SIGNATURE_DEADLINE_ATTENTION). INTERPRETIVE = leitura do Hermes.",
+      "enum": [
+        "GOVERNED",
+        "INTERPRETIVE"
+      ]
+    },
+    "governed_fact_type": {
+      "description": "Nome do fato governado que sustenta um ALERT GOVERNED.",
+      "type": "string",
+      "maxLength": 128
+    },
+    "severity": {
+      "description": "Severidade CANÔNICA. Só pode existir com lastro governado — ver `allOf`. `null` é a afirmação de que nenhuma foi atribuída.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical",
+        null
+      ]
+    },
+    "materiality_ref": {
+      "$ref": "#/$defs/identifier"
+    },
+    "proposed_action": {
+      "$ref": "#/$defs/untrusted_text"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.:-]{2,127}$"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "untrusted_text": {
+      "description": "Envelope obrigatório para QUALQUER texto livre. Na Fase 3 isso inclui o texto que o PRÓPRIO Hermes escreve: uma frase gerada por modelo é dado, nunca instrução, e sem o rótulo ela chegaria a um consumidor a jusante indistinguível de uma diretiva do sistema.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "untrusted",
+        "content"
+      ],
+      "properties": {
+        "untrusted": {
+          "const": true
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "origin": {
+          "type": "string",
+          "maxLength": 256
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "description": "FACT exige evidência governada e NÃO admite confiança probabilística.",
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "FACT"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "required": [
+          "evidence_refs"
+        ],
+        "properties": {
+          "evidence_refs": {
+            "minItems": 1,
+            "type": "array"
+          },
+          "requires_stefano_approval": {
+            "const": false
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "description": "INFERENCE exige limitação declarada e não pode carregar severidade canônica.",
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "INFERENCE"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "required": [
+          "limitations"
+        ],
+        "properties": {
+          "limitations": {
+            "minItems": 1,
+            "type": "array"
+          },
+          "severity": {
+            "const": null
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "description": "ALERT exige declarar se é governado ou interpretativo.",
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "ALERT"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "required": [
+          "alert_basis"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "ALERT governado exige nomear o fato que o sustenta.",
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "ALERT"
+          },
+          "alert_basis": {
+            "const": "GOVERNED"
+          }
+        },
+        "required": [
+          "kind",
+          "alert_basis"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "required": [
+          "governed_fact_type"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "ALERT interpretativo NÃO pode inventar severidade canônica. É o furo que a Fase 2.12 fechou para A/P e que aqui não pode reabrir.",
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "ALERT"
+          },
+          "alert_basis": {
+            "const": "INTERPRETIVE"
+          }
+        },
+        "required": [
+          "kind",
+          "alert_basis"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "properties": {
+          "severity": {
+            "const": null
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "description": "RECOMMENDATION SEMPRE exige aprovação de Stefano. `const true` e não `boolean`: auto-aprovação deixa de ser expressável.",
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "RECOMMENDATION"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "required": [
+          "proposed_action"
+        ],
+        "properties": {
+          "requires_stefano_approval": {
+            "const": true
+          }
+        },
+        "type": "object"
+      }
+    }
+  ]
+}

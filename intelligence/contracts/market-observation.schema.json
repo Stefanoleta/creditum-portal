@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://creditum.internal/intelligence/contracts/market-observation.schema.json",
+  "title": "Observação externa de mercado",
+  "description": "Fato EXTERNO verificável, e nada além. A leitura do que ele significa é um HermesInsight com `kind: INFERENCE` — a separação é obrigatória por construção: aqui não existe campo para interpretação, hipótese, tendência inferida ou conclusão. 'O concorrente publicou 6 Reels sobre X' cabe; 'o concorrente parece apostar em X' não cabe.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "observation_id",
+    "schema_version",
+    "observed_at",
+    "source_type",
+    "subject",
+    "observed_fact",
+    "capture_time"
+  ],
+  "properties": {
+    "observation_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "schema_version": {
+      "$ref": "#/$defs/schema_version"
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source_type": {
+      "enum": [
+        "COMPETITOR",
+        "SOCIAL_TREND",
+        "MARKET",
+        "CREATOR",
+        "INDUSTRY"
+      ]
+    },
+    "source_ref": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "platform": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "subject": {
+      "$ref": "#/$defs/untrusted_text"
+    },
+    "observed_fact": {
+      "description": "O que foi OBSERVADO. Nunca o que se conclui dele.",
+      "$ref": "#/$defs/untrusted_text"
+    },
+    "metrics_if_available": {
+      "description": "Ausência de métrica não é zero: o item não existe.",
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "metric",
+          "value"
+        ],
+        "properties": {
+          "metric": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "value": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        }
+      }
+    },
+    "period": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "capture_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Quando foi capturado. Observação externa sem tempo não é verificável."
+    },
+    "evidence_ref": {
+      "$ref": "#/$defs/identifier"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.:-]{2,127}$"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "untrusted_text": {
+      "description": "Envelope obrigatório para QUALQUER texto livre, inclusive o que Hermes ou Aros escrevem: texto gerado por modelo é dado, nunca instrução.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "untrusted",
+        "content"
+      ],
+      "properties": {
+        "untrusted": {
+          "const": true
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "origin": {
+          "type": "string",
+          "maxLength": 256
+        }
+      }
+    }
+  }
+}

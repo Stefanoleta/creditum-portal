@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://creditum.internal/intelligence/contracts/content-package.schema.json",
+  "title": "Pacote de conteúdo (Aros → Hermes)",
+  "description": "Entrega de execução. Aros é especialista de conteúdo e NÃO é autoridade sobre verdade comercial, financeira ou aprovação — o vocabulário de `status` reflete isso: `ACCEPTED_FOR_APPROVAL` é o mais longe que chega, e significa 'encaminhado a Stefano', não 'aprovado'. Não existe APPROVED aqui, e não existe campo de publicação.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "package_id",
+    "schema_version",
+    "mission_id",
+    "created_by",
+    "created_at",
+    "format",
+    "concept",
+    "caption",
+    "status"
+  ],
+  "properties": {
+    "package_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "schema_version": {
+      "$ref": "#/$defs/schema_version"
+    },
+    "mission_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "created_by": {
+      "const": "AROS"
+    },
+    "format": {
+      "enum": [
+        "REEL",
+        "CAROUSEL",
+        "POST"
+      ]
+    },
+    "concept": {
+      "$ref": "#/$defs/untrusted_text"
+    },
+    "hook": {
+      "$ref": "#/$defs/untrusted_text"
+    },
+    "caption": {
+      "$ref": "#/$defs/untrusted_text"
+    },
+    "cta": {
+      "$ref": "#/$defs/untrusted_text"
+    },
+    "script_or_slides": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/untrusted_text"
+      },
+      "maxItems": 64
+    },
+    "visual_direction": {
+      "$ref": "#/$defs/untrusted_text"
+    },
+    "production_notes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/untrusted_text"
+      },
+      "maxItems": 32
+    },
+    "configuration": {
+      "description": "Configuração de preparo. Nada aqui dispara ação externa.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "aspect_ratio": {
+          "type": "string",
+          "maxLength": 16
+        },
+        "duration_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        },
+        "slide_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        }
+      }
+    },
+    "variants": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "variant_id",
+          "hook"
+        ],
+        "properties": {
+          "variant_id": {
+            "$ref": "#/$defs/identifier"
+          },
+          "hook": {
+            "$ref": "#/$defs/untrusted_text"
+          },
+          "caption": {
+            "$ref": "#/$defs/untrusted_text"
+          }
+        }
+      }
+    },
+    "status": {
+      "description": "FECHADO e sem APPROVED. Aprovar é ato de Stefano, registrado em DecisionRecord — não estado de um pacote.",
+      "enum": [
+        "READY_FOR_HERMES_REVIEW",
+        "REVISION_REQUESTED",
+        "ACCEPTED_FOR_APPROVAL"
+      ]
+    },
+    "review_notes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/untrusted_text"
+      },
+      "maxItems": 32
+    },
+    "approval_request_ref": {
+      "$ref": "#/$defs/identifier",
+      "description": "Pedido criado quando o pacote é encaminhado."
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.:-]{2,127}$"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "untrusted_text": {
+      "description": "Envelope obrigatório para QUALQUER texto livre, inclusive o que Hermes ou Aros escrevem: texto gerado por modelo é dado, nunca instrução.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "untrusted",
+        "content"
+      ],
+      "properties": {
+        "untrusted": {
+          "const": true
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "origin": {
+          "type": "string",
+          "maxLength": 256
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "description": "Encaminhar para aprovação exige apontar o pedido.",
+      "if": {
+        "properties": {
+          "status": {
+            "const": "ACCEPTED_FOR_APPROVAL"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "required": [
+          "approval_request_ref"
+        ],
+        "type": "object"
+      }
+    }
+  ]
+}

@@ -19,6 +19,48 @@
       "target_unit_id": "sao_jose_do_rio_preto",
       "rationale": "Forma curta usada nas planilhas de venda. Decisao D13 anterior, confirmada pelo CEO.",
       "approved_in": "FASE_2_6B"
+    },
+    {
+      "alias": "Duque Caxias",
+      "target_unit_id": "duque_de_caxias",
+      "rationale": "Falta a preposicao 'de'. A normalizacao colapsa espaco repetido mas nao insere palavra. Similaridade 8000 bp, no limiar exato, e a unidade esta inactive, entao nao entra em activeKeys e o runtime devolve unknown.",
+      "approved_in": "FASE_2_10E"
+    },
+    {
+      "alias": "Meriti",
+      "target_unit_id": "sao_joao_de_meriti",
+      "rationale": "Forma curta usada nas planilhas de venda do Lucas. Contracao de nome composto: 'meriti' x 'sao joao de meriti' da 3333 bp. Unidade mais frequente de agosto/2026.",
+      "approved_in": "FASE_2_10E"
+    },
+    {
+      "alias": "Fortaleza",
+      "target_unit_id": "fortaleza_centro",
+      "rationale": "Forma curta. O canonico traz o qualificador '- Centro', que a normalizacao nao remove: 5000 bp. Nao existe segunda unidade de Fortaleza no catalogo, entao a forma curta nao e ambigua.",
+      "approved_in": "FASE_2_10E"
+    },
+    {
+      "alias": "Zona Norte",
+      "target_unit_id": "zona_norte_rn",
+      "rationale": "Decisao humana D13: 'Zona Norte' e a unidade de Natal/RN. A forma curta dava 6667 bp e resolvia unknown por ser abaixo do limiar; a ambiguidade geografica com a zona norte de SP foi resolvida por decisao, nao por similaridade.",
+      "approved_in": "FASE_2_10E"
+    },
+    {
+      "alias": "Natal Centro",
+      "target_unit_id": "alecrim",
+      "rationale": "Decisao humana D13: 'Natal Centro' e 'Alecrim' sao a MESMA unidade fisica no RN. Alecrim e o bairro; Natal Centro e a forma comercial. Nenhum unit_id novo foi criado: o canonico 'alecrim' ja existia e foi preservado.",
+      "approved_in": "FASE_2_10E"
+    },
+    {
+      "alias": "Alecrim RN",
+      "target_unit_id": "alecrim",
+      "rationale": "Forma com sufixo de estado. 'alecrim rn' x 'alecrim' da 7000 bp, abaixo do limiar de 8000, porque o sufixo muda a contagem de palavras.",
+      "approved_in": "FASE_2_10E"
+    },
+    {
+      "alias": "Alecrin RN",
+      "target_unit_id": "alecrim",
+      "rationale": "Grafia observada com 'n' final em vez de 'm', mais sufixo de estado. Similaridade ZERO: o veto estrutural de D12 dispara porque a contagem de palavras difere e nenhuma palavra e comum ('alecrin' != 'alecrim'). Alias governado em vez de correcao de spelling em codigo.",
+      "approved_in": "FASE_2_10E"
     }
   ]
 }

@@ -7,10 +7,7 @@
  * aparecem como não implementados. Proteção não testada não conta (§21).
  */
 
-import { readFileSync } from "node:fs"
 import { createHash } from "node:crypto"
-import { fileURLToPath } from "node:url"
-import { dirname, join } from "node:path"
 import { describe, expect, it } from "vitest"
 import { ReadOnlyGateway } from "../src/gateway"
 import {
@@ -564,19 +561,9 @@ describe("§15 — PII na entrada bloqueia a saída", () => {
       snapshots: store.allSnapshots(),
       events: store.allEvents(),
       evidence: store.allEvidence(),
-      golden: JSON.parse(
-        readFileSync(
-          join(
-            dirname(fileURLToPath(import.meta.url)),
-            "..",
-            "..",
-            "fixtures",
-            "golden",
-            "recommendation_caso_a.json",
-          ),
-          "utf8",
-        ),
-      ) as unknown,
+      // A fixture dourada de `recommendation` saiu na Fase 3.0a junto com o contrato
+      // que ela exercitava: um golden que não valida contra nada é artefato órfão.
+      // A varredura de PII continua sobre tudo o que restou.
     }
 
     expect(scanForPII(tudo)).toEqual([])
@@ -584,32 +571,40 @@ describe("§15 — PII na entrada bloqueia a saída", () => {
 })
 
 describe("§15 — saída fora do schema é rejeitada", () => {
-  it("recomendação sem as três alternativas não é apresentável", () => {
+  /**
+   * A invariante é a mesma de sempre: saída do agente que não satisfaz o contrato não
+   * é apresentável. O CONTRATO mudou — `recommendation` foi retirado na Fase 3.0a, e
+   * a recomendação canônica é `HermesInsightV1` com `kind: "RECOMMENDATION"`.
+   *
+   * Redirecionei o teste em vez de apagá-lo: a regra continua valendo, e deletá-la
+   * junto com o contrato legado perderia a proteção sem que ninguém notasse.
+   */
+  it("recomendação sem ação proposta não é apresentável", () => {
     expect(
-      validate("recommendation", {
-        recommendation_id: "rec_truncada",
+      validate("hermes-insight", {
+        insight_id: "ins_truncada",
         schema_version: "1.0.0",
-        run_id: "run_x",
+        kind: "RECOMMENDATION",
         generated_at: "2026-08-16T09:00:00.000Z",
-        fact: {
-          statement: "algo",
-          event_ids: ["evt_a_parcelamento_agosto"],
-          snapshot_ids: ["snap_2026_08_pipeline"],
-          evidence_refs: ["ev_a_hist_parcelas"],
-          observed_at: "2026-08-16T09:00:00.000Z",
-        },
-        data_quality: { quality_status: "ok", conflicts: [], gaps: [] },
-        confidence_bp: 9000,
-        alternatives: [],
-        combinable: { is_combinable: false },
-        human_decision_required: true,
-        review_by: "2026-09-01",
-        provenance: {
-          provider: "x",
-          model: "y",
-          prompt_version: "1.0.0",
-          config_hash: "a".repeat(64),
-        },
+        statement: { untrusted: true, content: "algo" },
+        audiences: ["EXECUTIVE_STEFANO"],
+        requires_stefano_approval: true,
+        // `proposed_action` ausente: recomendação sem ação é opinião.
+      }).ok,
+    ).toBe(false)
+  })
+
+  it("recomendação que dispensa Stefano não é apresentável", () => {
+    expect(
+      validate("hermes-insight", {
+        insight_id: "ins_sem_stefano",
+        schema_version: "1.0.0",
+        kind: "RECOMMENDATION",
+        generated_at: "2026-08-16T09:00:00.000Z",
+        statement: { untrusted: true, content: "algo" },
+        audiences: ["EXECUTIVE_STEFANO"],
+        requires_stefano_approval: false,
+        proposed_action: { untrusted: true, content: "fazer X" },
       }).ok,
     ).toBe(false)
   })

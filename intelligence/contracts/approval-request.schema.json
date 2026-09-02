@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://creditum.internal/intelligence/contracts/approval-request.schema.json",
+  "title": "Pedido de aprovação a Stefano",
+  "description": "Pede uma decisão. NUNCA a registra. `status` não tem `APPROVED` no vocabulário — a aprovação existe somente num DecisionRecord assinado por Stefano. Silêncio, timeout, confiança alta do Hermes e `AROS_READY` não são estados deste objeto, e por isso não há caminho para virarem aprovação.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "approval_id",
+    "schema_version",
+    "requested_at",
+    "requested_by",
+    "approver",
+    "subject_type",
+    "subject_ref",
+    "proposed_action",
+    "rationale",
+    "supporting_refs",
+    "risk_and_uncertainty",
+    "status"
+  ],
+  "properties": {
+    "approval_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "schema_version": {
+      "$ref": "#/$defs/schema_version"
+    },
+    "requested_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "requested_by": {
+      "description": "Quem pede. Nunca é o aprovador.",
+      "enum": [
+        "HERMES",
+        "AROS"
+      ]
+    },
+    "approver": {
+      "description": "v1: só Stefano decide. `const`, não enum de um item.",
+      "const": "STEFANO"
+    },
+    "subject_type": {
+      "enum": [
+        "HERMES_INSIGHT",
+        "CONTENT_MISSION",
+        "CONTENT_PACKAGE",
+        "SHARED_BRIEFING",
+        "OTHER"
+      ]
+    },
+    "subject_ref": {
+      "$ref": "#/$defs/identifier"
+    },
+    "proposed_action": {
+      "$ref": "#/$defs/untrusted_text"
+    },
+    "rationale": {
+      "$ref": "#/$defs/untrusted_text"
+    },
+    "supporting_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/identifier"
+      },
+      "maxItems": 512
+    },
+    "risk_and_uncertainty": {
+      "description": "O que pode dar errado e o que não se sabe. Não-vazio: pedido sem risco declarado é pedido incompleto.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/untrusted_text"
+      },
+      "minItems": 1,
+      "maxItems": 32
+    },
+    "status": {
+      "description": "FECHADO e sem `APPROVED`. `DECIDED` só afirma que existe um DecisionRecord — não diz qual foi a decisão.",
+      "enum": [
+        "AWAITING_STEFANO_APPROVAL",
+        "DECIDED",
+        "WITHDRAWN"
+      ]
+    },
+    "decision_ref": {
+      "$ref": "#/$defs/identifier",
+      "description": "Aponta o DecisionRecord quando `status` é DECIDED."
+    },
+    "subject_content_hash": {
+      "$ref": "#/$defs/sha256",
+      "description": "Compromisso com o CONTEÚDO exato aprovado. Obrigatório quando o assunto é `SHARED_BRIEFING`.\n\nO gate encontrou o replay: vincular só `subject_ref` deixava uma aprovação de uma projeção autorizar outra que reusasse a mesma id — trocar a audiência de `COMMERCIAL_LUCAS` para `FINANCE_LEONARDO`, ou trocar a allowlist de evidência, e a decisão antiga seguia valendo. Stefano aprova UMA divulgação, não um identificador.\n\nSchema verifica presença e forma; a igualdade com o objeto real é verificada em `authorizeSharedBriefing` — relação entre objetos não cabe em JSON Schema."
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.:-]{2,127}$"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "untrusted_text": {
+      "description": "Envelope obrigatório para QUALQUER texto livre. Na Fase 3 isso inclui o texto que o PRÓPRIO Hermes escreve: uma frase gerada por modelo é dado, nunca instrução, e sem o rótulo ela chegaria a um consumidor a jusante indistinguível de uma diretiva do sistema.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "untrusted",
+        "content"
+      ],
+      "properties": {
+        "untrusted": {
+          "const": true
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "origin": {
+          "type": "string",
+          "maxLength": 256
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "description": "`DECIDED` exige apontar a decisão explícita. Sem ela o estado é mentira.",
+      "if": {
+        "properties": {
+          "status": {
+            "const": "DECIDED"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "required": [
+          "decision_ref"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "Enquanto aguarda, NÃO pode haver decisão apontada.",
+      "if": {
+        "properties": {
+          "status": {
+            "const": "AWAITING_STEFANO_APPROVAL"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "not": {
+          "required": [
+            "decision_ref"
+          ],
+          "type": "object"
+        }
+      }
+    },
+    {
+      "description": "Divulgação exige vínculo de conteúdo. Outros assuntos preservam a semântica existente: não inventamos exigência onde a governança não pediu.",
+      "if": {
+        "type": "object",
+        "properties": {
+          "subject_type": {
+            "const": "SHARED_BRIEFING"
+          }
+        },
+        "required": [
+          "subject_type"
+        ]
+      },
+      "then": {
+        "type": "object",
+        "required": [
+          "subject_content_hash"
+        ]
+      }
+    }
+  ]
+}

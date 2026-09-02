@@ -1,5 +1,10 @@
 # Fase 2.9 — Dashboard do Leonardo: descoberta da fonte oficial
 
+> **SUPERSEDIDO EM PARTE PELA §18 (Fase 2.9b, 18/08 21:00 UTC).** As conclusões
+> de contrato abaixo continuam válidas; o que a 2.9b acrescenta é a verificação
+> pós-deploy, o mapeamento completo dos indicadores e a lacuna de 8 colunas entre
+> o que o dashboard lê e o que o espelho tem. Ler a §18 primeiro.
+
 **Discovery. Nenhum adapter implementado, nenhuma migration, nenhuma escrita em
 banco.** `REAL_SUPABASE_INTROSPECTION = AVAILABLE` — somente leitura.
 
@@ -318,3 +323,254 @@ deployados e **vazios**, alimentados pela planilha do Lucas).
 Um Centro de Inteligência sobre inadimplência é um produto legítimo e provavelmente
 mais valioso — mas é um conjunto de detectores diferente do que está SHIP hoje.
 Registro como decisão sua, não como conclusão minha.
+
+---
+
+# 18. Fase 2.9b — verificação pós-deploy (18/08/2026, 21:00 UTC)
+
+## 18.1 Resultado
+
+```
+DASHBOARD                 https://creditum-financas.vercel.app/
+SUPABASE_USED             NO  (na versão publicada)
+SUPABASE PROJECT          Creditum n8n CFO (ftumfypxpzimhqhmlcun) — alvo pretendido
+OFFICIAL SOURCE           Omie ERP via proxy `/api/omie`   ← o que está no ar
+                          public.espelho_titulos_creditum  ← o que o código já sabe ler
+SOURCE TYPE               API (atual) / table (pretendida)
+GRANULARITY               um título = uma PARCELA
+LOGICAL ID                codigo_lancamento_omie
+BUSINESS PERIOD           data_vencimento
+SOURCE AS_OF              ultima_alteracao
+COLLECTION AS_OF          sync_em — parado há 21 dias
+FULL/INCREMENTAL          espelho com upsert 1:1
+UNIT IDENTITY             Omie `projeto` — AUSENTE do espelho
+MONEY                     numeric na fonte; parseFloat no dashboard
+FRONTEND TRANSFORMS       substanciais (§18.6)
+DATASET_ID                PENDING
+A/B/C/D COMPATIBILITY     todos NOT_COMPATIBLE / NOT_APPLICABLE (§18.8)
+SOURCEADAPTER             REQUIRES_CHANGE
+PARITY WITH DASHBOARD     NOT_POSSIBLE_FROM_SOURCE_ALONE
+IMPLEMENTATION READINESS  BLOCKED
+```
+
+## 18.2 O deploy: evidência
+
+| verificação | resultado |
+| --- | --- |
+| HTTP | 200 |
+| `last-modified` | **Tue, 11 Aug 2026 12:45:15 GMT** — 7 dias |
+| `etag` | `b5248bdd5287be6ca255a56f4c28a398` |
+| bytes | 90.946 — **idênticos** à coleta anterior |
+| cache-busting (`?cb=`, `Cache-Control: no-cache`) | mesmo `etag`, mesmo conteúdo |
+| scripts | 2 CDN (Chart.js) + 1 inline de 57,8 KB. **Nenhum bundle** |
+| `*.supabase.co` no artefato | **zero** |
+| `createClient` | **zero** |
+| endpoint de dados | `/api/omie` |
+| `/api/omie` ao vivo | **200**, `x-vercel-cache: MISS`, resposta real do Omie (`pagina`, `total_de_paginas`, `registros`, `total_de_registros`, `cadastro`) |
+| rotas alternativas (`/v2`, `/dashboard`, `/cockpit`, `/novo`, `/inadimplencia`) | **404** |
+
+**`SUPABASE_USED = NO`** para o que está publicado. Não é interpretação de cache:
+o `last-modified` é de 11/08 e o conteúdo é byte-idêntico com o cache furado.
+
+## 18.3 Mas o código JÁ sabe ler o Supabase
+
+Aqui está a reconciliação, e é o achado central desta passada. O `normalizeRow`
+do dashboard publicado aceita **duas** formas, e a primeira é a do espelho:
+
+```js
+codigoCliente:        r.codigo_cliente_fornecedor ?? r.cCodCliente ?? …
+dataVencimento:       r.data_vencimento           ?? r.dDtVenc
+valorDocumento:       parseFloat(r.valor_documento ?? r.nValorTitulo ?? 0)
+numeroParcela:        (r.numero_parcela           ?? r.cNumParcela ?? "").toString()
+numeroDocumento:      (r.numero_documento         ?? r.cNumTitulo  ?? "").toString()
+statusTitulo:         (r.status_titulo            ?? r.cStatus     ?? "")…
+codigoLancamentoOmie: r.codigo_lancamento_omie    ?? r.nCodTitulo  ?? r.nCodLanc
+```
+
+`codigo_cliente_fornecedor`, `data_vencimento`, `valor_documento`,
+`numero_parcela`, `numero_documento`, `status_titulo`,
+`codigo_lancamento_omie` — são **exatamente** os nomes das colunas de
+`espelho_titulos_creditum`. O `??` coloca a forma do espelho em primeiro lugar e
+o Omie nativo como fallback.
+
+Leitura honesta: o trabalho de Supabase **foi feito** — o leitor está pronto e
+prova a intenção. O que não está no artefato publicado é a **troca do fetch**.
+Ele continua chamando `/api/omie`.
+
+Explicações possíveis, nenhuma verificável de fora: o deploy foi para uma URL de
+preview e o alias de produção não foi promovido; está em outro projeto/domínio;
+ou a troca do fetch ainda não entrou. Não tenho acesso a essa conta Vercel — a
+autenticada aqui tem só `creditum-portal`.
+
+## 18.4 A lacuna de contrato — 8 de 16 colunas AUSENTES
+
+O `normalizeRow` espera 16 campos. `espelho_titulos_creditum` tem 10 colunas.
+
+| campo esperado | no espelho? | o que depende dele |
+| --- | --- | --- |
+| `codigo_cliente_fornecedor` | ✅ | agregação por cliente, exclusão de reneg |
+| `codigo_lancamento_omie` | ✅ | identidade lógica |
+| `data_vencimento` | ✅ | período, aging |
+| `data_emissao` | ✅ | — |
+| `numero_documento` | ✅ | `isReneg` |
+| `numero_parcela` | ✅ | `isFPD` |
+| `status_titulo` | ✅ | `isRecebido`, `isCancelado` |
+| `valor_documento` | ✅ | todo valor |
+| **`codigo_projeto`** | ❌ | **`renderInadimplenciaPorUnidade`, `renderMatrizUnidades`** |
+| **`codigo_categoria`** | ❌ | **`renderConcentracaoPlano`** (campo `plano`) |
+| **`data_pagamento`** | ❌ | **`isRecebido`, `isPagoCP`** |
+| **`valor_pago`** | ❌ | `isRecebido`, ROI |
+| **`valor_juros`** | ❌ | **`renderJurosMulta`** |
+| **`valor_multa`** | ❌ | **`renderJurosMulta`** |
+| **`valor_desconto`** | ❌ | ROI |
+| **`id_conta_corrente`** | ❌ | exclusão de contas canceladas |
+
+Oito ausentes, e não são periféricas: **a dimensão de unidade, o plano, e todo o
+lado de pagamento**. `isRecebido` depende de `data_pagamento` e `valor_pago`
+além do status — no espelho ele cairia para status apenas, o que muda a
+classificação de inadimplência.
+
+Trocar o fetch para o espelho hoje faria o dashboard perder unidade, plano,
+juros/multa e metade do critério de recebimento — **em silêncio**, porque `??`
+com campo ausente devolve `undefined` e `parseFloat(undefined ?? 0)` devolve 0.
+
+## 18.5 A cadeia real
+
+```
+https://creditum-financas.vercel.app/          artefato de 11/08, HTML+inline JS
+  └─ GET /api/omie?resource=…&pagina=N          proxy, 100/pág, 1200 ms entre páginas
+       └─ Omie ERP                              projetos · clientes · contacorrente · contas a receber
+            └─ normalizeRow                     mapeia 16 campos (aceita espelho OU Omie)
+                 └─ classificação + agregação   TODA no frontend
+                      └─ 14 render* → cards, tabelas, gráficos
+```
+
+| camada | conteúdo |
+| --- | --- |
+| **BACKEND/SOURCE** | apenas transporte. O proxy pagina; nenhuma regra de negócio |
+| **FRONTEND BUSINESS** | classificação, aging, exclusão de reneg, FPD, agregações, plano, unidade |
+| **VISUAL ONLY** | Chart.js, cores, `fmtMoney`/`fmtMoneyK`/`fmtPct`, `badgeClassPorTaxa` |
+
+## 18.6 Transformações de frontend — as regras validadas
+
+| regra | fórmula | classificação |
+| --- | --- | --- |
+| `diasAtraso` | `floor((new Date() − dataVencimento)/86400000)` | **FRONTEND_DERIVED** |
+| `isAtrasado` | `!isRecebido && diasAtraso > 21` | FRONTEND_DERIVED |
+| `isInadimplente` | `isAtrasado && !isReneg && !clientesRenegSet.has(cliente)` | FRONTEND_DERIVED |
+| `isReneg` | `/RENEG\|R-\|ACORDO/i.test(numeroDocumento)` | FRONTEND_DERIVED |
+| `isFPD` | `numeroParcela.startsWith("001/")` | FRONTEND_DERIVED |
+| `isRecebido` | `status ∈ {RECEBIDO, LIQUIDADO}` **ou** `dataPagamento` **ou** `valorPago` | FRONTEND_DERIVED |
+| `isCancelado` | `status === "CANCELADO"` | SOURCE_ALREADY_ENCODES |
+| aging BKT1–BKT5 | 21-30, 31-60, 61-90, 91-120, >121 | FRONTEND_DERIVED |
+| `CORTE_INADIMPLENCIA_DIAS` | 21 | FRONTEND_DERIVED — sem lastro governado |
+| `OFFSET_ENTRADA_INADIMPLENCIA_DIAS` | 22 | FRONTEND_DERIVED — sem lastro governado |
+| unidade | `projetosMap[codigoProjeto]` montado de Omie `projetos` | FRONTEND_DERIVED |
+| plano | `codigo_categoria` | FRONTEND_DERIVED |
+| exclusão de conta cancelada | via `contacorrente` do Omie | FRONTEND_DERIVED |
+
+**`diasAtraso` usa `new Date()`.** O aging é calculado no instante do render, não
+como-de uma data de referência. Duas pessoas abrindo o dashboard em dias
+diferentes veem números diferentes dos mesmos dados. Para o intelligence, que
+exige `detected_at` explícito e determinismo, isso precisa virar parâmetro.
+
+## 18.7 Indicadores
+
+| INDICADOR | OBJETO | CAMPOS | FILTROS | TRANSFORMAÇÃO | ONDE | REPRODUZ EXATO? |
+| --- | --- | --- | --- | --- | --- | --- |
+| Inadimplência total | contas a receber | venc, status, nº doc, cliente | > 21 dias, não reneg | `isInadimplente` | frontend | **não** — regra não está na fonte |
+| Aging (5 buckets) | idem | `data_vencimento` | por faixa de dias | `bucketOf` | frontend | **não** |
+| Inadimplência por unidade | idem + `projetos` | `codigo_projeto` | — | join + agregação | frontend | **não** — coluna ausente no espelho |
+| Matriz de unidades | idem | `codigo_projeto` | — | pivot | frontend | **não** |
+| Concentração por plano | idem | `codigo_categoria` | — | agregação | frontend | **não** — coluna ausente |
+| FPD | idem | `numero_parcela` | `001/` | `isFPD` | frontend | parcial — campo existe |
+| Juros e multa | idem | `valor_juros`, `valor_multa` | — | soma | frontend | **não** — colunas ausentes |
+| Renegociações | idem | `numero_documento` | regex | `isReneg` + set por cliente | frontend | parcial |
+| Fluxo mensal | idem | `data_vencimento`, valor | `monthKey` | agregação | frontend | parcial |
+| Curva histórica | idem | venc, pagamento | — | série temporal | frontend | **não** — `data_pagamento` ausente |
+| ROI | idem | pago, desconto, juros | — | razão | frontend | **não** — colunas ausentes |
+| Tabela de alunos | idem + `clientes` | razão social | — | `agregarPorCliente` | frontend | **não** — exige `clientes` do Omie |
+| Contas a pagar | `espelho_contas_pagar_creditum`? | — | — | `renderCP` | frontend | não verificado |
+| Pós-curso dependente | idem | — | — | `renderPosCursoDependente` | frontend | não verificado |
+
+## 18.8 Compatibilidade com A/B/C/D
+
+| detector | veredito | por quê |
+| --- | --- | --- |
+| **A** — concentração de parcelamento | **NOT_COMPATIBLE** | exige `installment_count` do contrato. A fonte tem `numero_parcela` de título financeiro (`001/012`), que é posição na série, não o parcelamento contratado |
+| **B** — conflito entre fontes | **DERIVABLE_WITHOUT_SEMANTIC_CHANGE** | `espelho_titulos_creditum` e `espelho_titulos_criteria` são duas versões do mesmo título (Creditum vs FIDC). É um caso legítimo de B — porém é comparação financeira, não de venda |
+| **C** — concentração de vencimento | **NOT_COMPATIBLE** | `data_vencimento` existe, mas é vencimento de título, não `first_due_date` de contrato. Semanticamente diferente: o primeiro vencimento de um contrato é um fato comercial |
+| **D** — caso único material | **NOT_APPLICABLE** | exige agregado com semântica parte-do-todo sobre venda. Aplicável a inadimplência exigiria redefinir a métrica |
+
+**A fonte é exclusivamente financeira** — títulos, vencimento, inadimplência. Não
+alimenta os detectores como estão especificados. B é a única com caminho, e é o
+caminho do FIDC, não do dashboard.
+
+## 18.9 `SourceAdapter` — REQUIRES_CHANGE
+
+Mesma conclusão da §13, agora com a fonte confirmada.
+
+`read(period_start, period_end): Promise<RawBatch>` não distingue as três
+situações que o comentário da própria porta exige: origem indisponível, schema
+divergente, tabela vazia. Só devolve lote ou lança.
+
+Semântica perdida hoje, especificamente para esta fonte:
+
+| precisa | a porta suporta? |
+| --- | --- |
+| distinguir "espelho parado 21 dias" de "sem títulos no período" | **não** |
+| carregar `observed_at` da origem (`ultima_alteracao`) separado de `collected_at` (`sync_em`) | sim — `RawBatch` tem os dois |
+| declarar que 8 campos esperados não existem | **não** — não há canal para lacuna de schema |
+| `rows_skipped` | **não rastreável** na fonte |
+
+## 18.10 Paridade — `NOT_POSSIBLE_FROM_SOURCE_ALONE`
+
+Consumir `espelho_titulos_creditum` **não reproduz** os números do dashboard, por
+três razões independentes, cada uma suficiente:
+
+1. **13 dos 14 indicadores são frontend-derived.** Corte de 21 dias, offset de
+   22, buckets, exclusão de cliente renegociado, FPD — nada disso existe em
+   objeto de banco. Não há view nem RPC no projeto CFO (verificado: 5 funções,
+   nenhuma view).
+2. **8 das 16 colunas necessárias não existem no espelho** — incluindo unidade,
+   plano e todo o lado de pagamento.
+3. **`diasAtraso` usa `new Date()`.** O número oficial é função do instante de
+   render, não só dos dados.
+
+## 18.11 Estado e blockers
+
+`IMPLEMENTATION READINESS = BLOCKED`
+
+1. **A versão Supabase não está publicada.** O artefato de 11/08 lê Omie. Sem o
+   deploy correto — ou sem acesso ao repositório — não há fonte oficial Supabase
+   para integrar.
+2. **8 colunas ausentes no espelho** — `codigo_projeto`, `codigo_categoria`,
+   `data_pagamento`, `valor_pago`, `valor_juros`, `valor_multa`,
+   `valor_desconto`, `id_conta_corrente`.
+3. **`sync_em` parado há 21 dias** (28/07). Os dois espelhos.
+4. **A regra validada mora no frontend.** Para o intelligence consumir a mesma
+   verdade, ela precisa virar view/função ou política governada. O precedente
+   interno é `config_status_abertos`, documentada como fonte única.
+5. **`diasAtraso` não é determinístico** — depende de `new Date()`.
+6. **Unidade não é `UnitId` do D13** — é `codigo_projeto` do Omie, e o mapeamento
+   projeto→unidade não existe em nenhum lugar governado.
+7. **`dataset_id` PENDING** — a granularidade é parcela, mas os indicadores são
+   por cliente e por unidade.
+8. `valor_documento` é `numeric` e o dashboard usa `parseFloat` — o intelligence
+   exige `round(valor * 100)` em SQL, sem float no caminho.
+
+## 18.12 Recomendação
+
+Nada a implementar. Duas perguntas para o Leonardo, na ordem:
+
+1. **Onde está o deploy da versão Supabase?** O `creditum-financas.vercel.app`
+   serve o artefato de 11/08 que lê Omie. Se existe URL de preview ou outro
+   domínio, é ela que precisa ser inspecionada.
+2. **Ele sabe das 8 colunas ausentes?** O `normalizeRow` já aceita a forma do
+   espelho — o leitor está pronto —, mas o espelho não tem projeto, categoria,
+   pagamento, juros, multa, desconto nem conta corrente. Com o fetch trocado, os
+   cards de unidade, plano, juros/multa e ROI zeram sem erro.
+
+A terceira, para você: se a regra de inadimplência vai virar objeto de banco,
+essa é a decisão que destrava a integração do intelligence — e é decisão de
+governança, não de código.

@@ -1,0 +1,403 @@
+{
+  "manifest_version": "d2b-mutations/1.0.0",
+  "generated_for": "PHASE 3.1D-D2B-R8",
+  "note": "ENTRADA autoritativa do executor. Nenhuma lista paralela em Python governa execução ou totais.",
+  "historical_excluded": [
+    {
+      "id": "B5",
+      "status": "HISTORICAL_INVALID",
+      "reason": "o mutante contornava EXECUTION_ALREADY_RESERVED e batia em `reserva.receipt` inexistente numa recusa: TypeError antes de qualquer reutilização de id",
+      "merged_into": "B7"
+    },
+    {
+      "id": "B7_OLD",
+      "status": "HISTORICAL_INVALID",
+      "reason": "fabricava recibo de mesma forma; o WeakSet privado o recusava e nenhuma segunda capacidade escapava",
+      "superseded_by": "B7"
+    },
+    {
+      "id": "B1",
+      "status": "HISTORICAL_INVALID",
+      "reason": "estruturalmente mascarada: sob exists-depois-mkdir o registro write-once barra todos menos um; capacidade duplicada nunca aparece",
+      "covered_by": "B7"
+    },
+    {
+      "id": "B6",
+      "status": "HISTORICAL_INVALID",
+      "reason": "mascarada pela exigência de recibo autêntico; o construtor lança RESERVED_ATTEMPT_NOT_DURABLE antes de qualquer capacidade",
+      "merged_into": "B7"
+    },
+    {
+      "id": "B12",
+      "status": "HISTORICAL_INVALID",
+      "reason": "o mutante invalida a autoridade d1 (TTL) em vez de testar a d2b; o relógio do consumo d1 e o do prazo d2b são o mesmo valor por desenho",
+      "covered_by": "B11"
+    }
+  ],
+  "mutations": [
+    {
+      "id": "DUR1",
+      "status": "ACTIVE",
+      "rotulo": "DUR1 falha de fsync do diretório engolida e devolvida como sucesso",
+      "source_file": "gateway/src/execution-ledger.ts",
+      "transformation": {
+        "kind": "literal_replace",
+        "find": "  if ((await sincronizaDiretorio(diretorio)) !== \"ok\") return \"not_durable\"",
+        "replace": "  await sincronizaDiretorio(diretorio)",
+        "expected_cardinality": 1
+      },
+      "property": "falha de fsync do diretório da execução não pode virar sucesso",
+      "expected_test": "fsync do diretório da EXECUÇÃO",
+      "unsafe_oracle": "UNSAFE_RECEIPT_AFTER_DURABILITY_FAILURE"
+    },
+    {
+      "id": "DUR2",
+      "status": "ACTIVE",
+      "rotulo": "DUR2 fsync de `attempts` omitido após o mkdir da chave",
+      "source_file": "gateway/src/execution-ledger.ts",
+      "transformation": {
+        "kind": "literal_replace",
+        "find": "  if ((await sincronizaDiretorio(paiTentativas)) !== \"ok\") {\n    return { status: \"refused\", defect: \"EXECUTION_RESERVATION_NOT_DURABLE\" }\n  }\n",
+        "replace": "",
+        "expected_cardinality": 1
+      },
+      "property": "a entrada do diretório da chave é comprometida em `attempts` antes do recibo",
+      "expected_test": "fsync de `attempts`",
+      "unsafe_oracle": "UNSAFE_RECEIPT_AFTER_DURABILITY_FAILURE"
+    },
+    {
+      "id": "DUR3",
+      "status": "ACTIVE",
+      "rotulo": "DUR3 fsync incondicional da raiz removido",
+      "source_file": "gateway/src/execution-ledger.ts",
+      "transformation": {
+        "kind": "literal_replace",
+        "find": "  if ((await sincronizaDiretorio(ledgerRoot)) !== \"ok\") {",
+        "replace": "  if (false) {",
+        "expected_cardinality": 1
+      },
+      "property": "o fsync da raiz é INCONDICIONAL em toda reserva",
+      "expected_test": "B NÃO lava a falha",
+      "unsafe_oracle": "UNSAFE_RESERVATION_WITHOUT_ROOT_FSYNC"
+    },
+    {
+      "id": "LAUNDER1",
+      "status": "ACTIVE",
+      "rotulo": "LAUNDER1 fsync da raiz só quando ESTA invocação criou `attempts`",
+      "source_file": "gateway/src/execution-ledger.ts",
+      "transformation": {
+        "kind": "literal_replace",
+        "find": "  const estadoPai = await attemptsRealNaoLink(paiTentativas)\n  if (estadoPai === \"invalido\") {\n    return { status: \"refused\", defect: \"EXECUTION_LEDGER_INVALID\" }\n  }\n  if (estadoPai === \"ausente\") {\n    try {\n      // Sem `recursive`: a raiz é provisionada pelo deploy, não fabricada aqui.\n      await mkdir(paiTentativas)\n    } catch (erro) {\n      if ((erro as { code?: string }).code !== \"EEXIST\") {\n        return { status: \"refused\", defect: \"EXECUTION_LEDGER_UNAVAILABLE\" }\n      }\n      // `EEXIST` diz que ALGO ocupa o caminho — não que seja o diretório esperado.\n      // Corrida com outro processo criando `attempts` é benigna; arquivo ou LINK no\n      // lugar dele não é. Revalidação no-follow, nunca `stat`.\n      if ((await attemptsRealNaoLink(paiTentativas)) !== \"ok\") {\n        return { status: \"refused\", defect: \"EXECUTION_LEDGER_INVALID\" }\n      }\n    }\n  }\n  // Nem link, nem fuga: `attempts` tem de ser filho direto da raiz canônica.\n  if (!(await contidoNaRaiz(ledgerRoot, paiTentativas))) {\n    return { status: \"refused\", defect: \"EXECUTION_LEDGER_INVALID\" }\n  }\n\n  // INCONDICIONAL. Falhou aqui, nada abaixo acontece — em particular, o diretório da\n  // chave NÃO é criado, para não queimar estado mais fundo sobre um pré-requisito de\n  // durabilidade que não se cumpriu.\n  if ((await sincronizaDiretorio(ledgerRoot)) !== \"ok\") {",
+        "replace": "  let criouNestaInvocacao = false\n  const estadoPai = await attemptsRealNaoLink(paiTentativas)\n  if (estadoPai === \"invalido\") {\n    return { status: \"refused\", defect: \"EXECUTION_LEDGER_INVALID\" }\n  }\n  if (estadoPai === \"ausente\") {\n    try {\n      // Sem `recursive`: a raiz é provisionada pelo deploy, não fabricada aqui.\n      await mkdir(paiTentativas)\n      criouNestaInvocacao = true\n    } catch (erro) {\n      if ((erro as { code?: string }).code !== \"EEXIST\") {\n        return { status: \"refused\", defect: \"EXECUTION_LEDGER_UNAVAILABLE\" }\n      }\n      // `EEXIST` diz que ALGO ocupa o caminho — não que seja o diretório esperado.\n      // Corrida com outro processo criando `attempts` é benigna; arquivo ou LINK no\n      // lugar dele não é. Revalidação no-follow, nunca `stat`.\n      if ((await attemptsRealNaoLink(paiTentativas)) !== \"ok\") {\n        return { status: \"refused\", defect: \"EXECUTION_LEDGER_INVALID\" }\n      }\n    }\n  }\n  // Nem link, nem fuga: `attempts` tem de ser filho direto da raiz canônica.\n  if (!(await contidoNaRaiz(ledgerRoot, paiTentativas))) {\n    return { status: \"refused\", defect: \"EXECUTION_LEDGER_INVALID\" }\n  }\n\n  // INCONDICIONAL. Falhou aqui, nada abaixo acontece — em particular, o diretório da\n  // chave NÃO é criado, para não queimar estado mais fundo sobre um pré-requisito de\n  // durabilidade que não se cumpriu.\n  if (criouNestaInvocacao && (await sincronizaDiretorio(ledgerRoot)) !== \"ok\") {",
+        "expected_cardinality": 1
+      },
+      "property": "uma segunda chamada não herda durabilidade que a primeira não estabeleceu",
+      "expected_test": "B NÃO lava a falha",
+      "unsafe_oracle": "UNSAFE_LAUNDERED_ROOT_FSYNC"
+    },
+    {
+      "id": "SYM1",
+      "status": "ACTIVE",
+      "rotulo": "SYM1 validação de `attempts` volta a seguir link (`stat`)",
+      "source_file": "gateway/src/execution-ledger.ts",
+      "transformation": {
+        "kind": "literal_replace",
+        "find": "  return diretorioRealNaoLink(caminho)",
+        "replace": "  const alvo = await stat(caminho).catch(() => null)\n  if (alvo === null) return \"ausente\"\n  return alvo.isDirectory() ? \"ok\" : \"invalido\"",
+        "expected_cardinality": 1
+      },
+      "property": "`attempts` é validado no-follow; symlink é recusado",
+      "expected_test": "SYMLINK é recusado NO no-follow",
+      "unsafe_oracle": "UNSAFE_ATTEMPTS_SYMLINK_ACCEPTED"
+    },
+    {
+      "id": "SYM3",
+      "status": "ACTIVE",
+      "rotulo": "SYM3 raiz symlinkada aceita",
+      "source_file": "gateway/src/execution-ledger.ts",
+      "transformation": {
+        "kind": "literal_replace",
+        "find": "  if ((await diretorioRealNaoLink(raiz)) !== \"ok\") return false",
+        "replace": "  const st = await stat(raiz).catch(() => null)\n  if (st === null || !st.isDirectory()) return false",
+        "expected_cardinality": 1
+      },
+      "property": "a raiz é validada no-follow; symlink é recusado",
+      "expected_test": "RAIZ como symlink",
+      "unsafe_oracle": "UNSAFE_ROOT_SYMLINK_ACCEPTED"
+    },
+    {
+      "id": "CONTAIN1",
+      "status": "STRUCTURAL",
+      "rotulo": "CONTAIN1 contenção canônica removida",
+      "source_file": "gateway/src/execution-ledger.ts",
+      "transformation": {
+        "kind": "literal_replace",
+        "find": "  if (!(await contidoNaRaiz(ledgerRoot, paiTentativas))) {",
+        "replace": "  if (false) {",
+        "expected_cardinality": 1
+      },
+      "property": "guarda de defesa em profundidade",
+      "structural_proof": {
+        "structural_proof_id": "canonical-containment-by-construction",
+        "claim": "remover a contenção canônica não muda estado governado algum fora de corrida",
+        "required_assumptions": [
+          "a raiz é validada por lstat como diretório REAL (não link)",
+          "`attempts` é derivado literalmente de join(raiz, \"attempts\")",
+          "`attempts` é validado por lstat como diretório REAL",
+          "o SO recusa hardlink de diretório (medido no alvo)",
+          "adversário de mesma credencial em corrida está FORA do modelo de ameaça (r5)"
+        ],
+        "private_symbols": [],
+        "governed_entrypoints": [
+          "reserveExecutionAttempt"
+        ],
+        "reason_no_reachable_state": "com raiz e attempts diretórios reais e attempts sendo filho literal, realpath dos dois resolve pela mesma cadeia: a igualdade é consequência da construção",
+        "validator": "attempts_e_filho_literal_e_lstat_no_follow"
+      }
+    },
+    {
+      "id": "EEXIST1",
+      "status": "ACTIVE",
+      "rotulo": "EEXIST1 após EEXIST, segue sem revalidar `attempts` no-follow",
+      "source_file": "gateway/src/execution-ledger.ts",
+      "transformation": {
+        "kind": "literal_replace",
+        "find": "      if ((await attemptsRealNaoLink(paiTentativas)) !== \"ok\") {\n        return { status: \"refused\", defect: \"EXECUTION_LEDGER_INVALID\" }\n      }",
+        "replace": "",
+        "expected_cardinality": 1
+      },
+      "property": "EEXIST revalida o tipo de `attempts` sem seguir link",
+      "expected_test": "ALCANÇA a revalidação",
+      "unsafe_oracle": "UNSAFE_EEXIST_NOT_REVALIDATED"
+    },
+    {
+      "id": "DUR4",
+      "status": "ACTIVE",
+      "rotulo": "DUR4 falha de sync tratada como plataforma-sem-suporte (sucesso)",
+      "source_file": "gateway/src/execution-ledger.ts",
+      "transformation": {
+        "kind": "literal_replace",
+        "find": "  } catch {\n    // O errno real fica aqui dentro: para fora vai defeito próprio, nunca o objeto\n    // de exceção, o caminho absoluto ou a pilha.\n    return \"not_durable\"",
+        "replace": "  } catch {\n    return \"ok\"",
+        "expected_cardinality": 1
+      },
+      "property": "falha de sync nunca é rebaixada a plataforma-sem-suporte",
+      "expected_test": "fsync do diretório da EXECUÇÃO",
+      "unsafe_oracle": "UNSAFE_RECEIPT_AFTER_DURABILITY_FAILURE"
+    },
+    {
+      "id": "B2",
+      "status": "ACTIVE",
+      "rotulo": "B2 livro-razão chaveado por fingerprint em vez de execution_id",
+      "source_file": "gateway/src/execution-ledger.ts",
+      "transformation": {
+        "kind": "literal_replace",
+        "find": "  const chave = executionKey(executionId)\n",
+        "replace": "  const chave = executionKey(executionFingerprint)\n",
+        "expected_cardinality": 1
+      },
+      "property": "a unicidade global é chaveada por execution_id, não por fingerprint",
+      "expected_test": "mesmo id com fingerprint DIFERENTE continua recusado",
+      "unsafe_oracle": "UNSAFE_EXECUTION_ID_REUSED"
+    },
+    {
+      "id": "B3",
+      "status": "ACTIVE",
+      "rotulo": "B3 diretório sem registro tratado como LIVRE",
+      "source_file": "gateway/src/execution-ledger.ts",
+      "transformation": {
+        "kind": "literal_replace",
+        "find": "  } catch (erro) {\n    const codigo = (erro as { code?: string }).code\n    if (codigo === \"EEXIST\") {\n      // Existe. Queimado — não importa o que haja dentro.\n      return { status: \"refused\", defect: \"EXECUTION_ALREADY_RESERVED\" }\n    }\n    return { status: \"refused\", defect: \"EXECUTION_LEDGER_UNAVAILABLE\" }\n  }\n",
+        "replace": "  } catch (erro) {\n    const codigo = (erro as { code?: string }).code\n    if (codigo !== \"EEXIST\") {\n      return { status: \"refused\", defect: \"EXECUTION_LEDGER_UNAVAILABLE\" }\n    }\n    const legivel = await readFile(join(dirTentativa, ARQ_RESERVA), \"utf8\").then(\n      () => true,\n      () => false,\n    )\n    if (legivel) {\n      return { status: \"refused\", defect: \"EXECUTION_ALREADY_RESERVED\" }\n    }\n    // Sem registro legível → tratado como LIVRE. É o defeito que B3 modela: o fluxo\n    // ATRAVESSA o catch e segue reservando sobre um id já queimado.\n  }\n",
+        "expected_cardinality": 1
+      },
+      "property": "diretório existente sem registro legível continua QUEIMADO",
+      "expected_test": "diretório existente SEM registro nenhum continua queimado",
+      "unsafe_oracle": "UNSAFE_MALFORMED_TREATED_FREE"
+    },
+    {
+      "id": "B4",
+      "status": "ACTIVE",
+      "rotulo": "B4 reserva apagada depois de falha de durabilidade",
+      "source_file": "gateway/src/execution-ledger.ts",
+      "transformation": {
+        "kind": "literal_replace",
+        "find": "  if (escrita !== \"ok\") {",
+        "replace": "  if (escrita !== \"ok\") {\n    await (await import(\"node:fs/promises\")).rm(dirTentativa, { recursive: true, force: true })",
+        "expected_cardinality": 1
+      },
+      "property": "não existe rollback: falha de durabilidade não devolve o id ao pool",
+      "expected_test": "fsync do diretório da EXECUÇÃO",
+      "unsafe_oracle": "UNSAFE_EXECUTION_ID_REUSABLE_AFTER_ROLLBACK"
+    },
+    {
+      "id": "B6b",
+      "status": "STRUCTURAL",
+      "rotulo": "B6b exigência de recibo autêntico removida do construtor",
+      "source_file": "gateway/src/execution-supervisor.ts",
+      "transformation": {
+        "kind": "literal_replace",
+        "find": "    if (!isDurableReservationReceipt(receipt)) {",
+        "replace": "    if (false) {",
+        "expected_cardinality": 1
+      },
+      "property": "guarda de defesa em profundidade",
+      "structural_proof": {
+        "structural_proof_id": "receipt-seal-unreachable",
+        "claim": "remover a exigência de recibo autêntico no construtor não muda comportamento algum alcançável pelo caminho governado",
+        "required_assumptions": [
+          "SELO_TENTATIVA não é exportado por execution-supervisor.ts",
+          "o construtor de ReservedExecutionAttempt exige SELO_TENTATIVA",
+          "o único emissor exportado entrega sempre o recibo devolvido pela reserva durável",
+          "DurableReservationReceipt só é cunhado dentro de reserveExecutionAttempt"
+        ],
+        "private_symbols": [
+          "SELO_TENTATIVA",
+          "RECIBOS",
+          "SELO_RECIBO"
+        ],
+        "governed_entrypoints": [
+          "prepareGovernedExecution",
+          "__prepareGovernedExecutionForTests"
+        ],
+        "reason_no_reachable_state": "para atingir o ramo é preciso recibo NÃO autêntico E o selo privado do módulo; nenhum export produz essa combinação",
+        "validator": "exports_sem_selo_e_recibo_so_no_ledger"
+      }
+    },
+    {
+      "id": "B7",
+      "status": "ACTIVE",
+      "rotulo": "B7 EEXIST tratado como sucesso: segunda capacidade real escapa",
+      "source_file": "gateway/src/execution-ledger.ts",
+      "transformation": {
+        "kind": "literal_replace",
+        "find": "    if (codigo === \"EEXIST\") {\n      // Existe. Queimado — não importa o que haja dentro.\n      return { status: \"refused\", defect: \"EXECUTION_ALREADY_RESERVED\" }\n    }",
+        "replace": "    if (codigo === \"EEXIST\") {\n      const recFalso = new DurableReservationReceipt(\n        SELO_RECIBO,\n        executionId,\n        chave,\n        executionFingerprint,\n      )\n      RECIBOS.add(recFalso)\n      return {\n        status: \"reserved\",\n        execution_key: chave,\n        attempt_directory: dirTentativa,\n        receipt: recFalso,\n      }\n    }",
+        "expected_cardinality": 1
+      },
+      "property": "EEXIST é queima; nenhuma segunda capacidade escapa",
+      "expected_test": "duas autorizações legítimas para o mesmo id",
+      "unsafe_oracle": "UNSAFE_SECOND_RESERVED_CAPACITY"
+    },
+    {
+      "id": "B8",
+      "status": "ACTIVE",
+      "rotulo": "B8 tentativa de mesma forma aceita como capacidade",
+      "source_file": "gateway/src/execution-supervisor.ts",
+      "transformation": {
+        "kind": "literal_replace",
+        "find": "  if (!(attempt instanceof ReservedExecutionAttempt) || !RESERVADAS.has(attempt)) {",
+        "replace": "  if (false) {",
+        "expected_cardinality": 1
+      },
+      "property": "capacidade de mesma forma não é aceita no consumo",
+      "expected_test": "tentativa de mesma forma é recusada no consumo",
+      "unsafe_oracle": "UNSAFE_CAPACITY_FORGED"
+    },
+    {
+      "id": "B9",
+      "status": "ACTIVE",
+      "rotulo": "B9 capacidade serializável (toJSON deixa de recusar)",
+      "source_file": "gateway/src/execution-supervisor.ts",
+      "transformation": {
+        "kind": "literal_replace",
+        "find": "  toJSON(): never {\n    throw new Error(\"RESERVED_ATTEMPT_NOT_SERIALIZABLE\")\n  }",
+        "replace": "  toJSON(): unknown {\n    return { execution_id: this.execution_id, execution_key: this.execution_key }\n  }",
+        "expected_cardinality": 1
+      },
+      "property": "a capacidade não é serializável como autoridade",
+      "expected_test": "serializar recusa, e JSON não reconstrói capacidade",
+      "unsafe_oracle": "UNSAFE_CAPACITY_SERIALIZED"
+    },
+    {
+      "id": "B10",
+      "status": "ACTIVE",
+      "rotulo": "B10 mesma capacidade consumida duas vezes",
+      "source_file": "gateway/src/execution-supervisor.ts",
+      "transformation": {
+        "kind": "literal_replace",
+        "find": "    if (this.consumida) return false",
+        "replace": "    if (false) return false",
+        "expected_cardinality": 1
+      },
+      "property": "a capacidade é de uso único",
+      "expected_test": "consumo duplo: exatamente um vencedor entre 32 concorrentes",
+      "unsafe_oracle": "UNSAFE_DOUBLE_CONSUME"
+    },
+    {
+      "id": "B11",
+      "status": "ACTIVE",
+      "rotulo": "B11 prazo de 180 s reiniciado depois da IO do livro-razão",
+      "source_file": "gateway/src/execution-supervisor.ts",
+      "transformation": {
+        "kind": "literal_replace",
+        "find": "    autorizada.spec,\n    prazo,",
+        "replace": "    autorizada.spec,\n    relogio() + autorizada.spec.attempt_deadline_seconds,",
+        "expected_cardinality": 1
+      },
+      "property": "o prazo de 180 s não reinicia após a IO do livro-razão",
+      "expected_test": "o prazo nasce ANTES do consumo",
+      "unsafe_oracle": "UNSAFE_DEADLINE_RESET"
+    },
+    {
+      "id": "B13",
+      "status": "ACTIVE",
+      "rotulo": "B13 raiz de produção escolhida pelo chamador",
+      "source_file": "gateway/src/execution-supervisor.ts",
+      "transformation": {
+        "kind": "literal_replace",
+        "find": "  return prepararComSemente(auth, {})",
+        "replace": "  return prepararComSemente(auth, (arguments as any)[1] ?? {})",
+        "expected_cardinality": 1
+      },
+      "property": "a raiz de produção é fixa em código, não escolhida pelo chamador",
+      "expected_test": "raiz de produção indisponível",
+      "unsafe_oracle": "UNSAFE_CALLER_LEDGER_ROOT"
+    },
+    {
+      "id": "B14",
+      "status": "ACTIVE",
+      "rotulo": "B14 queda para /tmp quando a raiz de produção falta",
+      "source_file": "gateway/src/execution-ledger.ts",
+      "transformation": {
+        "kind": "literal_replace",
+        "find": "    return { status: \"refused\", defect: \"EXECUTION_LEDGER_UNAVAILABLE\" }\n  }\n\n  const chave",
+        "replace": "    ledgerRoot = (await import(\"node:os\")).tmpdir()\n  }\n\n  const chave",
+        "expected_cardinality": 1
+      },
+      "property": "raiz indisponível falha FECHADA, sem livro-razão alternativo",
+      "expected_test": "raiz de produção indisponível",
+      "unsafe_oracle": "UNSAFE_FAIL_OPEN_LEDGER_FALLBACK"
+    },
+    {
+      "id": "B15",
+      "status": "ACTIVE",
+      "rotulo": "B15 material bruto da autoridade persistido no registro",
+      "source_file": "gateway/src/execution-ledger.ts",
+      "transformation": {
+        "kind": "literal_replace",
+        "find": "    reserved_at_utc: reservedAtUtc,\n  })",
+        "replace": "    reserved_at_utc: reservedAtUtc,\n    approval: { approver: \"STEFANO\", decision: \"APPROVED\", approval_id: \"ap-d2b-0001\" },\n  })",
+        "expected_cardinality": 1
+      },
+      "property": "o registro guarda identificadores e hashes, nunca material de autoridade",
+      "expected_test": "o registro guarda identificadores e hashes",
+      "unsafe_oracle": "UNSAFE_RAW_AUTHORITY_PERSISTED"
+    },
+    {
+      "id": "B16",
+      "status": "ACTIVE",
+      "rotulo": "B16 segundo terminal sobrescreve o primeiro",
+      "source_file": "gateway/src/execution-ledger.ts",
+      "transformation": {
+        "kind": "literal_replace",
+        "find": "    arquivo = await open(caminho, \"wx\")",
+        "replace": "    arquivo = await open(caminho, \"w\")",
+        "expected_cardinality": 1
+      },
+      "property": "o primeiro terminal vence; não há sobrescrita",
+      "expected_test": "segundo terminal é recusado, nunca sobrescreve",
+      "unsafe_oracle": "UNSAFE_TERMINAL_OVERWRITTEN"
+    }
+  ]
+}

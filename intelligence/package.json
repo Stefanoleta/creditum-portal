@@ -5,21 +5,29 @@
   "type": "module",
   "description": "POC do Centro de Inteligência da Creditum — plano de consulta somente leitura. Bloco 1.",
   "scripts": {
-    "validate:schemas": "node scripts/validate-schemas.mjs",
+    "verify:frozen": "tsx scripts/verify-frozen-contracts.ts",
+    "verify:hygiene": "python3 -B scripts/verify-output-hygiene.py",
+    "validate:schemas": "tsx scripts/verify-frozen-contracts.ts && tsx scripts/validate-schemas.ts",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:bridge": "python3 -B -m unittest discover -s bridge -t bridge",
     "test:watch": "vitest",
-    "verify": "npm run validate:schemas && npm run lint && npm run typecheck && npm run test"
+    "verify": "npm run verify:hygiene && npm run validate:schemas && npm run lint && npm run typecheck && npm run test && npm run test:bridge",
+    "lucas:analyze": "tsx integration/src/lucas/cli.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
     "@types/node": "^22.10.2",
-    "ajv": "^8.17.1",
-    "ajv-formats": "^3.0.1",
     "eslint": "^9.17.0",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.18.1",
     "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "google-auth-library": "^11.0.2",
+    "tsx": "^4.23.12"
   }
 }

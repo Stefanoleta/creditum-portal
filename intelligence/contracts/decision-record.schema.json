@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://creditum.internal/intelligence/contracts/decision-record.schema.json",
+  "title": "Decisão de Stefano (append-only)",
+  "description": "O ÚNICO objeto do sistema que pode dizer APPROVED. `decided_by` é `const \"STEFANO\"`: HERMES, AROS, LUCAS e LEONARDO são recusados pelo schema, não por revisão de código. Imutável — mudar de opinião cria um novo registro que aponta o anterior em `supersedes`, e o histórico permanece.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "decision_id",
+    "schema_version",
+    "approval_id",
+    "decided_by",
+    "decision",
+    "decided_at"
+  ],
+  "properties": {
+    "decision_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "schema_version": {
+      "$ref": "#/$defs/schema_version"
+    },
+    "approval_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "decided_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "decided_by": {
+      "const": "STEFANO"
+    },
+    "decision": {
+      "enum": [
+        "APPROVED",
+        "REJECTED",
+        "APPROVED_WITH_CHANGES"
+      ]
+    },
+    "changes": {
+      "description": "Obrigatório e não-vazio em APPROVED_WITH_CHANGES: 'com mudanças' sem dizer quais não é decisão.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/untrusted_text"
+      },
+      "maxItems": 32
+    },
+    "rationale": {
+      "$ref": "#/$defs/untrusted_text"
+    },
+    "supersedes": {
+      "$ref": "#/$defs/identifier",
+      "description": "Decisão anterior revista. NUNCA sobrescreve."
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.:-]{2,127}$"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "untrusted_text": {
+      "description": "Envelope obrigatório para QUALQUER texto livre. Na Fase 3 isso inclui o texto que o PRÓPRIO Hermes escreve: uma frase gerada por modelo é dado, nunca instrução, e sem o rótulo ela chegaria a um consumidor a jusante indistinguível de uma diretiva do sistema.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "untrusted",
+        "content"
+      ],
+      "properties": {
+        "untrusted": {
+          "const": true
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "origin": {
+          "type": "string",
+          "maxLength": 256
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "APPROVED_WITH_CHANGES"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "required": [
+          "changes"
+        ],
+        "properties": {
+          "changes": {
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      }
+    }
+  ]
+}

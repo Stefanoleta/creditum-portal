@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://creditum.internal/intelligence/contracts/dashboard-observation.schema.json",
+  "title": "Observação de dashboard (somente leitura)",
+  "description": "Registra o que Hermes VIU num dashboard e sob qual contexto. `interaction_mode` é `const \"OBSERVE_ONLY\"` — WRITE, EDIT, UPDATE e ADMIN não estão no vocabulário, e `additionalProperties: false` impede contornar por um campo novo como `write_access`. A proibição é contratual, não instrução de prompt: prompt vale até alguém reescrevê-lo.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "observation_id",
+    "schema_version",
+    "source",
+    "owner",
+    "observed_at",
+    "view_state",
+    "observations",
+    "interaction_mode"
+  ],
+  "properties": {
+    "observation_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "schema_version": {
+      "$ref": "#/$defs/schema_version"
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "type": "string",
+      "maxLength": 256
+    },
+    "owner": {
+      "description": "Dono do dashboard. Curadoria, nunca aprovação.",
+      "enum": [
+        "LUCAS",
+        "LEONARDO",
+        "CREDITUM_INTERNAL"
+      ]
+    },
+    "interaction_mode": {
+      "const": "OBSERVE_ONLY"
+    },
+    "view_state": {
+      "description": "O contexto sob o qual a observação vale. Nenhum campo é obrigatório: um dashboard sem filtro de unidade não deve ser forçado a inventar um. O que não foi observado fica ausente, não vazio.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "period": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "unit": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "status": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "view": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "tab": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "grouping": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "filters": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "field",
+              "value"
+            ],
+            "properties": {
+              "field": {
+                "type": "string",
+                "maxLength": 128
+              },
+              "value": {
+                "type": "string",
+                "maxLength": 256
+              }
+            }
+          }
+        },
+        "search": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        }
+      }
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/untrusted_text"
+      },
+      "minItems": 1,
+      "maxItems": 128
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/identifier"
+      },
+      "maxItems": 512
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.:-]{2,127}$"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "untrusted_text": {
+      "description": "Envelope obrigatório para QUALQUER texto livre, inclusive o que Hermes ou Aros escrevem: texto gerado por modelo é dado, nunca instrução.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "untrusted",
+        "content"
+      ],
+      "properties": {
+        "untrusted": {
+          "const": true
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "origin": {
+          "type": "string",
+          "maxLength": 256
+        }
+      }
+    }
+  }
+}

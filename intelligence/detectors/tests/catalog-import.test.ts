@@ -865,14 +865,37 @@ describe("as duas fontes governadas reais", () => {
   it("o arquivo de overrides existe e tem schema fechado", () => {
     const doc = JSON.parse(
       readFileSync(join(RAIZ_GOV, "d13.alias-overrides.json"), "utf8"),
-    ) as { schema_version: string; aliases: { alias: string; target_unit_id: string }[] }
+    ) as {
+      schema_version: string
+      aliases: {
+        alias: string
+        target_unit_id: string
+        rationale: string
+        approved_in: string
+      }[]
+    }
     expect(doc.schema_version).toBe("1.0.0")
-    expect(doc.aliases).toHaveLength(3)
+    // A lista é EXATA, não um mínimo. Alias humano entra por decisão D13 assinada,
+    // e um alias que aparecesse sem passar por aqui seria identidade inventada.
+    expect(doc.aliases).toHaveLength(10)
     expect(doc.aliases.map((a) => a.alias).sort()).toEqual([
+      "Alecrim RN",
+      "Alecrin RN",
       "BelfordRoxo",
+      "Duque Caxias",
+      "Fortaleza",
+      "Meriti",
+      "Natal Centro",
       "Presidente P.",
       "Rio Preto",
+      "Zona Norte",
     ])
+    // Toda entrada declara em que fase foi aprovada. Sem isso, o artefato não
+    // distingue decisão governada de alias que alguém acrescentou de passagem.
+    for (const a of doc.aliases) {
+      expect(a.approved_in, a.alias).toMatch(/^FASE_2_(6B|10E)$/)
+      expect(a.rationale.length, a.alias).toBeGreaterThan(40)
+    }
   })
 
   it("o artefato em uso registra as duas fontes", () => {
@@ -882,8 +905,20 @@ describe("as duas fontes governadas reais", () => {
     expect(a.sources.map((f) => f.role)).toEqual(["workbook", "alias_overrides"])
   })
 
-  it("o artefato em uso tem 8 aliases efetivos — 5 da planilha + 3 humanos", () => {
+  it("o artefato em uso tem 15 aliases efetivos — 5 da planilha + 10 humanos", () => {
     const c = lerCatalogo(join(RAIZ, "catalog/unidades.catalog.json"))
-    expect(c.units.reduce((n, u) => n + u.aliases.length, 0)).toBe(8)
+    expect(c.units.reduce((n, u) => n + u.aliases.length, 0)).toBe(15)
+  })
+
+  it("as três formas de Alecrim/Natal Centro apontam para o MESMO unit_id", () => {
+    // A decisão humana da 2.10e é de equivalência FÍSICA: Alecrim é o bairro,
+    // Natal Centro a forma comercial. Nenhum unit_id novo foi criado — o
+    // canônico `alecrim` já existia e foi preservado, que é o que impede a
+    // duplicação de entidade canônica.
+    const c = lerCatalogo(join(RAIZ, "catalog/unidades.catalog.json"))
+    const alecrim = c.units.find((u) => u.unit_id === "alecrim")
+    expect(alecrim?.aliases.sort()).toEqual(["Alecrim RN", "Alecrin RN", "Natal Centro"])
+    // E não nasceu nenhum segundo registro para a mesma unidade física.
+    expect(c.units.filter((u) => /natal.centro|alecri/i.test(u.canonical_name))).toHaveLength(1)
   })
 })

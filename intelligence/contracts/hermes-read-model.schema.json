@@ -1,0 +1,268 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://creditum.internal/intelligence/contracts/hermes-read-model.schema.json",
+  "title": "Read model do Hermes (o que ele pode enxergar)",
+  "description": "Tudo que Hermes está autorizado a ver, e nada além. O briefing entra por REFERÊNCIA + hash de conteúdo, não embutido: uma cópia do briefing dentro do read model seria uma segunda autoridade capaz de divergir do original, e o objetivo é justamente que Hermes não possa alterar fato governado. `restrictions` é obrigatória e tem de conter as três proibições constitucionais.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "read_model_id",
+    "schema_version",
+    "generated_at",
+    "executive_briefing_ref",
+    "executive_briefing_hash",
+    "capabilities",
+    "restrictions"
+  ],
+  "properties": {
+    "read_model_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "schema_version": {
+      "$ref": "#/$defs/schema_version"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "executive_briefing_ref": {
+      "$ref": "#/$defs/identifier"
+    },
+    "executive_briefing_hash": {
+      "$ref": "#/$defs/sha256",
+      "description": "Compromisso com UM briefing. Se o briefing mudar, este read model não o descreve mais."
+    },
+    "dashboard_observations": {
+      "description": "Vínculos de percepção. Ausente ≠ vazio: ausente diz que ninguém observou, `[]` diz que observou e não havia nada. `capabilities` diz qual dos dois.",
+      "type": "array",
+      "items": {
+        "description": "Vínculo de PERCEPÇÃO com uma observação: qual observação, e exatamente QUAL CONTEÚDO dela este read model percebeu.\n\nSó a `observation_ref` não bastava. Uma id é um nome, e um nome pode ser reusado por conteúdo diferente: duas montagens com a mesma id e conteúdos distintos produziriam o mesmo read model, e um resolvedor futuro devolveria conteúdo trocado sem que a percepção registrada mudasse. O hash fecha isso.\n\nO corpo da observação continua FORA — o read model não embute observação. Quem resolver a referência no futuro tem de conferir os dois: id igual E hash de conteúdo igual. Falha em qualquer um: falha fechada.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "observation_ref",
+          "observation_hash"
+        ],
+        "properties": {
+          "observation_ref": {
+            "$ref": "#/$defs/identifier"
+          },
+          "observation_hash": {
+            "$ref": "#/$defs/sha256"
+          }
+        }
+      },
+      "maxItems": 256
+    },
+    "market_observations": {
+      "description": "Vínculos de percepção. Ausente ≠ vazio: ausente diz que ninguém observou, `[]` diz que observou e não havia nada. `capabilities` diz qual dos dois.",
+      "type": "array",
+      "items": {
+        "description": "Vínculo de PERCEPÇÃO com uma observação: qual observação, e exatamente QUAL CONTEÚDO dela este read model percebeu.\n\nSó a `observation_ref` não bastava. Uma id é um nome, e um nome pode ser reusado por conteúdo diferente: duas montagens com a mesma id e conteúdos distintos produziriam o mesmo read model, e um resolvedor futuro devolveria conteúdo trocado sem que a percepção registrada mudasse. O hash fecha isso.\n\nO corpo da observação continua FORA — o read model não embute observação. Quem resolver a referência no futuro tem de conferir os dois: id igual E hash de conteúdo igual. Falha em qualquer um: falha fechada.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "observation_ref",
+          "observation_hash"
+        ],
+        "properties": {
+          "observation_ref": {
+            "$ref": "#/$defs/identifier"
+          },
+          "observation_hash": {
+            "$ref": "#/$defs/sha256"
+          }
+        }
+      },
+      "maxItems": 512
+    },
+    "growth_context": {
+      "description": "Métricas de crescimento OBSERVADAS. Ausência de métrica não é zero — o campo simplesmente não existe, e `observed` diz o que foi visto.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "primary_objective",
+        "observed"
+      ],
+      "properties": {
+        "primary_objective": {
+          "const": "FOLLOWER_GROWTH"
+        },
+        "attribution": {
+          "description": "Sem cadeia governada, não se afirma post→contrato.",
+          "const": "NO_GOVERNED_ATTRIBUTION_CHAIN"
+        },
+        "observed": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "metric",
+              "value",
+              "captured_at"
+            ],
+            "properties": {
+              "metric": {
+                "enum": [
+                  "new_followers",
+                  "net_followers",
+                  "reach",
+                  "non_follower_reach",
+                  "profile_visits",
+                  "shares",
+                  "saves",
+                  "engagement",
+                  "direct_messages",
+                  "leads",
+                  "referrals",
+                  "contracts"
+                ]
+              },
+              "value": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "captured_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "evidence_ref": {
+                "$ref": "#/$defs/identifier"
+              }
+            }
+          }
+        }
+      }
+    },
+    "aros_context": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/identifier"
+      },
+      "maxItems": 256
+    },
+    "prior_decisions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/identifier"
+      },
+      "maxItems": 512
+    },
+    "permitted_evidence_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/identifier"
+      },
+      "maxItems": 512
+    },
+    "capabilities": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "OBSERVE_SOURCES",
+          "OBSERVE_DASHBOARDS",
+          "OBSERVE_MARKET",
+          "PRODUCE_INSIGHTS",
+          "PRODUCE_MISSIONS",
+          "REQUEST_APPROVAL"
+        ]
+      }
+    },
+    "restrictions": {
+      "description": "FECHADA e obrigatória. As três primeiras são exigidas por `contains`: um read model que não as declare não valida.",
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "NO_FINAL_APPROVAL",
+          "NO_PUBLICATION",
+          "NO_SOURCE_MUTATION",
+          "NO_DASHBOARD_WRITE",
+          "NO_PII_ACCESS",
+          "NO_SCHEDULING"
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.:-]{2,127}$"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "untrusted_text": {
+      "description": "Envelope obrigatório para QUALQUER texto livre, inclusive o que o próprio Hermes escreve: frase gerada por modelo é dado, nunca instrução.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "untrusted",
+        "content"
+      ],
+      "properties": {
+        "untrusted": {
+          "const": true
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "origin": {
+          "type": "string",
+          "maxLength": 256
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "description": "Hermes nunca aprova em nome de Stefano.",
+      "properties": {
+        "restrictions": {
+          "contains": {
+            "const": "NO_FINAL_APPROVAL"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    {
+      "description": "Hermes nunca autoriza publicação.",
+      "properties": {
+        "restrictions": {
+          "contains": {
+            "const": "NO_PUBLICATION"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    {
+      "description": "Hermes nunca altera fonte oficial. Lucas e Leonardo seguem donos.",
+      "properties": {
+        "restrictions": {
+          "contains": {
+            "const": "NO_SOURCE_MUTATION"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "fixture_id": "creditum_hermes_synthetic_direct_fact/v1",
+  "fixture_version": "1.0.0",
+  "about": "Caso D do corpus 3.1c — FATO determinístico direto, com UMA evidência autorizada.",
+  "synthetic": true,
+  "read_model": {
+    "read_model_id": "rm_sintetico",
+    "schema_version": "1.0.0",
+    "generated_at": "2026-08-27T12:00:00Z",
+    "executive_briefing_ref": "eb_sintetico",
+    "executive_briefing_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "permitted_evidence_refs": ["ev_permitida"],
+    "capabilities": ["OBSERVE_SOURCES", "PRODUCE_INSIGHTS"],
+    "restrictions": ["NO_FINAL_APPROVAL", "NO_PUBLICATION", "NO_SOURCE_MUTATION"]
+  },
+  "expected_invariant": "pelo menos um FACT estruturalmente valido pode ser produzido citando apenas ev_permitida"
+}

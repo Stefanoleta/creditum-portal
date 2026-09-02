@@ -1,0 +1,22 @@
+{
+  "withdrawn": [
+    "recommendation",
+    "decision",
+    "aros-briefing"
+  ],
+  "canonical": {
+    "snapshot": "6c470bf512ea47dea971fa791e5e454e1ca9e1065693b4a16b24c1e75754f6c7",
+    "event": "a7373904f043b7af9afd00623eabdffe8298916884684e25c5dba0f4aaa1337a",
+    "evidence": "5af264f3f6bbd069bfbbe6e72bb9e7656c0f4a9d0914e959f3c4944f422bd257",
+    "executive-briefing": "06b17d52294bac27af32ba9603805557e86554b24bb72c08b8b6d503542388df",
+    "hermes-read-model": "b3802fdd51360a9db98064fa1acdc87d96c50dba21bd45362019bffc768655c6",
+    "hermes-insight": "75bee778cae6c1394920613d3c00433f3a545222117171ad4e163ac37ce2e46c",
+    "dashboard-observation": "e77e05b5fbeba516b14d45b71482676396371ef7d862f07d04f0381585a565a7",
+    "market-observation": "1eef2bc2995d957e88b3a6df2e66ad61c01e7d1552320beb3bd98531fd214b47",
+    "content-mission": "eaf5af62399926d8cab8fb7dd7b32ccabd1ab7d642c2da7d9ca9fda806030e9d",
+    "content-package": "a579544e1cb006158737c557c327adf678b2a493215b0d252ae84c92ed7797fe",
+    "approval-request": "c84a9f67e841337f5996d4d83054e86be16a00d5fdef1d01e3040785ac3d832f",
+    "decision-record": "69c4b437bef5257989e2312dfc5ff6496e40b1853e51e1b2a5bb9cfab750bb52",
+    "shared-briefing": "4e70d3a11f9516fcd4bc5d08d53fe418d85ff6469fbe4a9140570c77951eeb7d"
+  }
+}

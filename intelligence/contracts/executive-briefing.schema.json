@@ -1,0 +1,602 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://creditum.internal/intelligence/contracts/executive-briefing.schema.json",
+  "title": "Briefing executivo determinístico",
+  "description": "Somente conhecimento GOVERNADO. Não há campo para raciocínio livre do Hermes — interpretação vive em HermesInsight, com `kind` declarado. Os fatos de prazo chegam JÁ CALCULADOS pela Fase 2.13: este contrato transporta `deadline` e `offset_days`, e não existe campo a partir do qual alguém recalcularia D-4/D-1.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "briefing_id",
+    "schema_version",
+    "generated_at",
+    "period",
+    "scope",
+    "source_health",
+    "commercial_state",
+    "detector_results",
+    "quality_and_coverage",
+    "evidence_index"
+  ],
+  "properties": {
+    "briefing_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "schema_version": {
+      "$ref": "#/$defs/schema_version"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "period": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}$"
+    },
+    "scope": {
+      "description": "Domínios cobertos por ESTE briefing. Fora daqui, nada foi olhado.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "COMMERCIAL",
+          "FINANCIAL",
+          "OPERATIONAL",
+          "MARKET",
+          "GROWTH"
+        ]
+      }
+    },
+    "source_health": {
+      "description": "Estado por fonte, com o OWNER preservado. Owner não é aprovador.",
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "dataset_id",
+          "owner",
+          "view_state"
+        ],
+        "properties": {
+          "dataset_id": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "owner": {
+            "description": "Dono da fonte. Papel de curadoria, jamais de aprovação.",
+            "enum": [
+              "LUCAS",
+              "LEONARDO",
+              "CREDITUM_INTERNAL"
+            ]
+          },
+          "view_state": {
+            "description": "Os cinco estados governados da fonte. `data_not_available` NÃO é `available_empty`: o primeiro é 'não sabemos', o segundo é 'sabemos que é zero'. Colapsá-los transformaria ausência em zero, que é a proibição central do projeto.",
+            "enum": [
+              "available",
+              "available_empty",
+              "data_not_available",
+              "source_error",
+              "invalid_source"
+            ]
+          },
+          "detail": {
+            "$ref": "#/$defs/untrusted_text"
+          }
+        }
+      }
+    },
+    "source_view_gaps": {
+      "description": "Dimensão que o briefing NÃO tem porque pertence ao dashboard do owner. Declarar o gap é a alternativa a reconstruir a métrica do owner por fora.",
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "gap",
+          "owner",
+          "dimension"
+        ],
+        "properties": {
+          "gap": {
+            "const": "SOURCE_VIEW_GAP"
+          },
+          "owner": {
+            "enum": [
+              "LUCAS",
+              "LEONARDO",
+              "CREDITUM_INTERNAL"
+            ]
+          },
+          "dimension": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "detail": {
+            "$ref": "#/$defs/untrusted_text"
+          }
+        }
+      }
+    },
+    "commercial_state": {
+      "description": "As três populações governadas da Fase 2.12. Nenhuma se chama `sales`. `fully_completed` é declarada e NÃO computada — exige pagamento no Omie, que não é fonte observável.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "view_state"
+      ],
+      "properties": {
+        "view_state": {
+          "description": "Os cinco estados governados da fonte. `data_not_available` NÃO é `available_empty`: o primeiro é 'não sabemos', o segundo é 'sabemos que é zero'. Colapsá-los transformaria ausência em zero, que é a proibição central do projeto.",
+          "enum": [
+            "available",
+            "available_empty",
+            "data_not_available",
+            "source_error",
+            "invalid_source"
+          ]
+        },
+        "commercial_potential": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "E + A + P"
+        },
+        "commercially_confirmed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "E + A"
+        },
+        "emitted": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "E"
+        },
+        "historical_realized": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "E, em mês fechado"
+        },
+        "fully_completed": {
+          "description": "Capacidade DECLARADA e não computada.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status"
+          ],
+          "properties": {
+            "status": {
+              "const": "DEFERRED_REQUIRES_OMIE_PAYMENT"
+            }
+          }
+        }
+      }
+    },
+    "operational_facts": {
+      "description": "Fatos governados por contrato, transportados. Prazo já resolvido pela camada determinística — `deadline` é data civil completa da fonte.",
+      "type": "array",
+      "maxItems": 4096,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "fact_type",
+          "subject_ref",
+          "source_status"
+        ],
+        "properties": {
+          "fact_type": {
+            "enum": [
+              "AWAITING_CREDITUM_SIGNATURE",
+              "PENDING_STUDENT_SIGNATURE",
+              "P_SIGNATURE_DEADLINE_ATTENTION",
+              "A_EMISSION_DEADLINE_ALERT",
+              "CONTRACT_DEADLINE_MISSED",
+              "AUTO_CANCELLED_BY_DEADLINE"
+            ]
+          },
+          "subject_ref": {
+            "description": "Pseudônimo governado. Nunca CPF, nunca nome.",
+            "type": "string",
+            "pattern": "^subj_[a-f0-9]{16}$"
+          },
+          "source_status": {
+            "description": "O que a FONTE afirma. Nunca reescrito pelo derivado.",
+            "enum": [
+              "E",
+              "A",
+              "P",
+              "C"
+            ]
+          },
+          "derived_deadline_state": {
+            "description": "Estado DERIVADO. Coexiste com `source_status`.",
+            "enum": [
+              "p_signature_deadline_attention",
+              "a_emission_deadline_alert",
+              "contract_deadline_missed",
+              "auto_cancelled_by_deadline"
+            ]
+          },
+          "deadline": {
+            "type": "string",
+            "format": "date",
+            "description": "Data civil já resolvida. NÃO recalcular."
+          },
+          "evaluation_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "offset_days": {
+            "type": "integer",
+            "minimum": -100000,
+            "maximum": 100000
+          },
+          "recovery_candidate": {
+            "type": "boolean"
+          },
+          "recovery_semantics": {
+            "description": "Candidato a INVESTIGAÇÃO. Não é promessa.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "RECOVERY_OPPORTUNITY_TO_INVESTIGATE",
+              null
+            ]
+          },
+          "unit_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 128
+          },
+          "severity": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "info",
+              "low",
+              "medium",
+              "high",
+              "critical",
+              null
+            ]
+          },
+          "severity_status": {
+            "enum": [
+              "SEVERITY_POLICY_UNRESOLVED",
+              "SEVERITY_GOVERNED"
+            ]
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/identifier"
+            },
+            "maxItems": 512
+          }
+        }
+      }
+    },
+    "detector_results": {
+      "description": "`not_executed` NUNCA é `executed_no_findings`. O primeiro exige alguém resolver algo; o segundo é uma resposta.",
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "detector",
+          "execution_state"
+        ],
+        "properties": {
+          "detector": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "execution_state": {
+            "enum": [
+              "unavailable",
+              "not_executed",
+              "executed_no_findings",
+              "executed_with_findings"
+            ]
+          },
+          "not_executed_reason": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "events": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "candidates_evaluated": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "quality_status": {
+            "enum": [
+              "ok",
+              "degraded",
+              "insufficient",
+              "conflicted"
+            ]
+          },
+          "population": {
+            "enum": [
+              "COMMERCIAL_POTENTIAL",
+              "COMMERCIALLY_CONFIRMED",
+              "EMITTED"
+            ]
+          }
+        }
+      }
+    },
+    "material_findings": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/identifier"
+      }
+    },
+    "quality_and_coverage": {
+      "description": "Qualidade e cobertura. TRÊS situações distintas, e a terceira não é a segunda:\n\n  medido e suficiente      ok / degraded\n  medido e insuficiente    insufficient / conflicted\n  NÃO medido               not_measured\n\nRamos discriminados por `quality_status`, não por convenção de leitura.",
+      "type": "object",
+      "required": [
+        "quality_status"
+      ],
+      "oneOf": [
+        {
+          "description": "NÃO MEDIDO. Nenhuma medição de qualidade/cobertura foi realizada ou está disponível para este briefing — tipicamente porque não houve captura utilizável. NÃO é um veredito sobre a qualidade: é a declaração de que veredito não existe. Por isso o ramo PROÍBE estruturalmente `expected_units` e `reporting_units`: ausência de medição não pode virar medição de zero.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "quality_status"
+          ],
+          "properties": {
+            "quality_status": {
+              "const": "not_measured"
+            },
+            "notes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/untrusted_text"
+              },
+              "maxItems": 32
+            }
+          }
+        },
+        {
+          "description": "MEDIDO. Existe medição governada a montante e este é o resultado dela. `insufficient` = cobertura baixa demais para afirmar — é RESULTADO DE MEDIÇÃO, nunca substituto de medição ausente. Emitir `insufficient` porque não houve captura converteria ausência em conclusão, que é o defeito que `not_measured` existe para impedir.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "quality_status"
+          ],
+          "properties": {
+            "quality_status": {
+              "enum": [
+                "ok",
+                "degraded",
+                "insufficient",
+                "conflicted"
+              ]
+            },
+            "expected_units": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "reporting_units": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "notes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/untrusted_text"
+              },
+              "maxItems": 32
+            }
+          }
+        }
+      ]
+    },
+    "evidence_index": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/identifier"
+      },
+      "maxItems": 512
+    },
+    "unavailable_capabilities": {
+      "description": "O que este briefing NÃO consegue responder, e por quê.",
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "capability",
+          "status"
+        ],
+        "properties": {
+          "capability": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "status": {
+            "enum": [
+              "unavailable",
+              "deferred"
+            ]
+          },
+          "reason": {
+            "$ref": "#/$defs/untrusted_text"
+          }
+        }
+      }
+    },
+    "governance_gaps": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/untrusted_text"
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.:-]{2,127}$"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "untrusted_text": {
+      "description": "Envelope obrigatório para QUALQUER texto livre, inclusive o que o próprio Hermes escreve: frase gerada por modelo é dado, nunca instrução.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "untrusted",
+        "content"
+      ],
+      "properties": {
+        "untrusted": {
+          "const": true
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "origin": {
+          "type": "string",
+          "maxLength": 256
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "description": "Detector não executado exige a razão. 'Não rodou' sem motivo não é estado.",
+      "if": {
+        "properties": {
+          "detector_results": {
+            "contains": {
+              "properties": {
+                "execution_state": {
+                  "const": "not_executed"
+                }
+              },
+              "required": [
+                "execution_state"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "detector_results"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "properties": {
+          "detector_results": {
+            "items": {
+              "anyOf": [
+                {
+                  "properties": {
+                    "execution_state": {
+                      "enum": [
+                        "unavailable",
+                        "executed_no_findings",
+                        "executed_with_findings"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "execution_state"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "required": [
+                    "not_executed_reason"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "description": "Fonte indisponível NÃO carrega métrica comercial alguma.\n\nA versão anterior listava três proibições e ESQUECIA `historical_realized` — então `data_not_available` com `historical_realized: 0` validava, e ausência virava zero executivo. Enumerar proibições é frágil: a próxima métrica adicionada nasce permitida.\n\nAgora o ramo declara o que É permitido e fecha o resto com `additionalProperties: false`. Métrica nova passa a ser proibida aqui por padrão, sem ninguém precisar lembrar.",
+      "if": {
+        "properties": {
+          "commercial_state": {
+            "properties": {
+              "view_state": {
+                "enum": [
+                  "data_not_available",
+                  "source_error",
+                  "invalid_source"
+                ]
+              }
+            },
+            "required": [
+              "view_state"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "commercial_state"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "commercial_state": {
+            "type": "object",
+            "properties": {
+              "view_state": {
+                "type": "string"
+              },
+              "fully_completed": {
+                "type": "object"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    }
+  ]
+}

@@ -14,9 +14,22 @@ import { fileURLToPath } from "node:url"
 import { dirname, join } from "node:path"
 import Ajv2020 from "ajv/dist/2020.js"
 import addFormats from "ajv-formats"
+import { CONTRACT_NAMES } from "../gateway/src/contract-registry"
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..")
-const CONTRACTS = ["snapshot", "event", "evidence", "recommendation", "decision", "aros-briefing"]
+
+/**
+ * A associação NÃO é declarada aqui.
+ *
+ * Até a r5-r1 este arquivo tinha a própria lista de contratos. Um regate mostrou o
+ * buraco: acrescentar um nome canônico ao registro governado, registrar o hash
+ * congelado dele e esquecer desta cópia fazia o portão de congelamento aprovar um
+ * schema que este script nunca compilava.
+ *
+ * Agora todo nome canônico chega à compilação por construção — não por alguém ter
+ * lembrado de editar dois arquivos.
+ */
+const CONTRACTS: readonly string[] = CONTRACT_NAMES
 
 /** Mesmas opções de `gateway/src/contracts.ts` — divergir aqui esconderia bug. */
 const ajv = new Ajv2020({
@@ -27,14 +40,14 @@ const ajv = new Ajv2020({
 })
 addFormats(ajv)
 
-const problems = []
-const validators = new Map()
+const problems: string[] = []
+const validators = new Map<string, ReturnType<Ajv2020["compile"]>>()
 
-function readJson(path) {
+function readJson(path: string): unknown {
   return JSON.parse(readFileSync(path, "utf8"))
 }
 
-function listJson(dir) {
+function listJson(dir: string): string[] {
   if (!existsSync(dir)) return []
   return readdirSync(dir)
     .filter((f) => f.endsWith(".json"))
@@ -47,12 +60,12 @@ for (const name of CONTRACTS) {
   try {
     validators.set(name, ajv.compile(readJson(path)))
   } catch (err) {
-    problems.push(`contrato ${name}: não compila — ${err.message}`)
+    problems.push(`contrato ${name}: não compila — ${(err as Error).message}`)
   }
 }
 
 // 2. Toda fixture satisfaz seu contrato.
-const FIXTURE_DIRS = [
+const FIXTURE_DIRS: readonly (readonly [string, string])[] = [
   ["snapshot", join(ROOT, "fixtures", "synthetic", "snapshots")],
   ["event", join(ROOT, "fixtures", "synthetic", "events")],
   ["evidence", join(ROOT, "fixtures", "synthetic", "evidence")],

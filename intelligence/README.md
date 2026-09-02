@@ -99,7 +99,13 @@ intelligence/
 
 ### Contratos
 
-`snapshot` · `event` · `evidence` · `recommendation` · `decision` · `aros-briefing`
+`snapshot` · `event` · `evidence` · `executive-briefing` · `hermes-read-model` ·
+`hermes-insight` · `dashboard-observation` · `market-observation` · `content-mission` ·
+`content-package` · `approval-request` · `decision-record` · `shared-briefing`
+
+`recommendation`, `decision` e `aros-briefing` foram RETIRADOS na Fase 3.0a — abriam
+um segundo caminho de autoridade. Substituição em
+`docs/FASE_3_0A_CANONICAL_HERMES_CONTRACTS.md`.
 
 Todos com `additionalProperties: false`. As invariantes de classe de dado estão
 **no schema**: `calculated` exige fórmula, `inferred` exige confiança, `forecast`

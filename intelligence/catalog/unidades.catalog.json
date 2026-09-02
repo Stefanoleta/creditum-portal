@@ -15,15 +15,19 @@
     {
       "role": "alias_overrides",
       "file": "d13.alias-overrides.json",
-      "sha256": "b80a7d81e50aa94541f3ecd5ec8b1979f6a7eca53d06defcf7c2f72af4a67c4e",
-      "alias_count": 3
+      "sha256": "ef2897a2f0b628628229189201f1c38f36f777177f8239584a34eb001a8bbdb7",
+      "alias_count": 10
     }
   ],
   "units": [
     {
       "unit_id": "alecrim",
       "canonical_name": "Alecrim",
-      "aliases": [],
+      "aliases": [
+        "Natal Centro",
+        "Alecrim RN",
+        "Alecrin RN"
+      ],
       "status": "active"
     },
     {
@@ -93,14 +97,17 @@
     {
       "unit_id": "duque_de_caxias",
       "canonical_name": "Duque de Caxias",
-      "aliases": [],
+      "aliases": [
+        "Duque Caxias"
+      ],
       "status": "inactive"
     },
     {
       "unit_id": "fortaleza_centro",
       "canonical_name": "Fortaleza - Centro",
       "aliases": [
-        "Centro FZA"
+        "Centro FZA",
+        "Fortaleza"
       ],
       "status": "active"
     },
@@ -256,7 +263,8 @@
       "unit_id": "sao_joao_de_meriti",
       "canonical_name": "São João de Meriti",
       "aliases": [
-        "S.J de Meriti"
+        "S.J de Meriti",
+        "Meriti"
       ],
       "status": "active"
     },
@@ -326,7 +334,8 @@
       "unit_id": "zona_norte_rn",
       "canonical_name": "Zona Norte - RN",
       "aliases": [
-        "Natal Zona Norte"
+        "Natal Zona Norte",
+        "Zona Norte"
       ],
       "status": "active"
     }

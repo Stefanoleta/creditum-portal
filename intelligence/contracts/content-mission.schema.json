@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://creditum.internal/intelligence/contracts/content-mission.schema.json",
+  "title": "Missão de conteúdo (Hermes → Aros)",
+  "description": "Autoriza PREPARAÇÃO, jamais publicação. `publication_authorized` é `const false`: não é um booleano que alguém possa virar, é um valor que o schema fixa. Hermes autorizar publicação deixou de ser expressável. A publicação exige DecisionRecord de Stefano, e este objeto não tem campo capaz de substituí-lo.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "mission_id",
+    "schema_version",
+    "created_at",
+    "created_by",
+    "primary_objective",
+    "format",
+    "audience",
+    "theme",
+    "message",
+    "publication_authorized"
+  ],
+  "properties": {
+    "mission_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "schema_version": {
+      "$ref": "#/$defs/schema_version"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "created_by": {
+      "const": "HERMES"
+    },
+    "primary_objective": {
+      "enum": [
+        "FOLLOWER_GROWTH",
+        "ENGAGEMENT",
+        "SHAREABILITY",
+        "LEAD_GENERATION",
+        "REFERRAL",
+        "BRAND_AUTHORITY"
+      ]
+    },
+    "secondary_objective": {
+      "enum": [
+        "FOLLOWER_GROWTH",
+        "ENGAGEMENT",
+        "SHAREABILITY",
+        "LEAD_GENERATION",
+        "REFERRAL",
+        "BRAND_AUTHORITY"
+      ]
+    },
+    "format": {
+      "enum": [
+        "REEL",
+        "CAROUSEL",
+        "POST"
+      ]
+    },
+    "audience": {
+      "description": "Audiência do CONTEÚDO. Vocabulário fechado, sem PUBLIC.",
+      "enum": [
+        "EXECUTIVE_STEFANO",
+        "COMMERCIAL_LUCAS",
+        "FINANCE_LEONARDO"
+      ]
+    },
+    "theme": {
+      "$ref": "#/$defs/untrusted_text"
+    },
+    "strategic_angle": {
+      "$ref": "#/$defs/untrusted_text"
+    },
+    "desired_hook": {
+      "$ref": "#/$defs/untrusted_text"
+    },
+    "message": {
+      "$ref": "#/$defs/untrusted_text"
+    },
+    "cta": {
+      "$ref": "#/$defs/untrusted_text"
+    },
+    "market_context_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/identifier"
+      },
+      "maxItems": 512
+    },
+    "competitor_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/identifier"
+      },
+      "maxItems": 512
+    },
+    "business_context_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/identifier"
+      },
+      "maxItems": 512
+    },
+    "constraints": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/untrusted_text"
+      },
+      "maxItems": 32
+    },
+    "variants_requested": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10
+    },
+    "publication_authorized": {
+      "description": "`const false`. Nem Hermes nem Aros podem autorizar publicação.",
+      "const": false
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.:-]{2,127}$"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "untrusted_text": {
+      "description": "Envelope obrigatório para QUALQUER texto livre, inclusive o que Hermes ou Aros escrevem: texto gerado por modelo é dado, nunca instrução.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "untrusted",
+        "content"
+      ],
+      "properties": {
+        "untrusted": {
+          "const": true
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "origin": {
+          "type": "string",
+          "maxLength": 256
+        }
+      }
+    }
+  }
+}

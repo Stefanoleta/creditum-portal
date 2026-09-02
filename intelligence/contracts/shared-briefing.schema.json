@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://creditum.internal/intelligence/contracts/shared-briefing.schema.json",
+  "title": "Briefing compartilhado (projeção positiva por audiência)",
+  "description": "Só entra o que foi EXPLICITAMENTE permitido. Não existe campo para o ExecutiveBriefing inteiro, e não existe `hidden_sections`: esconder pressupõe gerar tudo e filtrar depois, e um filtro esquecido vaza. Aqui o objeto é construído a partir do permitido, então o vazamento não tem de onde vir. `generated_from` é uma REFERÊNCIA ao briefing, não o conteúdo dele.\n\nE a autorização também é referência: `authorization_ref` aponta o DecisionRecord de Stefano. Este objeto NÃO consegue se autorizar.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "shared_briefing_id",
+    "schema_version",
+    "generated_from",
+    "generated_at",
+    "audience",
+    "permitted_insights",
+    "permitted_evidence_refs",
+    "authorization_ref"
+  ],
+  "properties": {
+    "shared_briefing_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "schema_version": {
+      "$ref": "#/$defs/schema_version"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "generated_from": {
+      "$ref": "#/$defs/identifier",
+      "description": "briefing_id de origem. Referência, nunca cópia."
+    },
+    "audience": {
+      "description": "UMA audiência por objeto. Sem ALL, sem EVERYONE, sem PUBLIC.",
+      "enum": [
+        "EXECUTIVE_STEFANO",
+        "COMMERCIAL_LUCAS",
+        "FINANCE_LEONARDO"
+      ]
+    },
+    "permitted_insights": {
+      "description": "Allowlist de insight_id. Vazio é resultado legítimo: nada a compartilhar.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/identifier"
+      },
+      "maxItems": 512
+    },
+    "contextual_cross_domain_insights": {
+      "description": "Contexto de outro domínio explicitamente liberado para esta audiência.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/identifier"
+      },
+      "maxItems": 512
+    },
+    "permitted_evidence_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/identifier"
+      },
+      "maxItems": 512,
+      "description": "Allowlist de evidência. O que não está aqui não é alcançável por esta audiência."
+    },
+    "authorization_ref": {
+      "$ref": "#/$defs/identifier",
+      "description": "DecisionRecord que autoriza ESTA divulgação. OBRIGATÓRIO.\n\nO gate encontrou o furo: `authorized_by: const \"STEFANO\"` com `authorization_ref` opcional deixava um produtor afirmar que Stefano autorizou sem que nenhuma decisão existisse. Um nome dentro do próprio objeto não é prova de autoridade — é a autoridade se autoproclamando.\n\n`authorized_by` foi REMOVIDO em vez de mantido como metadado: um campo que parece autoridade e não é seria lido como autoridade na primeira leitura apressada. A prova é a referência, e a referência é o único caminho.\n\nSchema não valida relação entre objetos: quem verifica a cadeia é `authorizeSharedBriefing`, na fronteira de construção."
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.:-]{2,127}$"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "untrusted_text": {
+      "description": "Envelope obrigatório para QUALQUER texto livre, inclusive o que o próprio Hermes escreve: frase gerada por modelo é dado, nunca instrução.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "untrusted",
+        "content"
+      ],
+      "properties": {
+        "untrusted": {
+          "const": true
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "origin": {
+          "type": "string",
+          "maxLength": 256
+        }
+      }
+    }
+  }
+}

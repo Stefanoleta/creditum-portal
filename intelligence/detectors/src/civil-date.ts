@@ -61,8 +61,17 @@ const ISO_COMPLETO = /^(\d{4})-(\d{2})-(\d{2})$/
  */
 const BR_COMPLETO = /^(\d{1,2})([/-])(\d{1,2})\2(\d{4})$/
 
-/** Dias por mês, com fevereiro resolvido pela regra real de ano bissexto. */
-function diasNoMes(ano: number, mes: number): number {
+/**
+ * Dias por mês, com fevereiro resolvido pela regra real de ano bissexto.
+ *
+ * EXPORTADO na Fase 2.11d. Era interno, e a validação de `modifiedTime` da fonte do
+ * Lucas precisava da mesma resposta para "esta data existe?". Escrever um segundo
+ * contador de dias seria criar duas autoridades de calendário no repositório — e a
+ * que estivesse errada só apareceria quando uma delas aceitasse 30 de fevereiro.
+ *
+ * Nenhuma linha de lógica mudou: só a visibilidade.
+ */
+export function diasNoMes(ano: number, mes: number): number {
   if (mes === 2) {
     const bissexto = (ano % 4 === 0 && ano % 100 !== 0) || ano % 400 === 0
     return bissexto ? 29 : 28
@@ -103,4 +112,127 @@ export function parseCivilDateStrict(raw: unknown): string | null {
   }
 
   return null
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Fase 2.13 — aritmética de calendário civil e o serial do Google Sheets
+// ═════════════════════════════════════════════════════════════════════════════
+//
+// Adicionado AQUI, e não num módulo novo, por decisão explícita da fase: este é o
+// módulo de calendário do repositório. Um segundo lugar que soubesse somar dias
+// civis seria uma segunda autoridade de calendário — e a que estivesse errada só
+// apareceria no dia em que as duas discordassem sobre 29 de fevereiro.
+//
+// Nada aqui usa `Date`, `Date.parse`, milissegundos ou duração de 24h. Deslocamento
+// de prazo é distância em DIAS DE CALENDÁRIO, e horário de verão faz um "dia" ter
+// 23 ou 25 horas — dividir milissegundos por 86.400.000 erra o dia na virada.
+
+/**
+ * Dias civis desde 1970-01-01, algoritmo de Howard Hinnant (`days_from_civil`).
+ *
+ * Álgebra pura sobre inteiros, sem tabela e sem laço: independe de fuso, de locale
+ * e da implementação de `Intl`. É o mesmo algoritmo que `source-time.ts` usa para
+ * `SourceInstant`; um teste desta fase afirma que as duas concordam sobre um
+ * intervalo largo de datas, porque duplicação não provada é divergência esperando
+ * acontecer.
+ */
+function diasDesdeEpoca(ano: number, mes: number, dia: number): number {
+  const y = ano - (mes <= 2 ? 1 : 0)
+  const era = Math.floor((y >= 0 ? y : y - 399) / 400)
+  const yoe = y - era * 400
+  const doy = Math.floor((153 * (mes + (mes > 2 ? -3 : 9)) + 2) / 5) + dia - 1
+  const doe = yoe * 365 + Math.floor(yoe / 4) - Math.floor(yoe / 100) + doy
+  return era * 146097 + doe - 719468
+}
+
+/** Inverso exato de `diasDesdeEpoca` (`civil_from_days`). */
+function dataDesdeDias(dias: number): { ano: number; mes: number; dia: number } {
+  const z = dias + 719468
+  const era = Math.floor((z >= 0 ? z : z - 146096) / 146097)
+  const doe = z - era * 146097
+  const yoe = Math.floor((doe - Math.floor(doe / 1460) + Math.floor(doe / 36524) - Math.floor(doe / 146096)) / 365)
+  const doy = doe - (365 * yoe + Math.floor(yoe / 4) - Math.floor(yoe / 100))
+  const mp = Math.floor((5 * doy + 2) / 153)
+  const dia = doy - Math.floor((153 * mp + 2) / 5) + 1
+  const mes = mp + (mp < 10 ? 3 : -9)
+  return { ano: yoe + era * 400 + (mes <= 2 ? 1 : 0), mes, dia }
+}
+
+/** `YYYY-MM-DD` → dias desde a epoch civil. `null` se não for data civil válida. */
+export function civilDaysFromDate(raw: unknown): number | null {
+  const iso = parseCivilDateStrict(raw)
+  if (iso === null) return null
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
+  if (m === null) return null
+  return diasDesdeEpoca(Number(m[1]), Number(m[2]), Number(m[3]))
+}
+
+/** Dias desde a epoch civil → `YYYY-MM-DD`. */
+export function civilDateFromDays(dias: number): string | null {
+  if (!Number.isSafeInteger(dias)) return null
+  const { ano, mes, dia } = dataDesdeDias(dias)
+  if (ano < 1 || ano > 9999) return null
+  return `${String(ano).padStart(4, "0")}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`
+}
+
+/**
+ * Soma (ou subtrai) DIAS DE CALENDÁRIO a uma data civil.
+ *
+ * Sem pular fim de semana e sem feriado: a regra de prazo aprovada é dia corrido, e
+ * D-4 de uma segunda-feira é a quinta anterior mesmo que ninguém trabalhe no sábado.
+ */
+export function addCivilDays(raw: unknown, delta: number): string | null {
+  if (!Number.isSafeInteger(delta)) return null
+  const base = civilDaysFromDate(raw)
+  if (base === null) return null
+  return civilDateFromDays(base + delta)
+}
+
+/** `to - from` em dias de calendário. `null` se qualquer lado não for data civil. */
+export function diffCivilDays(from: unknown, to: unknown): number | null {
+  const a = civilDaysFromDate(from)
+  const b = civilDaysFromDate(to)
+  if (a === null || b === null) return null
+  return b - a
+}
+
+/**
+ * Epoch do serial de data do Google Sheets, em dias civis desde 1970-01-01.
+ *
+ * Serial 0 é 1899-12-30 no sistema 1900 que o Sheets herdou do Lotus/Excel. O valor
+ * é derivado, não digitado: um teste afirma que ele reproduz os seriais REAIS
+ * observados na fonte oficial — `46260 → 2026-08-26`.
+ */
+export const SHEETS_SERIAL_EPOCH_DAYS: number = diasDesdeEpoca(1899, 12, 30)
+
+/**
+ * Menor serial aceito. 61 é 1900-03-01.
+ *
+ * Abaixo disso está a região do bug de ano bissexto de 1900 que o sistema 1900
+ * carrega — o 29/02/1900 fictício —, e ali o mapeamento serial→data civil depende de
+ * qual implementação reproduz o bug. Nenhum prazo de contrato de 2026 mora lá, e
+ * recusar é honesto: preferir um palpite sobre 1900 a um estado de não-avaliável
+ * seria inventar data.
+ */
+export const SHEETS_SERIAL_MIN = 61
+
+/** Maior serial aceito: 9999-12-31. Acima disso não é prazo, é dado corrompido. */
+export const SHEETS_SERIAL_MAX = 2958465
+
+/**
+ * Serial de data do Google Sheets → data civil canônica.
+ *
+ * Aceita SOMENTE inteiro dentro da janela governada. Recusa, por decisão:
+ *
+ *   string          `"46260"` não declara que é serial; poderia ser qualquer número
+ *   fracionário     carrega hora do dia, e prazo é data — truncar escolheria o dia
+ *   fora da janela  ver `SHEETS_SERIAL_MIN` / `SHEETS_SERIAL_MAX`
+ *
+ * `null` significa "não é serial de data suportado", nunca "provavelmente era isto".
+ */
+export function civilDateFromSheetsSerial(raw: unknown): string | null {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return null
+  if (!Number.isInteger(raw)) return null
+  if (raw < SHEETS_SERIAL_MIN || raw > SHEETS_SERIAL_MAX) return null
+  return civilDateFromDays(SHEETS_SERIAL_EPOCH_DAYS + raw)
 }
