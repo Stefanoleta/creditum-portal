@@ -149,7 +149,8 @@ const {
 const { prepareGovernedExecution } = await import("../src/execution-supervisor")
 const {
   PRECALL_PYTHON_EXECUTABLE, PRECALL_WORKER_MODULE, PRECALL_RESULT_PROTOCOL,
-  PRECALL_DEFECTS, PRECALL_STDOUT_MAX_BYTES, executeReservedPrecall,
+  PRECALL_DEFECTS, PRECALL_STDOUT_MAX_BYTES, PRECALL_HERMES_HOME,
+  executeReservedPrecall,
 } = await import("../src/precall-execution")
 type Spec = import("../src/live-execution").LiveExecutionSpecV1
 
@@ -662,9 +663,11 @@ describe("C5 o ambiente do filho é fixo e mínimo", () => {
     try {
       await executeReservedPrecall(await capacidade(), { request_nonce: NONCE })
       const env = filho.chamadas[0]?.opts.env as Record<string, string>
+      // `HERMES_HOME` entrou na r6, por achado de produção. As outras seis são as
+      // mesmas, e a lista segue EXATA: chave a mais é vazamento.
       expect(Object.keys(env).sort()).toEqual(
-        ["LANG", "LC_ALL", "PATH", "PYTHONDONTWRITEBYTECODE", "PYTHONHASHSEED",
-         "PYTHONUNBUFFERED"])
+        ["HERMES_HOME", "LANG", "LC_ALL", "PATH", "PYTHONDONTWRITEBYTECODE",
+         "PYTHONHASHSEED", "PYTHONUNBUFFERED"])
       expect(JSON.stringify(env)).not.toContain("valor-que-nao-pode-vazar")
       expect(env.SEGREDO_SINTETICO_D2C).toBeUndefined()
     } finally {
@@ -1092,6 +1095,147 @@ print(json.dumps(sorted(chamados)))
     const w = readFileSync(
       join(__dirname, "..", "..", "bridge", "creditum_hermes_precall", "worker.py"), "utf8")
     expect(w).toContain("live_authorization=None")
+  })
+})
+
+// ═════════════════════════════════════════════════════════════════════════════
+// C14 — R6: HERMES_HOME governado no ambiente do filho
+// ═════════════════════════════════════════════════════════════════════════════
+//
+// Nasceu de execução REAL na Hostinger: `d2d-precall-20260902-01` recusou com
+// `RUNTIME_NOT_RESOLVED` porque o saneamento removia `HERMES_HOME`, e é dele que o
+// `hermes_cli` instalado depende para resolver config e provider. O `execution_id`
+// está permanentemente queimado — não há, e não haverá, caminho de reuso.
+
+describe("C14 o filho recebe o HERMES_HOME governado", () => {
+  const AMBIENTE_ESPERADO = {
+    HERMES_HOME: "/data",
+    PATH: "/usr/bin:/bin",
+    LC_ALL: "C.UTF-8",
+    LANG: "C.UTF-8",
+    PYTHONDONTWRITEBYTECODE: "1",
+    PYTHONUNBUFFERED: "1",
+    PYTHONHASHSEED: "0",
+  }
+
+  it("C14/A o ambiente do filho é EXATAMENTE o conjunto governado", async () => {
+    await executeReservedPrecall(await capacidade(), { request_nonce: NONCE })
+    expect(filho.chamadas.length).toBe(1)
+    const env = filho.chamadas[0]?.opts?.env as Record<string, string>
+    // Igualdade exata: chave a mais é vazamento, chave a menos é o defeito da r6.
+    expect(env).toEqual(AMBIENTE_ESPERADO)
+    expect(env.HERMES_HOME).toBe(PRECALL_HERMES_HOME)
+  })
+
+  it("C14/B a forma antiga, sem HERMES_HOME, já não é válida", async () => {
+    // A regressão do achado: `ambienteMinimo()` sem esta chave era exatamente o que
+    // fazia o `hermes_cli` não resolver na Hostinger.
+    await executeReservedPrecall(await capacidade(), { request_nonce: NONCE })
+    const env = filho.chamadas[0]?.opts?.env as Record<string, string>
+    expect(Object.keys(env).sort()).toContain("HERMES_HOME")
+    expect(Object.keys(env)).toHaveLength(7)
+  })
+
+  it("C14/C o ambiente do PAI não redireciona o do filho", async () => {
+    const antes = process.env.HERMES_HOME
+    try {
+      process.env.HERMES_HOME = PRECALL_HERMES_HOME // presente e IGUAL: segue
+      await executeReservedPrecall(await capacidade(), { request_nonce: NONCE })
+      const env = filho.chamadas[0]?.opts?.env as Record<string, string>
+      expect(env.HERMES_HOME).toBe("/data")
+    } finally {
+      if (antes === undefined) delete process.env.HERMES_HOME
+      else process.env.HERMES_HOME = antes
+    }
+  })
+
+  it("C14/C2 pai com raiz DIVERGENTE → recusa, ZERO filho, nada consumido", async () => {
+    const antes = process.env.HERMES_HOME
+    const cap = await capacidade()
+    let r: Awaited<ReturnType<typeof executeReservedPrecall>>
+    try {
+      process.env.HERMES_HOME = "/tmp/raiz-do-atacante"
+      r = await executeReservedPrecall(cap, { request_nonce: NONCE })
+    } finally {
+      if (antes === undefined) delete process.env.HERMES_HOME
+      else process.env.HERMES_HOME = antes
+    }
+    expect(r.status).toBe("refused")
+    if (r.status === "refused") expect(r.defect).toBe("PRECALL_HERMES_HOME_MISMATCH")
+    expect(filho.chamadas.length, "nasceu filho com raiz divergente").toBe(0)
+    // Nem commit, nem terminal: a conferência precede o consumo.
+    expect(readdirSync(join(RAIZ, "attempts", cap.execution_key)))
+      .toEqual(["reservation.json"])
+    // E a capacidade NÃO foi queimada — o host mal configurado não gasta a aprovação.
+    expect(cap.isConsumed).toBe(false)
+    const depois = await executeReservedPrecall(cap, { request_nonce: NONCE })
+    expect(depois.status).toBe("precall_succeeded")
+  })
+
+  it("C14/D segredo do pai não atravessa a fronteira", async () => {
+    const guardados = {
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+      HOME: process.env.HOME,
+      AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
+    }
+    try {
+      process.env.OPENAI_API_KEY = "sk-NAO-DEVE-ATRAVESSAR"
+      process.env.AWS_SECRET_ACCESS_KEY = "SEGREDO-NAO-DEVE-ATRAVESSAR"
+      await executeReservedPrecall(await capacidade(), { request_nonce: NONCE })
+      const env = filho.chamadas[0]?.opts?.env as Record<string, string>
+      expect(env.OPENAI_API_KEY).toBeUndefined()
+      expect(env.AWS_SECRET_ACCESS_KEY).toBeUndefined()
+      expect(env.HOME).toBeUndefined()
+      expect(JSON.stringify(env)).not.toContain("NAO-DEVE-ATRAVESSAR")
+    } finally {
+      for (const [k, v] of Object.entries(guardados)) {
+        if (v === undefined) delete process.env[k]
+        else process.env[k] = v
+      }
+    }
+  })
+
+  it("C14/E o pai NÃO é encaminhado inteiro", async () => {
+    const marca = "CREDITUM_MARCA_R6_" + String(Date.now())
+    try {
+      process.env[marca] = "1"
+      await executeReservedPrecall(await capacidade(), { request_nonce: NONCE })
+      const env = filho.chamadas[0]?.opts?.env as Record<string, string>
+      expect(env[marca]).toBeUndefined()
+      // O pai tem dezenas de variáveis; o filho tem sete.
+      expect(Object.keys(env).length).toBeLessThan(Object.keys(process.env).length)
+    } finally {
+      delete process.env[marca]
+    }
+  })
+
+  it("C14/F nenhuma via de modelo, provedor ou rede entrou", () => {
+    // ESTRUTURAL: a r6 acrescentou UMA chave de ambiente e uma conferência. Nada mais.
+    const src = fonte(PRE)
+    const PROIBIDAS = new Set(["fetch", "request", "createResponse", "create"])
+    expect(chamadasEm(src).filter((c) => PROIBIDAS.has(c))).toEqual([])
+    const t = readFileSync(PRE, "utf8")
+    for (const p of ["--live", "OPENAI_API_KEY", "api_key", "Authorization"]) {
+      expect(t, p).not.toContain(p)
+    }
+  })
+
+  it("C14 fonte: HERMES_HOME é constante do módulo, não leitura do ambiente", () => {
+    // Se `ambienteMinimo()` lesse `process.env`, o ambiente escolheria a raiz — a
+    // lição que a d1 pagou com `HERMES_HOME=/tmp/x`.
+    const src = fonte(PRE)
+    let leituras = 0
+    ts.forEachChild(src, (n) => {
+      if (!ts.isFunctionDeclaration(n) || n.name?.text !== "ambienteMinimo") return
+      const anda = (x: ts.Node): void => {
+        if (ts.isPropertyAccessExpression(x) && x.getText(src).startsWith("process.env")) {
+          leituras++
+        }
+        ts.forEachChild(x, anda)
+      }
+      anda(n)
+    })
+    expect(leituras, "ambienteMinimo lê process.env").toBe(0)
   })
 })
 

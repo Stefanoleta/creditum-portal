@@ -3442,3 +3442,98 @@ método de objeto, `#emissao` nunca recebendo retorno de chamada.
 
 As duas últimas nasceram como regex e a segunda **falhou acusando a própria prosa
 que documenta a ausência do padrão**. Décima vez nesta fase. Convertidas para AST.
+
+---
+
+## §35 — D2C-R6: `HERMES_HOME` governado no ambiente do filho
+
+Primeiro achado desta fase que veio de **execução real em produção**, não de
+revisão de código.
+
+### O que a Hostinger mostrou
+
+```
+execution_id: d2d-precall-20260902-01
+resultado:    refused / PRECALL_SEMANTIC_REJECTED
+child_detail: RUNTIME_NOT_RESOLVED
+```
+
+E o resto funcionou inteiro: reserva → `ATTEMPT_COMMITTED` durável → **um** filho,
+nascido exatamente como `/opt/venv/bin/python3 -I -B -m
+creditum_hermes_precall.worker` → recusa governada → terminal. Retry 0. Segunda
+execução recusada como já consumida. Rede do runtime PRECALL 0. Modelo/provedor 0.
+
+Ou seja: tudo o que cinco rodadas de revisão adversarial construíram se comportou
+como projetado. O que faltou foi ambiente.
+
+### Onde eu errei o diagnóstico
+
+Na D2D-A eu examinei se `HERMES_HOME` importava e concluí que não. O raciocínio
+estava correto sobre o código congelado da Creditum: `approved_hermes_home_ok()`
+só lê o ambiente quando chamado por `governed_cwd_ok`, que vive em `session.py`,
+**fora** do fechamento PRECALL; e `ApprovedRuntimeBinding` recebe
+`hermes_home=APPROVED_HERMES_HOME`, a constante. Cheguei a registrar isso como
+correção de um defeito que eu ia reportar por engano.
+
+O que não considerei foi o terceiro. `RUNTIME_NOT_RESOLVED` tem quatro origens em
+`runtime.py`, e todas são o `hermes_cli` **instalado** falhando em resolver
+config ou provider — e é ele que depende de `HERMES_HOME`. Eu verifiquei o nosso
+código e paramei ali. A execução real encontrou o resto.
+
+### A correção, e por que o valor é fixo
+
+`ambienteMinimo()` passou a incluir `HERMES_HOME: PRECALL_HERMES_HOME`, com
+`PRECALL_HERMES_HOME = "/data"` — constante do módulo, não leitura de
+`process.env`. Há checagem de AST exigindo zero acessos a `process.env` dentro de
+`ambienteMinimo()`.
+
+Encaminhar `process.env.HERMES_HOME` daria ao ambiente o poder de **escolher** a
+raiz, e a d1 já pagou essa lição: `HERMES_HOME=/tmp/x` com `cwd=/tmp/x` passava
+porque a variável definia a regra em vez de ser conferida contra ela. Aqui o pai
+não escolhe; ele é conferido.
+
+A porta fecha-falha: `HERMES_HOME` do pai **ausente** é aceitável — o filho
+recebe o valor fixo de qualquer forma. **Presente e diferente** é
+`PRECALL_HERMES_HOME_MISMATCH`, zero spawn. Um host que anuncia outra raiz não é
+o host aprovado, e normalizá-lo em silêncio esconderia exatamente a divergência.
+
+Uma decisão de ordem que vale explicitar: a conferência vem **antes** do consumo
+da capacidade. Ela não toca a capacidade — lê só o ambiente do próprio processo —
+e recusar ali evita que um host mal configurado queime uma aprovação de Stefano.
+Foi esse o custo real do achado: uma aprovação gasta para descobrir uma variável
+de ambiente. Há regressão exigindo que, no caso de divergência, o diretório da
+tentativa contenha apenas `reservation.json` e que a capacidade siga consumível.
+
+### O que NÃO mudou
+
+`live-execution.ts`, `execution-ledger.ts` e `execution-supervisor.ts` seguem
+byte-idênticos. O contrato exato do resultado, o prazo absoluto, a ordem
+commit-antes-do-spawn, um filho no máximo, retry 0 e a semântica terminal: tudo
+intocado. O parente recusou o resultado do filho como
+`PRECALL_SEMANTIC_REJECTED` e isso foi **correto** — a recusa descreveu a
+realidade.
+
+Uma única variável de ambiente entrou. `OPENAI_API_KEY`, `HOME`, tokens e
+segredos continuam fora, com regressão que os planta no pai e exige que não
+atravessem.
+
+### A tentativa de produção está queimada
+
+`d2d-precall-20260902-01` está **permanentemente consumida**. Não existe, e não
+será construído, mecanismo de reset, reuso ou remoção do estado dela no
+livro-razão. A próxima verificação em produção exige `execution_id` novo, reserva
+nova e tentativa governada nova — que é precisamente o comportamento que a d2b
+foi construída para garantir.
+
+### Evidência
+
+`gateway/tests/d2c-ev.test.ts` — **99 checagens** (eram 91). O bloco C14 novo:
+ambiente do filho igual ao conjunto governado exato de sete chaves; a forma
+antiga de seis já não é válida; pai igual não redireciona; pai divergente recusa
+com zero filho, zero commit e capacidade não queimada; segredo do pai não
+atravessa; o pai não é encaminhado inteiro; nenhuma via de modelo/provedor/rede
+entrou; e a checagem de AST contra leitura de `process.env`.
+
+O C5, que fixava as seis chaves antigas, foi atualizado para sete — é o teste que
+esta rodada devia atualizar, e o fato de ele ter falhado primeiro é o sinal de
+que a mudança é real.

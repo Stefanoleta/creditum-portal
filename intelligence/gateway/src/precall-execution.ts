@@ -83,6 +83,34 @@ export const PRECALL_PYTHON_EXECUTABLE = "/opt/venv/bin/python3"
 /** Entrypoint próprio da Creditum. O pacote congelado não foi tocado. */
 export const PRECALL_WORKER_MODULE = "creditum_hermes_precall.worker"
 
+/**
+ * O `HERMES_HOME` governado que o filho precisa receber.
+ *
+ * ─── O achado de produção que criou esta linha ───────────────────────────────
+ *
+ * A execução real `d2d-precall-20260902-01` na Hostinger nasceu, recusou de forma
+ * governada com `RUNTIME_NOT_RESOLVED`, e queimou o `execution_id`. A sequência
+ * durável funcionou inteira — reserva, ATTEMPT_COMMITTED, um filho, terminal, zero
+ * retry. O que faltou foi ambiente.
+ *
+ * Meu diagnóstico anterior estava certo sobre o código congelado da Creditum e errado
+ * sobre a consequência: `approved_hermes_home_ok()` só lê o ambiente por
+ * `governed_cwd_ok`, que vive em `session.py`, fora do fechamento PRECALL, e o vínculo
+ * usa a constante `APPROVED_HERMES_HOME`. Concluí daí que `HERMES_HOME` não importava.
+ * Importa — para o `hermes_cli` INSTALADO, que é quem resolve config e provider, e que
+ * o saneamento de ambiente estava removendo. As quatro origens de
+ * `RUNTIME_NOT_RESOLVED` em `runtime.py` são todas ele falhando em resolver.
+ *
+ * ─── Por que o valor é FIXO e não vem do pai ────────────────────────────────
+ *
+ * `APPROVED_HERMES_HOME = "/data"` já é a autoridade no lado Python. Encaminhar
+ * `process.env.HERMES_HOME` daria ao ambiente o poder de escolher a raiz — e a d1
+ * pagou por essa lição: `HERMES_HOME=/tmp/x` com `cwd=/tmp/x` passava porque a
+ * variável DEFINIA a regra em vez de ser conferida contra ela. Aqui o pai não escolhe;
+ * ele é conferido.
+ */
+export const PRECALL_HERMES_HOME = "/data"
+
 export const PRECALL_REQUEST_PROTOCOL = "creditum_precall_request/1.0.0"
 export const PRECALL_RESULT_PROTOCOL = "creditum_precall_result/1.0.0"
 
@@ -147,6 +175,7 @@ export const PRECALL_DEFECTS = [
   "PRECALL_ATTEMPT_INVALID",
   "PRECALL_ATTEMPT_ALREADY_CONSUMED",
   "PRECALL_CAPABILITY_INVALID",
+  "PRECALL_HERMES_HOME_MISMATCH",
   "PRECALL_NO_BUDGET_REMAINING",
   "PRECALL_COMMIT_NOT_DURABLE",
   "PRECALL_SPAWN_FAILED",
@@ -248,9 +277,15 @@ function instantaneoDaEmissao(estado: IssuedExecutionState): InstantaneoCapacida
 // O filho
 // ═════════════════════════════════════════════════════════════════════════════
 
-/** Só o que o filho precisa. Nada de token, chave, HOME, shell ou config de plugin. */
+/**
+ * Só o que o filho precisa. Nada de token, chave, `HOME`, shell ou config de plugin.
+ *
+ * `HERMES_HOME` entrou na r6 com valor FIXO — não encaminhado do pai. É a única
+ * variável que o achado de produção autorizou acrescentar.
+ */
 function ambienteMinimo(): Record<string, string> {
   return {
+    HERMES_HOME: PRECALL_HERMES_HOME,
     PATH: "/usr/bin:/bin",
     LC_ALL: "C.UTF-8",
     LANG: "C.UTF-8",
@@ -501,6 +536,20 @@ export async function executeReservedPrecall(
   attempt: unknown,
   governedInput: GovernedPrecallInput,
 ): Promise<PrecallOutcome> {
+  // (0) O ambiente do PAI é conferido contra o valor governado — antes de consumir.
+  //
+  // Ausente é aceitável: o filho recebe o valor fixo de qualquer forma, e o pai não é
+  // a autoridade. PRESENTE E DIFERENTE é recusa: um host que anuncia outra raiz não é
+  // o host aprovado, e normalizá-lo em silêncio esconderia justamente a divergência.
+  //
+  // Antes do consumo de propósito. Esta conferência não toca a capacidade — lê só o
+  // ambiente do próprio processo — e recusar aqui evita que um host mal configurado
+  // queime uma aprovação de Stefano, que foi o custo real do achado de produção.
+  const homeDoPai = process.env.HERMES_HOME
+  if (homeDoPai !== undefined && homeDoPai !== PRECALL_HERMES_HOME) {
+    return { status: "refused", defect: "PRECALL_HERMES_HOME_MISMATCH" }
+  }
+
   // (1) consumo SÍNCRONO da capacidade. Segunda tentativa falha fechada.
   const consumo = consumeReservedExecutionAttempt(attempt)
   if (consumo.status !== "consumed") {
