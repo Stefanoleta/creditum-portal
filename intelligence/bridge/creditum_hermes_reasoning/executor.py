@@ -242,6 +242,39 @@ class ExecutionEvidence:
     verdict: str = ""
 
 
+def construir_material_governado(
+    *,
+    contract: SystemContract,
+    binding: ApprovedRuntimeBinding,
+    read_model: Mapping[str, Any],
+) -> tuple[Mapping[str, Any], str]:
+    """
+    A ÚNICA construção do material governado. Pura: nada de rede, cliente ou estado.
+
+    ─── Por que existe como função de módulo ────────────────────────────────────
+    #
+    A 3.1d-D2E descobriu que os hashes que Stefano aprova nasciam dentro do
+    `precall_probe` — logo, obtê-los antes da aprovação exigia gastar uma execução, e
+    reimplementá-los em TypeScript criaria uma segunda verdade. Extrair estas linhas
+    para cá dá ao planejamento e à execução a MESMA origem, sem modo novo, sem
+    bandeira e sem clone.
+
+    `_construir` do executor agora delega para aqui. Não há dois caminhos.
+    """
+    if type(binding) is not ApprovedRuntimeBinding:
+        raise ExecutorRefusal(ExecutorDefect.RUNTIME_BINDING_REQUIRED)
+    if type(read_model) is not dict:
+        raise ExecutorRefusal(ExecutorDefect.READ_MODEL_NOT_OWNED, safe_type_name(read_model))
+
+    payload = governed_user_payload(read_model)
+    request = build_governed_request(binding=binding, contract=contract, user_payload=payload)
+    # O PORTÃO. Depois desta linha nada muda a requisição — ela é somente-leitura.
+    enforce_final_request(
+        request, binding=binding, contract=contract, expected_user_payload=payload
+    )
+    return request, payload
+
+
 class CreditumCodexReasoningExecutor:
     """
     O executor governado. Constrói, verifica e — só com capacidade — envia.
@@ -274,25 +307,12 @@ class CreditumCodexReasoningExecutor:
     # ── construção governada, comum aos dois modos ──────────────────────────
 
     def _construir(self, run: GovernedReasoningRun) -> tuple[Mapping[str, Any], str]:
-        if type(run.binding) is not ApprovedRuntimeBinding:
-            raise ExecutorRefusal(ExecutorDefect.RUNTIME_BINDING_REQUIRED)
-        if type(run.read_model) is not dict:
-            raise ExecutorRefusal(
-                ExecutorDefect.READ_MODEL_NOT_OWNED, safe_type_name(run.read_model)
-            )
-
-        payload = governed_user_payload(run.read_model)
-        request = build_governed_request(
-            binding=run.binding, contract=run.contract, user_payload=payload
+        # Delega para a função de MÓDULO. O planejamento (d2e) e a execução passam
+        # pelas mesmas linhas — se divergissem, o hash que Stefano aprova não
+        # descreveria o pedido que sai.
+        return construir_material_governado(
+            contract=run.contract, binding=run.binding, read_model=run.read_model
         )
-        # O PORTÃO. Depois desta linha nada muda a requisição — ela é somente-leitura.
-        enforce_final_request(
-            request,
-            binding=run.binding,
-            contract=run.contract,
-            expected_user_payload=payload,
-        )
-        return request, payload
 
     # ── sonda pública: prova a semântica sem rede ───────────────────────────
 

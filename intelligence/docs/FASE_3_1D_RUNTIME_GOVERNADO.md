@@ -3537,3 +3537,675 @@ entrou; e a checagem de AST contra leitura de `process.env`.
 O C5, que fixava as seis chaves antigas, foi atualizado para sete — é o teste que
 esta rodada devia atualizar, e o fato de ele ter falhado primeiro é o sinal de
 que a mudança é real.
+
+---
+
+## §36 — D2E-A2: o plano canônico, derivado antes da aprovação
+
+A d2e-a1 parou por dois motivos. Um era o Telegram, e continua fora. O outro era
+arquitetural e sobreviveria ao Telegram: **os hashes que Stefano aprova não
+existiam antes da execução.**
+
+Três exigências que eram conjuntamente insatisfazíveis:
+
+- `read_model_fingerprint` e `runtime_binding_fingerprint` eram **entradas** de
+  `LiveExecutionSpecV1`. A d1 conferia que eram texto não vazio e os copiava. Nada
+  os produzia — nos testes, `"x".repeat(64)` e `"b".repeat(64)`;
+- `request_hash` e `user_payload_hash` nasciam **dentro** do `precall_probe`, e
+  obtê-los exigia reservar e queimar um `execution_id`;
+- reimplementá-los em TypeScript criaria uma segunda verdade sobre os mesmos bytes.
+
+Ou placeholder, ou execução gasta, ou clone. Um `execution_fingerprint` derivado de
+placeholder não descreve execução nenhuma.
+
+### Onde cada valor nasce, e por que não em dois lugares
+
+| | |
+|---|---|
+| **Python** | `read_model_fingerprint`, `request_fingerprint`, `runtime_binding_fingerprint`, `request_hash`, `user_payload_hash` |
+| **TypeScript** | `execution_fingerprint`, `subject_content_hash` |
+
+Nenhum valor é calculado dos dois lados. `build_governed_request` e
+`request_fingerprint` já vivem no Python, e é lá que a execução os calcula;
+`liveExecutionFingerprint` é da d1 e é congelada. Reimplementar qualquer um dos
+dois no outro lado seria o defeito, em uma direção ou na outra. Há checagem de AST
+exigindo que o módulo TS não chame `createHash`.
+
+### A fonte única, e como ela ficou estrutural
+
+`_construir` do executor foi extraído para `construir_material_governado`, função
+de módulo. O planejamento e a execução passam pelas **mesmas linhas**. Há prova de
+AST: `_construir` chama `construir_material_governado` e **não** chama
+`build_governed_request`, `governed_user_payload` nem `enforce_final_request` —
+se alguém reintroduzir a construção lá, o teste acusa.
+
+### Os dois produtores que faltavam
+
+`read_model_fingerprint` reusa `governed_user_payload` — a serialização
+determinística que já existe e que o pedido usa. Um segundo `json.dumps` aqui
+criaria duas verdades sobre "os mesmos bytes".
+
+`runtime_binding_fingerprint` lê seis campos de identidade em ordem fixa, mais a
+**identidade do endpoint efetivo** (ver §36.1). A credencial fica de fora: um
+fingerprint que mudasse com a rotação vazaria a rotação para dentro de um hash que
+Stefano aprova e que aparece em texto de autorização.
+
+### Entrypoint dedicado, não um modo
+
+O planejador é um pacote próprio, `creditum_hermes_planner`, e não um `mode=` no
+worker PRECALL. A d1 fechou o defeito de a string `"LIVE"` bastar para mudar
+comportamento; acrescentar um seletor ao worker de execução reabriria a mesma
+porta com outro nome. Dois entrypoints fixos não têm o que selecionar.
+
+O protocolo de entrada tem **dois campos**: versão e `execution_id`. Nenhum hash
+entra — o planejador calcula. Aceitar `request_hash=...` do chamador faria o
+processo atestar o que não conferiu. Há teste para isso, e para `mode`, `live`,
+`model` e `provider` como campos: todos `REQUEST_FIELDS_INVALID`.
+
+### Planejar não gasta nada
+
+Zero reserva, zero `ATTEMPT_COMMITTED`, zero consumo de autorização, zero
+`precall_probe`, zero rede. O `execution_id` chega **pronto**: o planejador não o
+gera, não o reserva e não o marca. Reservar para calcular um hash queimaria a
+execução futura, que era exatamente o impasse.
+
+Prova estrutural: o módulo TS importa apenas `node:child_process` e
+`./live-execution`. Não conhece livro-razão nem supervisor.
+
+### TOCTOU
+
+`plansMatch(aprovado, agora)` compara 24 campos e é chamada antes de qualquer
+`Responses.create`. Divergiu, recusa. Aprovação humana vale para o que foi
+mostrado, não para o que o runtime reconstruiu depois.
+
+### Valores concretos, locais, de evidência
+
+```
+execution_id                 d2e-plan-teste-0001
+read_model_fingerprint       c2a29172a3b9653f2ca79a4418234fd31386fa228e955483f03d93b14871cead
+request_fingerprint          6c643ecea4a1a60f2a54763201bac4e5650edcc25daf993aca0dcd029160582d
+runtime_binding_fingerprint  3b01dbcc21cd0a5c100d22225307def7dcc63924c3d7321aef31cebe2662b9b5
+request_hash                 6c643ecea4a1a60f2a54763201bac4e5650edcc25daf993aca0dcd029160582d
+user_payload_hash            eba9b594d23b0a07293b55a9d0cff56d7271dc43ee797ebe1fcbaf3b8c91582e
+```
+
+Derivados com `approved_binding_for_tests` — vínculo de teste, não o vínculo de
+produção. **Não são candidato de produção**, e o texto de autorização declara
+`transport: NOT YET BOUND` enquanto o contrato de entrada do Telegram não existir.
+
+Uma observação de vocabulário que virou decisão: `request_fingerprint` (campo da
+spec da d1) e `request_hash` (evidência do PRECALL) são o **mesmo compromisso
+sobre o mesmo pedido**. Dois nomes para um valor é ruído; dois valores seria
+defeito. O plano emite o mesmo hash nos dois campos, e há teste exigindo isso.
+
+### Evidência
+
+`bridge/tests/test_d2e_canonical_plan.py` — 17 provas.
+`gateway/tests/d2e-plan.test.ts` — 33 provas.
+
+
+---
+
+## §36.1 — D2E-A2-R1: o endpoint também é a execução
+
+O regate bloqueou a A2 com um achado só, e ele estava certo.
+
+Eu havia deixado o `base_url` de fora do `runtime_binding_fingerprint` **junto com
+a credencial**, e escrevi na §36 que isso era proteção contra vazamento de
+rotação. A primeira metade estava certa. A segunda não: agrupei "endpoint" e
+"credencial" como se fossem a mesma categoria.
+
+Não são. Um é **para onde** a execução vai; o outro é **com o que** ela se
+autentica. Trocar o destino muda a execução que Stefano aprovou. Rodar a chave,
+não.
+
+### A falha concreta
+
+Plano construído com o endpoint A. Antes da execução, a configuração do Hermes
+passa para o endpoint B — estruturalmente válido, `https`, nada no formato o
+denuncia. Replaneja: mesmo `runtime_binding_fingerprint`, mesmo
+`execution_fingerprint`, `plansMatch` aceitando. E `to_client_kwargs()` entrega a
+credencial e o corpo da requisição para B.
+
+### A correção
+
+`runtime_binding_fingerprint` passou a comprometer também
+`binding.base_url_fingerprint()` — a função que **já existia** no vínculo e que
+hasheia exatamente o `base_url` que `to_client_kwargs()` entrega ao cliente. Não
+hasheei a URL de novo: um segundo algoritmo sobre o mesmo valor seria a segunda
+verdade que esta fase inteira veio proibir.
+
+Verifiquei antes de usar, porque o brief mandava parar se não representasse o
+endpoint efetivo: `base_url_fingerprint()` lê `_execution_material["base_url"]`, e
+`to_client_kwargs()` lê a mesma chave. E não existe caso de "endpoint padrão" —
+`base_url` é obrigatório, `https`, validado, e ausente já é recusa.
+
+A URL crua continua fora de tudo: do hash entra a identidade, não o valor.
+Hostname em log é topologia interna de graça para quem lê o log.
+
+### O que mudou e o que não mudou
+
+| | |
+|---|---|
+| endpoint A → B | `runtime_binding_fingerprint` **muda**, e o `execution_fingerprint` por composição |
+| rotação de `api_key` | fingerprint **igual** |
+| endpoint A → B | `request_hash` **igual** |
+
+A última linha é deliberada. `request_hash` compromete-se com o material
+governado — corpo, instruções, payload — e não com o destino. Distorcê-lo para
+"fazer tudo mudar" seria mentir sobre o que ele significa.
+
+### Um teste meu estava errado
+
+`test_f_credencial_NAO_entra_no_fingerprint_do_vinculo` afirmava que dois
+vínculos com endpoints diferentes davam o mesmo fingerprint — e passava. Ele
+codificava o defeito como se fosse a regra. Foi substituído por cinco provas
+separadas: rotação de credencial não muda; endpoint muda; o valor comprometido é o
+**efetivo** que vai ao cliente; a URL crua não aparece no hash; e o plano inteiro
+muda com o endpoint enquanto o corpo do pedido não.
+
+Do lado TypeScript, quatro provas novas: o `execution_fingerprint` muda por
+composição; o plano aprovado **não casa** com o replanejado noutro endpoint;
+`plansMatch` cobre o campo do vínculo (senão a proteção sumiria em silêncio); e o
+texto de autorização não publica `http://`, `https://` nem `base_url`.
+
+### Evidência regerada
+
+O `runtime_binding_fingerprint` de teste mudou de `3b01dbcc…b9b5` para
+`34b2e674…63d5`. Os outros quatro não mudaram — eles nunca dependeram do endpoint.
+
+`bridge/tests/test_d2e_canonical_plan.py` — 21 provas (eram 17).
+`gateway/tests/d2e-plan.test.ts` — 37 provas (eram 33).
+
+---
+
+## §37 — D2E-A4: o vínculo do Telegram, e o gancho que ficou bloqueado
+
+A a3 descobriu o contrato de entrada e fechou o **Bloqueio A** da a1. Ao ler o
+relatório, apareceu um terceiro bloqueio que nenhuma das duas fases tinha dito:
+**o texto do Telegram não tinha caminho para dentro de nenhum hash.** O
+`user_payload_hash` era o sha256 do fixture sintético serializado. Um plano
+canônico completo descreveria uma execução sobre o fixture — hashes corretos sobre
+a coisa errada.
+
+### O read model governado
+
+`creditum_hermes_reasoning/telegram_live.py` constrói um read model **exclusivo**
+da mensagem admitida: `schema_version`, `transport`, `sender_user_id`,
+`destination_chat_id`, `destination_thread_id`, `message_id`, `update_id`,
+`normalized_text`, `telegram_timestamp`. Conjunto fechado, sem campo opcional,
+sem queda para fixture.
+
+Ele é passado como `read_model` para `build_canonical_plan_material` — a via que
+já existia. Nenhuma derivação nova: o texto entra por
+`governed_user_payload(read_model)`, e daí saem `user_payload_hash`,
+`request_hash` e o `execution_fingerprint` por composição. Há prova de que mudar
+texto, `message_id`, `update_id`, remetente ou destino muda os hashes.
+
+O texto é o do adaptador instalado, exato. Sem `lower()`, sem segundo `strip()`,
+sem reinterpretar comando: a a3 provou que o adaptador já normalizou, e uma
+segunda camada mudaria o que Stefano leu.
+
+### Um achado sobre "exatamente uma mensagem"
+
+A a3 diz que mensagens rápidas do mesmo lote são unidas com `\n`. Mas
+`MessageEvent.message_id` é um valor **único**. Logo um evento em lote é
+indistinguível de um evento simples olhando só o `MessageEvent` — e uma política
+de "uma execução, uma mensagem" que não consegue contar mensagens não é política,
+é esperança.
+
+Por isso o material admitido exige `source_message_count`, e recusa qualquer valor
+diferente de 1. Essa cardinalidade só existe em quem fez o lote, em
+`_flush_text_batch` — ou seja, ela tem de atravessar o gancho. É requisito da
+ponte, não deste módulo.
+
+### Repetição: durável, e por reuso
+
+`telegram_execution_id(read_model)` deriva o identificador da identidade nativa
+imutável — transporte, remetente, destino, `message_id`, `update_id`. Repetir a
+mesma mensagem produz o **mesmo** `execution_id`, e aí a repetição bate no `mkdir`
+atômico do livro-razão da d2b, que já é durável e já foi provado em produção.
+
+Um registro em memória sumiria no reinício, e "a mesma mensagem não executa duas
+vezes" não pode depender de o processo não ter caído. O formato satisfaz o
+`identifier` do contrato de aprovação por construção: `tg-` mais 32 hex
+minúsculos.
+
+### O gancho está BLOQUEADO, e é o certo
+
+O §1.A manda descobrir se o Hermes expõe interface **oficial** de extensão que
+receba o `MessageEvent` pós-allowlist, e parar se não houver. Não consigo
+responder daqui: `/opt/hermes-agent` não existe nesta máquina, `hermes_cli`,
+`gateway.platforms.base` e `plugins.platforms.telegram.adapter` não são
+importáveis, e não há fonte do Hermes vendorizada no repositório.
+
+O relatório da a3 nomeou fronteiras internas de chamada — `_flush_text_batch` →
+`BasePlatformAdapter.handle_message` — mas **não** nomeou interface de extensão,
+callback ou plugin suportado. Envolver uma chamada interna é a instrumentação
+opaca que o §1.A proíbe.
+
+Então: o read model, os hashes e as recusas existem e estão provados. A ponte que
+entrega o evento a eles, não. E `ADMITTED_PROVENANCE` é honesto sobre isso — este
+módulo não pode observar fluxo de controle de outro processo; ele exige o carimbo
+e recusa sem ele. A prova real vive no ponto de entrega, que é o que falta.
+
+### Evidência
+
+`bridge/tests/test_d2e_telegram_binding.py` — 17 provas.
+
+---
+
+## §37.1 — D2E-A4-R1: adaptador governado, e a prova feita onde ela é possível
+
+O §3 do brief manda **provar** a ordem de autorização antes de implementar:
+atualização → allowlist → `MessageEvent` → `_enqueue_text_event`. Eu não posso
+inspecionar o Hermes desta máquina — não há `/opt/hermes-agent`, nem módulo
+importável, nem fonte vendorizada.
+
+A saída não foi confiar na minha leitura do relatório. Foi mover a prova para
+**runtime, por AST, sobre o arquivo realmente instalado**. Isso é estritamente
+melhor do que alguém ler e concluir, porque roda de novo a cada registro.
+
+O guarda exige três coisas da fonte instalada:
+
+1. `_enqueue_text_event` é chamado **somente** de dentro de `_handle_text_message`
+   — outro chamador seria outro caminho, possivelmente sem allowlist;
+2. dentro de `_handle_text_message`, `_is_user_authorized_from_message` é chamada
+   **antes**;
+3. essa chamada **governa um retorno antecipado** — chamar e ignorar o resultado
+   seria ordem correta e efeito nenhum.
+
+Mais a versão exata (`0.20.4`, igualdade, não mínimo), a existência da classe, a
+assinatura do método e os campos do evento. Qualquer divergência **recusa o
+registro**. Não existe queda para o lote nativo no caminho vivo.
+
+### A interceptação, e por que só ela
+
+Uma sobrescrita: `_enqueue_text_event`. É o último ponto onde a cardinalidade
+existe — depois dele o nativo faz `existing.text + "\n" + event.text` e a
+fronteira some. Polling, credencial, allowlist, envio, ciclo de vida e erros são
+herdados. Nada sob `/opt/hermes-agent` é tocado.
+
+A sobrescrita captura o ingresso e entrega o evento **imediatamente**, sem lote.
+"Uma execução viva, uma mensagem" vira verdade por construção, não por inspeção de
+um texto já concatenado. O lote nativo é conveniência de UX; para o ingresso
+governado ele é incompatível com a política, e a política ganha.
+
+### A deriva de versão falha fechada
+
+O carimbo de admissão é aplicado pelo **nosso** código. Se uma versão futura
+deixar de chamar a sobrescrita, nenhum evento sai carimbado — e o vínculo a
+jusante recusa material sem carimbo. A atualização do Hermes não faz a
+cardinalidade voltar a ser inverificável em silêncio: ela **para** o ingresso
+governado. Fragilidade observável em vez de degradação.
+
+### Um defeito no meu próprio dublê
+
+Os testes instalam um Hermes sintético sob o caminho de módulo fixo — mesma
+disciplina do `vi.mock` da d2c: a produção não ganha parâmetro, o teste substitui o
+ambiente. Duas coisas quebraram e valem registro, porque as duas eram do teste:
+
+`inspect.getsource` passa pelo `linecache`, e eu reescrevia o mesmo caminho a cada
+dublê — o guarda media a fonte **anterior**. Nome único por dublê resolveu. E o
+namespace do `exec` não definia `__name__`, então `cls.__module__` não resolvia o
+arquivo. Um teste que não consegue variar o que mede não mede nada.
+
+### Evidência
+
+`bridge/tests/test_d2e_telegram_adapter.py` — 23 provas, incluindo as dez de
+cardinalidade (A–J) e as negativas de compatibilidade: versão errada, método
+ausente, assinatura diferente, **segundo chamador** do enfileiramento, ordem
+invertida, autorização chamada e ignorada, campo de evento ausente, contexto sem
+`register_platform`, e registro só depois da prova.
+
+---
+
+## §37.2 — D2E-A4-R2: polaridade, e a armadilha da serialização
+
+O regate bloqueou com dois achados. Os dois eram reais, e o segundo era mais fundo
+do que "esqueceram de ligar um cabo".
+
+### Achado 1 — o guarda aceitava a polaridade invertida
+
+Minha verificação exigia "existe um `if` cujo teste chama a autorização e cujo corpo
+tem um `return`", mais "a autorização aparece antes". As duas coisas são **verdade
+na forma invertida**:
+
+```python
+if self._is_user_authorized_from_message(message):
+    return
+self._enqueue_text_event(event)     # ← o NÃO autorizado cai aqui
+```
+
+Ordem textual não é semântica. Eu tinha provado ordenação e chamado aquilo de
+prova de autorização.
+
+O que substituiu: **dominação**. Um comando `If` de primeiro nível cujo teste é
+exatamente `not <chamada de autorização>`, sem `else`, cujo corpo termina
+incondicionalmente em `return`/`raise`, e com o enfileiramento apenas **depois**
+dele. Mais: a autorização não pode aparecer em nenhum outro lugar do método — duas
+chamadas com polaridades possivelmente diferentes viram recusa em vez de escolha.
+
+Oito casos negativos provam cada recusa pelo nome, e o invertido prova também o que
+o brief pediu: registro recusado **e** zero ingresso governado.
+
+### Achado 2 — o planejador de produção ainda hasheava o fixture
+
+A correção óbvia seria mandar a mensagem para o worker. É exatamente a armadilha que
+o §6 do brief nomeia: o worker é outro processo, e mandar a admissão por JSON
+transformaria a prova de fluxo de controle num campo forjável. `{"authorized": true,
+"user_id": …}` chegando pelo stdin é precisamente o que a d1 e a d2b passaram sete
+rodadas fechando.
+
+A saída não foi assinar o JSON. Foi **não atravessar fronteira nenhuma**.
+
+O adaptador governado roda dentro do processo do Hermes, e é lá que o objeto de
+ingresso existe. O runtime de raciocínio está importável no mesmo interpretador — é
+o que o worker PRECALL já usa. Então `creditum_hermes_telegram/planning.py` deriva o
+plano canônico **em processo**, do objeto em memória. O que atravessa depois são
+apenas hashes.
+
+Um hash que atravessa não é autoridade que atravessa: a d1 confere
+`subject_content_hash == liveExecutionFingerprint(spec)` por conta própria, e um hash
+adulterado em trânsito faz a aprovação não bater.
+
+`creditum_hermes_planner.worker` foi **demovido** a via de evidência, com o fixture
+sintético, e está declarado assim no próprio arquivo. A via de produção não o importa,
+não importa `probe` e não chama `load_fixture` — há prova de AST. Ingresso ausente,
+inválido, em lote, de outra versão ou sem evidência de admissão é **recusa**, nunca
+queda para fixture.
+
+### O que impede um ingresso forjado
+
+`type(ingresso) is not GovernedTelegramIngressV1` — tipo exato, não `isinstance`.
+Um dicionário com os mesmos campos não passa; um dataclass impostor com a forma
+idêntica não passa. Só o adaptador constrói o tipo, e ele só constrói depois da
+admissão nativa que o guarda provou dominante.
+
+### Outro falso positivo textual meu
+
+Escrevi um teste que varria `vars(módulo)` procurando nomes com "approve" — e ele
+acusou `resolve_approved_runtime_binding`, um nome **importado** e legítimo. Nome em
+namespace não é função definida. Convertido para AST sobre as definições do arquivo.
+
+### Evidência
+
+`bridge/tests/test_d2e_telegram_adapter.py` — 31 provas (eram 23).
+`bridge/tests/test_d2e_telegram_production_plan.py` — 13 provas, na fronteira real:
+adaptador → sink → planejamento, com o Hermes inteiro dublado.
+Python: 521.
+
+---
+
+## §37.3 — D2E-A4-R3: forma não é procedência
+
+Dois achados, e o primeiro é o erro conceitual mais direto que cometi nesta fase.
+
+### Achado 1 — eu confundi tipo com procedência
+
+Eu escrevi `type(ingresso) is GovernedTelegramIngressV1` e chamei aquilo de prova de
+admissão. Rejeitava dicionário e dataclass impostor de forma diferente, e me
+convenci de que estava fechado.
+
+Mas o construtor do dataclass é público. Qualquer chamador constrói a classe
+**genuína** com os campos que quiser, e `dataclasses.replace(real, text="FORJADO")`
+clona uma emissão real mantendo todos os marcadores que eu conferia. Eu havia
+rejeitado o impostor de forma diferente e aceitado o impostor de forma idêntica.
+
+A pergunta certa não é "que classe é isto?". É **"este objeto exato foi emitido pelo
+adaptador depois da admissão nativa?"**.
+
+### A emissão, e onde ela mora
+
+Duas coisas novas, e as duas em **célula de closure**:
+
+- um `ContextVar` marcando a invocação do manipulador nativo, estabelecido pela
+  sobrescrita de `_handle_text_message` e limpo no `finally`;
+- um registro `id(objeto) → (referência fraca, instantâneo de conteúdo)`.
+
+O enfileiramento só emite se o contexto estiver ativo. Chamada direta a
+`_enqueue_text_event` recusa com `INGRESS_OUTSIDE_NATIVE_ADMISSION` — a allowlist não
+rodou, então não há admissão. Chamar `_handle_text_message` é permitido justamente
+porque ele atravessa a autorização nativa, que o guarda provou dominante.
+
+O registro é chaveado por **identidade**, não por valor. Um `WeakKeyDictionary` usaria
+o `__eq__` do dataclass, e um clone com os mesmos valores seria encontrado. Igualdade
+não é procedência.
+
+Por que closure e não atributo de módulo: `_CONTEXTO.set(_CAPACIDADE)` seria uma
+linha. O brief é explícito — sublinhado não é fronteira. O contexto, a capacidade e o
+registro vivem no escopo de `_monta_emissao`, e quem os toca é só o corpo das duas
+sobrescritas, definidas ali dentro. Nenhum atributo de módulo os expõe.
+
+O limite, dito em vez de encoberto: célula de closure ainda é alcançável por
+`cls._enqueue_text_event.__closure__`. Isso é introspecção de interpretador, e cai no
+que o §22 põe fora do modelo de ameaça. Não afirmo mais do que isso.
+
+Um detalhe que quase virou defeito: se o `_handle_text_message` nativo for
+assíncrono, uma sobrescrita síncrona limparia o contexto **antes** de a corrotina
+nativa começar. O guarda detecta com `inspect.iscoroutinefunction` e a fábrica monta a
+sobrescrita certa.
+
+### Achado 2 — o plano de produção ainda vinha do fixture
+
+A única via até um `CanonicalLivePlanV1` passava pelo worker do fixture. Usar o
+construtor existente descrevia o fixture; não usá-lo deixava o Telegram sem o plano
+que Stefano veria.
+
+Três mudanças:
+
+- `canonicalLivePlanFromMaterial(...)` — o construtor **puro**, extraído;
+- `buildCanonicalLivePlan` renomeado para `buildEvidenceCanonicalLivePlan`. Enquanto
+  se chamava "a via de construir um plano", ele silenciosamente ocupava o lugar da via
+  de produção. O nome agora diz o que é;
+- `gateway/src/canonical-plan-cli.ts` — entrypoint **fixo**, sem seletor de módulo, de
+  modo ou de executável.
+
+A ordem importa e está codificada: procedência verificada **no Python** → material
+canônico derivado → só então o material atravessa. Nada de autoridade é serializado —
+há teste sobre o conjunto fechado de campos exigindo que `authorized`,
+`admission_evidence`, `issuer`, `token` e `capability` **não** estejam nele. A
+identidade do Telegram vive dentro dos hashes, não ao lado deles.
+
+O plano devolvido é conferido contra o material que o originou: um construtor que
+devolvesse outra coisa seria aceito em silêncio se ninguém comparasse.
+
+### Décima primeira vez
+
+Escrevi um teste procurando `creditum_hermes_planner` no **texto** dos módulos de
+produção. Ele acusou a prosa que explica por que o worker do fixture não é usado.
+Convertido para AST: imports e chamadas, nunca menção.
+
+### Evidência
+
+`bridge/tests/test_d2e_telegram_production_plan.py` — 58 provas, incluindo as sete
+negativas de procedência (A–G) e a ponte de ponta a ponta até o TypeScript.
+Python: 566. TS: 3039.
+
+---
+
+## §37.4 — D2E-A4-R4: a peça certa, desligada
+
+Três achados, e todos com a mesma forma: eu havia construído a peça correta e não a
+tinha ligado a nada.
+
+### O renderizador aceitava qualquer plano
+
+`renderAuthorizationText(plano: CanonicalLivePlanV1)` era a única função que produzia
+o texto que Stefano assina. Como `canonicalLivePlanFromMaterial` é exportado e puro,
+existia uma composição de três passos:
+
+```
+material que eu escolho → canonicalLivePlanFromMaterial → renderAuthorizationText
+```
+
+Nenhum Telegram no caminho, e a saída com a aparência exata do texto de autorização.
+Eu havia dividido o construtor da via de evidência na r3 justamente para o Telegram
+ter plano — e ao dividir, deixei a metade pura alcançável pelo renderizador.
+
+Renomear não fecharia isso. O que fecha é o renderizador de produção exigir algo que
+um plano não é: `render_production_telegram_authorization` recebe **candidato
+emitido**, vive no Python, e nenhum objeto TypeScript tem como chegar lá. O
+`renderEvidenceAuthorizationText` continua existindo, continua imprimindo
+`transport: NOT YET BOUND`, e agora o cabeçalho dele diz `EVIDÊNCIA` — porque enquanto
+os dois textos começavam com a mesma linha, eram indistinguíveis à vista de quem lê.
+
+### Imutabilidade na casca
+
+```python
+@dataclass(frozen=True)
+class ProductionTelegramCandidateV1:
+    plan: Mapping[str, Any]
+```
+
+`frozen=True` impede `candidato.plan = outro`. Não impede
+`candidato.plan["model"] = "outro-modelo"`, porque o `dict` que veio do `json.loads`
+continua vivo lá dentro. E `Mapping` na anotação é declaração de intenção, não
+garantia: o objeto era `dict`.
+
+O `_congela` converte recursivamente — `dict` → `MappingProxyType`, `list` → `tuple` —
+e recusa tipo que não reconhece. Recusar importa: "congelo o que conheço e deixo o
+resto passar" é a porta pela qual um objeto mutável entra calado. O `dict` interno é
+construído dentro da função e nunca sai; só o proxy escapa. Proxy sobre `dict` que o
+chamador ainda segura não protege nada — é a mesma disciplina da d2c, construir local
+e entregar só o congelado.
+
+Efeito colateral que eu não projetei: `copy.deepcopy` do candidato agora levanta
+`TypeError`, porque `mappingproxy` não é serializável. Registrei como **medição**, não
+como defesa — a defesa é o registro de emissão, e se um Python futuro passar a copiar
+proxies, o clone continua recusado por identidade.
+
+### `provenance_valid()` que ninguém exigia
+
+O método existia, estava correto, e nenhuma linha de código o chamava. Um método que
+responde uma pergunta que nada faz é documentação.
+
+Ao ligá-lo, apareceu um segundo problema: se o renderizador perguntasse a um **nome de
+módulo**, `planning.verify_issued = lambda _: True` bastaria. Foi a lição da r3 voltando
+com outra cara. Agora o verificador do ingresso entra como **parâmetro** de
+`_monta_producao`, ligado uma vez no import, e o registro de candidatos vive em célula.
+
+Os caminhos do filho entraram pelo mesmo motivo: `planning.CANONICAL_PLAN_CLI = "..."`
+redirecionaria o construtor "fixo", e o §19 põe config mutável pós-inicialização dentro
+do modelo de ameaça. Há teste que reatribui os dois atributos e mostra que o filho certo
+roda de todo jeito.
+
+E `provenance_valid()` confere **os dois elos** — candidato emitido *e* ingresso ainda
+emitido. Conferir só o segundo era o furo: um candidato montado à mão em volta de um
+ingresso genuíno passava por ele.
+
+### O que mais apareceu ao medir
+
+O construtor puro fazia `d.provider as string` e seguia. Material sem o campo produzia
+um plano com a palavra `undefined` onde Stefano leria o modelo, e o `as string` calava
+o compilador. Pior: `tool_count` e `stream` eram **fixados** em 0/false, então material
+anunciando três ferramentas era aceito e exibido como zero — o texto passava a discordar
+do material que o originou. Fixar o valor certo não basta; o material que discorda tem
+de ser recusado.
+
+E a conferência do plano devolvido pelo filho olhava **cinco** campos. Os cinco que eu
+tinha pensado em conferir; `provider` e `model` não estavam entre eles, e são
+exatamente os dois que dizem o que vai rodar. Agora são os 23.
+
+### Um `sha256` que um teste antigo pegou
+
+Escrevi `_digere` com `hashlib.sha256` para o instantâneo de emissão, e
+`test_4b_o_modulo_de_producao_nao_hasheia_por_conta_propria` derrubou — corretamente.
+Trocado por tupla comparada por igualdade: sem colisão para discutir, sem segunda
+verdade sobre os mesmos bytes, e é o que o adaptador já fazia com o ingresso.
+
+### O limite, dito
+
+Um filho substituído só controla um valor que o Python não pode conferir sem
+reimplementar `liveExecutionFingerprint`: a própria impressão. Se ele devolvesse uma
+hexadecimal auto-consistente mas errada, o Python aceitaria, o texto sairia, e a **d1
+recusaria na hora de autorizar** — porque ela recalcula a impressão a partir da spec.
+A falha é execução recusada, não execução indevida. Está fechado o que dá para fechar
+deste lado, e o que sobra está dito.
+
+`__closure__` continua alcançando as células. Introspecção de interpretador, fora do
+§19. Não afirmo mais do que isso.
+
+---
+
+## §37.5 — D2E-A4-R5: o furo era a porta que provava não haver furo
+
+O Codex nomeou isto antes de a revisão ser cortada, e eu reproduzi:
+
+```python
+_, _, constroi, _, renderiza = planning._monta_producao(
+    lambda _: True, planning.NODE_RUNTIME, planning.CANONICAL_PLAN_CLI)
+renderiza(constroi(ingresso_construido_a_mao))
+```
+
+Três linhas, API pública de módulo, e saía `AUTORIZAÇÃO DE EXECUÇÃO VIVA — PRODUÇÃO
+TELEGRAM` com `sender_user_id 999999999` e um texto que nunca passou pelo Telegram. A
+via real (`build_production_candidate`) recusava corretamente o mesmo ingresso. O que
+passava era a fábrica.
+
+### A origem
+
+Eu abri o buraco na r4, de propósito. Passei o verificador de procedência como
+parâmetro de `_monta_producao` para que o `test_R4_E` pudesse desligá-lo e **provar**
+que `provenance_valid()` é exigida — a exigência que a própria r4 tinha vindo criar.
+O ponto de injeção que tornava a exigência testável era, ele mesmo, o bypass.
+
+A forma vale a pena guardar: **um verificador de procedência responde "sim", e quem
+escolhe o verificador escolhe a resposta.** Não é o caso de todo verificador. A
+conferência de plano contra material só recusa — não existe entrada que a faça
+conceder nada — e por isso ela pôde ser extraída para o nível de módulo e ser chamada
+diretamente pelos testes. A distinção entre as duas é a lição da r5.
+
+### Por que o adaptador tinha a mesma forma e era inofensivo
+
+`_monta_emissao()` também é alcançável. Mas ele **não recebe verificador**: uma emissão
+nova nasce com registro vazio, e a classe que ela devolve continua exigindo a
+autorização nativa do Hermes para emitir. A diferença entre as duas fábricas era
+exatamente o parâmetro que eu havia acrescentado — e eu tinha copiado o padrão sem
+copiar a propriedade que fazia o padrão funcionar.
+
+### A correção
+
+Não renomear. `_liga_producao` liga as dependências reais e **sai do namespace**:
+
+```python
+(...) = _liga_producao(verify_issued, NODE_RUNTIME, CANONICAL_PLAN_CLI,
+                       confere_plano_contra_material)
+del _liga_producao
+```
+
+Sobram cinco callables com as dependências presas em célula. Não há mais fábrica para
+chamar, então não há mais o que escolher. Sondagem própria: seis atributos de módulo
+reatribuídos ao mesmo tempo — `verify_issued` nos dois módulos, `verify_candidate_issued`,
+os dois caminhos do filho e a conferência de plano — e nenhuma rota produz texto de
+produção a partir de ingresso construído à mão; a via legítima continua funcionando
+com o namespace sujo.
+
+### O portão que existia e não podia ser demonstrado
+
+Ao trocar o teste, apareceu algo que a r4 tinha escondido de si mesma. Os dois portões
+do renderizador eram conferidos na ordem *candidato, depois ingresso* — e como o
+instantâneo do candidato inclui o conteúdo do ingresso, qualquer alteração no ingresso
+quebrava os dois de uma vez e a recusa vinha **sempre** do primeiro. O portão do
+ingresso era defesa em profundidade que nenhum teste podia alcançar.
+
+Invertida a ordem, cada um é observável sozinho:
+
+* só o portão do candidato falha → candidato montado à mão em volta de ingresso emitido
+  → `CANDIDATE_NOT_ISSUED`;
+* só o portão do ingresso falha → `object.__setattr__` no ingresso emitido quebra o
+  instantâneo do adaptador → `CANDIDATE_PROVENANCE_INVALID`.
+
+O segundo caso também diz uma coisa boa: mutar um ingresso emitido **tira** a
+procedência, não forja nada. Falha fechada.
+
+### O que o teste passou a medir
+
+O `test_R4_6` provava a conferência do plano montando uma via apontada para um filho
+falso — usando a fábrica, isto é, o defeito. Agora chama
+`confere_plano_contra_material` direto e cobre **os 23 campos, um a um**, mais ausência
+de campo e a relação da d1. Cobertura maior por um caminho que não concede nada.
+
+E `test_R5_1` é estrutural: nenhuma callable definida neste módulo tem parâmetro cujo
+nome contenha `verif`, `valida`, `provenance`, `issuer`, `trusted`, `callback` ou
+`authoriz`. Se eu reabrir a porta com outro nome de função, o teste ainda pega.

@@ -166,6 +166,48 @@ REASONING_OMITTED_BY_DECISION = True
 USER_PAYLOAD_HASH_DOMAIN = "hermes_codex_user_payload/v1"
 REQUEST_HASH_DOMAIN = "hermes_codex_request/v1"
 
+#: ─── 3.1d-D2E-A2: os dois produtores que NÃO existiam ────────────────────────
+#:
+#: `read_model_fingerprint` e `runtime_binding_fingerprint` são campos de
+#: `LiveExecutionSpecV1`, e até aqui eram ENTRADAS: a d1 conferia que eram texto não
+#: vazio e os copiava. Nada os produzia — nos testes eram `"x"*64` e `"b"*64`. Um
+#: `execution_fingerprint` derivado de placeholders não descreve execução nenhuma, e
+#: Stefano não pode aprovar o que não foi calculado.
+#:
+#: Domínio separado por valor, como os dois de cima: dois hashes do mesmo conteúdo em
+#: papéis diferentes não podem colidir.
+READ_MODEL_FINGERPRINT_DOMAIN = "hermes_codex_read_model/v1"
+RUNTIME_BINDING_FINGERPRINT_DOMAIN = "hermes_codex_runtime_binding/v1"
+
+#: Os campos de IDENTIDADE do vínculo que entram no fingerprint, em ordem FIXA.
+#:
+#: A credencial fica FORA: um fingerprint que mudasse a cada rotação de `api_key`
+#: vazaria a rotação para dentro de um hash que Stefano aprova e que aparece em texto
+#: de autorização. Identidade do runtime não é segredo do runtime.
+#:
+#: ─── O que a r1 corrigiu, e por quê ──────────────────────────────────────────
+#:
+#: A primeira versão deixou o `base_url` de fora junto com a credencial, e isso estava
+#: errado. O endpoint NÃO é segredo — é destino. Com ele fora, o plano aprovado com o
+#: endpoint A continuava casando depois que a configuração do Hermes passava para o
+#: endpoint B: mesmo `runtime_binding_fingerprint`, mesmo `execution_fingerprint`,
+#: `plansMatch` aceitando, e a requisição — com a credencial — saindo para B.
+#:
+#: Eu havia agrupado "endpoint" e "credencial" como se fossem a mesma categoria. Não
+#: são: um é para onde a execução vai, o outro é com o que ela se autentica. Trocar o
+#: destino muda a execução que Stefano aprovou; rodar a chave, não.
+RUNTIME_BINDING_IDENTITY_FIELDS = (
+    "hermes_version", "acp_version", "provider", "model", "api_mode", "hermes_home",
+)
+
+#: O endpoint entra pela IDENTIDADE dele, não pelo valor.
+#:
+#: `base_url_fingerprint()` já existe no vínculo e já hasheia exatamente o `base_url`
+#: que `to_client_kwargs()` entrega ao cliente. Reusá-lo prova que o destino é AQUELE
+#: sem transportar host, porta ou caminho para dentro de relatório e auditoria —
+#: hostname em log é topologia interna de graça para quem lê o log.
+RUNTIME_BINDING_ENDPOINT_COMPONENT = "base_url_fingerprint"
+
 
 def governed_user_payload(read_model: Mapping[str, Any]) -> str:
     """
@@ -185,6 +227,56 @@ def _hash(dominio: str, texto: str) -> str:
 
 def user_payload_hash(payload: str) -> str:
     return _hash(USER_PAYLOAD_HASH_DOMAIN, payload)
+
+
+def read_model_fingerprint(read_model: Mapping[str, Any]) -> str:
+    """
+    O compromisso com o READ MODEL exato que alimentará a execução.
+
+    Reusa `governed_user_payload` de propósito: é a serialização determinística que já
+    existe e que o pedido governado usa. Escrever um segundo `json.dumps` aqui criaria
+    duas verdades sobre "os mesmos bytes", e é exatamente o defeito que esta fase veio
+    fechar.
+    """
+    return _hash(READ_MODEL_FINGERPRINT_DOMAIN, governed_user_payload(read_model))
+
+
+def runtime_binding_fingerprint(binding: Any) -> str:
+    """
+    O compromisso com a IDENTIDADE do runtime aprovado — nunca com seu segredo.
+
+    Lê apenas `RUNTIME_BINDING_IDENTITY_FIELDS`, em ordem fixa, mais a IDENTIDADE do
+    endpoint. Iterar sobre atributos deixaria a ordem de declaração influenciar a
+    identidade; incluir a credencial faria o hash mudar a cada rotação; e deixar o
+    endpoint de fora — o defeito da primeira versão — permitia trocar o destino da
+    requisição sem invalidar a aprovação.
+    """
+    partes = []
+    for campo in RUNTIME_BINDING_IDENTITY_FIELDS:
+        valor = getattr(binding, campo, None)
+        if not isinstance(valor, str) or not valor:
+            raise CodexRefusal(
+                CodexDefect.RUNTIME_IDENTITY_MISMATCH, f"vínculo sem {campo}"
+            )
+        partes.append(f"{campo}={valor}")
+
+    # O endpoint EFETIVO, pela função canônica do próprio vínculo. Não hasheio a URL
+    # de novo aqui: um segundo algoritmo sobre o mesmo valor seria a segunda verdade
+    # que esta fase inteira veio proibir.
+    identidade = getattr(binding, RUNTIME_BINDING_ENDPOINT_COMPONENT, None)
+    if not callable(identidade):
+        raise CodexRefusal(
+            CodexDefect.RUNTIME_IDENTITY_MISMATCH,
+            f"vínculo sem {RUNTIME_BINDING_ENDPOINT_COMPONENT}",
+        )
+    endpoint = identidade()
+    if not isinstance(endpoint, str) or not endpoint:
+        raise CodexRefusal(
+            CodexDefect.RUNTIME_IDENTITY_MISMATCH, "identidade de endpoint ausente"
+        )
+    partes.append(f"{RUNTIME_BINDING_ENDPOINT_COMPONENT}={endpoint}")
+
+    return _hash(RUNTIME_BINDING_FINGERPRINT_DOMAIN, "\n".join(partes))
 
 
 def build_governed_request(
