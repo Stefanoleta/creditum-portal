@@ -4209,3 +4209,323 @@ de campo e a relação da d1. Cobertura maior por um caminho que não concede na
 E `test_R5_1` é estrutural: nenhuma callable definida neste módulo tem parâmetro cujo
 nome contenha `verif`, `valida`, `provenance`, `issuer`, `trusted`, `callback` ou
 `authoriz`. Se eu reabrir a porta com outro nome de função, o teste ainda pega.
+
+---
+
+## §38 — D2E-A6: um plugin que não carrega não recusa nada
+
+A a5 descobriu o contrato de plugin do Hermes 0.20.4 e, junto, o bloqueio: **não existe
+mecanismo de plugin obrigatório**. Se o plugin governado estiver ausente, malformado,
+não descoberto ou não habilitado, o Telegram nativo assume — o que faz lote de
+mensagens e não emite ingresso — e assume em silêncio.
+
+Isso invalida uma suposição que atravessou A4 inteira sem ser dita. A `compat` prova
+compatibilidade no momento de registrar, e eu tratei isso como suficiente. Mas ela só
+roda se o plugin governado for carregado, e **um plugin que não carrega não recusa
+nada**. Todas as cinco rodadas de A4 defenderam o caminho de dentro do plugin; nenhuma
+defendeu a existência do plugin.
+
+### A autoridade não pode morar no objeto verificado
+
+O `plugin.yaml` não declara os próprios hashes de confiança. Se declarasse, quem
+alterasse o plugin alteraria junto a lista que o valida, e a conferência viraria
+tautologia — arquivo confere consigo mesmo. Então a autoridade nasce num **manifesto de
+implantação** gerado a partir da árvore aprovada, fora do plugin, e o envelope de
+partida fixa o SHA-256 desse manifesto.
+
+Três níveis, cada um fixando o de baixo: envelope → manifesto → árvore.
+
+### Falha fechada inclui "não consegui conferir"
+
+Esta máquina não tem PyYAML nem pip — medido, 3.9.6. A Hostinger tem, porque o Hermes
+lê `config.yaml`. Sem parser, o portão levanta `YAML_PARSER_UNAVAILABLE` e **recusa**.
+A alternativa tentadora era escrever um parser de subconjunto de YAML, e ela é pior por
+duas razões: seria um segundo entendimento de semântica de YAML, e seria escrever um
+parser para uma decisão de segurança.
+
+O mesmo vale para a precedência. A a5 provou a ordem `embutido < usuário < projeto <
+entrypoint`, e o plugin governado é de usuário — logo plugin de projeto e entry point o
+superam. O caminho de plugin de projeto da 0.20.4 **não está descoberto**, então o
+manifesto tem de declarar as fontes a inspecionar, e manifesto sem fontes é
+`PRECEDENCE_SOURCES_UNDECLARED`. O portão não pode afirmar que não há concorrente; ele
+só pode dizer que não olhou, e dizer isso e subir seria o defeito que a fase veio
+fechar. O construtor de manifesto se recusa a gerar sem `--precedence-path`.
+
+Para entry points, varro **todos os grupos** em vez do grupo exato do Hermes — que
+também não está descoberto. Nome igual à chave governada é recusa em qualquer grupo.
+Mais largo do que o necessário, e largo na direção certa.
+
+### Dois erros meus que os testes pegaram
+
+**A conferência de tamanho curto-circuitava o hash.** `if tamanho != esperado:
+continue` antes do `_sha256`, então só arquivo de tamanho idêntico chegava à
+conferência que importa. Recusava nos dois casos — mas descrevia o defeito errado, e um
+portão que nomeia mal o que viu é um portão que se depura mal.
+
+**Décimo segundo falso positivo de texto-contra-estrutura, e o primeiro que eu plantei
+num teste de segurança meu.** O teste que provava "o verificador não abre rede" baniu
+`get`, `post` e `run` por nome nu — e acusou `dados.get("plugin_key")`, acesso a
+dicionário. O invariante real é mais simples de dizer e mais difícil de burlar: o
+módulo **não importa** `urllib`, `socket`, `http`, `subprocess`, `shutil`, `tempfile`.
+Não há como chamar o que não se importa.
+
+### A lição da r5, aplicada antes de custar uma rodada
+
+`verifica()` tinha `distribuicoes_do_hermes` como parâmetro, para os testes. Deixar o
+chamador escolher onde a versão é procurada é deixá-lo escolher qual versão é
+encontrada. Removido antes de qualquer teste ser escrito, e há teste estrutural que
+recusa parâmetro cujo nome contenha `verif`, `valida`, `distribuicoes`, `plugin_root`
+ou `chave`.
+
+### O que continua não descoberto
+
+**Como `hermes gateway run` é lançado na Hostinger.** O `deploy-r6r6-precall.sh` diz na
+linha 32, explicitamente, *"não reinicia Hermes/gateway"* — a superfície de implantação
+estabelecida nunca tocou no arranque. O artefato D2D encena runtime e roda pré-voo; não
+lança nada. Nenhum systemd, docker, supervisor ou entrypoint foi observado por este
+repositório.
+
+Então o envelope `prestart-gate.sh` é **contrato, não implantação**. Ele existe, é
+testado, e não tem onde ser ligado. Isso não é limitação do portão: é a próxima
+descoberta.
+
+---
+
+## §38.1 — D2E-A6-R1: `-B` impede escrever, não impede ler
+
+O Codex bloqueou a A6 com um achado, e ele está certo.
+
+`entradas_reais` — então `_arvore_real` — pulava `__pycache__` e `*.pyc`, e o construtor
+de manifesto pulava os mesmos. **As duas exclusões casavam**, então a árvore fechada
+"conferia" com bytecode dentro dela. E havia teste,
+`test_I3_pycache_e_pyc_nao_contam_como_inesperados`, afirmando que não contavam.
+
+Aquele teste não media higiene. Ele **codificava o defeito como regra** — o mesmo erro
+que a A2-R1 já tinha me custado, quando escrevi um teste afirmando que dois vínculos
+com endpoints diferentes produzem o mesmo fingerprint.
+
+A frase que fecha o raciocínio, e que eu não tinha feito: `-B` e
+`PYTHONDONTWRITEBYTECODE=1` impedem **escrever** bytecode. Não impedem **ler**. Um
+`.pyc` já presente é carregável. Eu havia fechado o pacote contra código-fonte e
+deixado aberto contra o código que o interpretador de fato executa — e o teste vizinho
+provava exatamente isso para `.py`, em qualquer profundidade.
+
+### Duas exclusões, não uma
+
+Ao remover o filtro apareceu a segunda: a enumeração listava só **arquivos**. Um
+`__pycache__/` vazio passaria, porque não há arquivo nele. O invariante é sobre
+**entradas do sistema de arquivos**, não sobre conteúdo executável, então a enumeração
+passou a listar diretórios também, e os declarados são os que os arquivos aprovados
+implicam.
+
+### Onde a recusa mora
+
+Pular na geração e recusar na conferência seria pior que o defeito: geraria manifesto
+que nunca passa. Então o construtor **recusa gerar** quando a árvore a aprovar contém
+bytecode — e não limpa a árvore por conta própria. Apagar arquivo de uma árvore que
+alguém mandou aprovar é decidir no lugar de quem pediu.
+
+### Uma terceira fuga, achada ao cumprir o §11
+
+O §11 pedia para revisar a enumeração por outras fugas, e havia uma que não é exclusão:
+**subdiretório symlinkado**. A raiz era conferida e cada arquivo declarado também, mas
+`creditum_hermes_telegram/compat.py` não é symlink quando o symlink é a pasta que o
+contém. O hash seguia sendo conferido através do link — o conteúdo estava preso, o
+**lugar** dele não. Agora nenhuma entrada sob a raiz pode ser symlink, em nenhuma
+profundidade, declarada ou não.
+
+### O teste que impede a volta
+
+`test_R1_11` é estrutural: falha se qualquer filtro por nome reaparecer em
+`entradas_reais`. Foi o casamento de dois filtros que produziu o defeito, e um filtro
+sozinho já é suficiente para produzi-lo de novo.
+
+---
+
+## §38.2 — D2E-A6-R2: eu troquei a direção do filtro e mantive a forma
+
+Dois bloqueios consecutivos, e a mesma raiz nas duas vezes. Vale escrever a raiz antes
+da correção.
+
+**A6** tinha lista de **exclusão** — `__pycache__` e `.pyc` eram pulados — e passava o
+que não estava nela.
+
+**A6-R1** "consertou" virando lista de **negação** — `.pyc` e `.pyo` eram recusados — e
+passava o que não estava nela. `.so`, `.pyd`, `.pyz` são carregáveis pelo interpretador
+tão bem quanto `.pyc`, e entravam em `plugin_files` com hash e tudo. Um
+`payload.cpython-311-x86_64-linux-gnu.so` era **aprovado** pelo verificador de árvore
+fechada, porque tinha sido declarado.
+
+Eu li o achado da A6 como "faltou `.pyo` na lista" quando ele era "a lista está do lado
+errado". Corrigi o conteúdo do filtro e não a sua forma.
+
+### A diferença que importa
+
+Enumerar o proibido **depende de eu adivinhar o próximo formato executável**. Enumerar o
+permitido não depende de nada: formato novo é bloqueio, não passagem. É a mesma
+assimetria que a D1 estabeleceu para os campos de spec e que eu apliquei em cinco
+rodadas de A4 ao material canônico — e não apliquei aqui.
+
+### A política, dita inteira
+
+```
+plugin.yaml na raiz;
+arquivos .py com nome de identificador Python na raiz ou diretamente
+dentro de creditum_hermes_telegram/.
+Nada mais.
+```
+
+Sete entradas na árvore real, e a inspeção que o §1 pediu mostrou que nada além disso é
+necessário: `creditum_hermes_reasoning` e `creditum_hermes_precall` são instalados no
+interpretador de produção pela D2D, e duplicá-los no plugin criaria uma segunda cópia
+com hash próprio.
+
+### Por que o radical tem de ser identificador
+
+`payload.so.py` termina em `.py` e passaria por sufixo puro. O radical `payload.so` não
+é identificador Python, então não passa — e um `.py` que não pode ser importado não tem
+o que fazer dentro de um pacote. Isso também recusa `meu-modulo.py`.
+
+### O teste que impede a volta da forma errada
+
+`test_R2_14` é estrutural sobre `arquivo_aprovado`: falha se qualquer `not in` decidir
+aprovação, se existir `return True` constante sem condição, ou se o último retorno da
+função não for a recusa. Não mede o conteúdo da lista — mede a **direção da decisão**,
+que é o que errei duas vezes.
+
+### O que a R1 deixou correto e continua valendo
+
+Enumeração de árvore sem filtro por nome, diretórios contando como entradas, symlink
+recusado em qualquer profundidade, e o construtor recusando sem limpar. O §13 pedia
+preservação e está preservado; o construtor agora também recusa symlink por conta
+própria, antes de gerar.
+
+---
+
+## §38.3 — D2E-A6-R3: ler duas vezes o que precisa ser lido uma vez
+
+Terceiro bloqueio da A6, e o primeiro cuja raiz é diferente das duas anteriores.
+
+A allowlist da R2 estava correta — o Codex confirmou. O defeito era **onde** ela era
+aplicada: eu validava numa passada de `os.walk` e hasheava em **outra**. Um arquivo que
+aparecesse entre as duas entrava em `plugin_files` com hash de aprovado sem
+`arquivo_aprovado` nunca ter sido chamado sobre ele. Ele provou executando: fez
+`package.json` aparecer só na segunda travessia, e o construtor retornou 0 com o arquivo
+dentro do manifesto.
+
+`ÁRVORE VALIDADA != ÁRVORE HASHEADA`.
+
+### A família do erro já estava escrita nesta fase
+
+Do `ingress.py`, sobre a captura do evento admitido:
+
+> *Ler duas vezes uma propriedade que pode ser um `property` do chamador devolveria
+> valores diferentes entre a validação e o armazenamento — a janela que a d1-R1 fechou.*
+
+Lá era campo de evento. Aqui é árvore de arquivos. Eu tinha o princípio escrito no
+repositório, num módulo que escrevi, e não o apliquei no arquivo ao lado.
+
+### Uma travessia, e o descritor que não se reabre
+
+`percorre_e_aprova` valida, aprova e hasheia na mesma iteração. A leitura usa
+`os.open(..., O_RDONLY | O_NOFOLLOW)` e `os.fstat` **no mesmo descritor** — não reabre
+por nome, porque reabrir por nome é exatamente o que permite trocar o arquivo entre a
+aprovação e o uso. `O_NOFOLLOW` faz o kernel recusar symlink no próprio `open`, antes de
+qualquer byte.
+
+`ArquivoAprovado` guarda o resultado, não o caminho. Não há o que reabrir depois.
+
+### Consertar sem criar o defeito silencioso
+
+Travessia única resolve *"arquivo novo é aprovado"*. Não resolve *"arquivo novo fica na
+árvore e o manifesto sai dizendo que descreve a árvore inteira"* — e trocar o primeiro
+pelo segundo seria trocar um defeito por outro mais difícil de ver. O §7 do brief nomeia
+isso, e é uma boa regra geral: a correção que produz sucesso silencioso não é correção.
+
+Então há uma conferência de **deriva** antes de escrever: a árvore de agora tem de ter
+exatamente as entradas aprovadas, e cada arquivo aprovado tem de continuar com o mesmo
+hash. Ela **só recusa** — não alimenta `plugin_files`, e há teste estrutural provando
+que `arquivos` é montado só a partir de `aprovados`.
+
+Conteúdo é reconferido por **hash**, não por metadado: `mtime` igual com bytes
+diferentes é possível — há teste que restaura o `mtime` com `os.utime` e mantém o
+tamanho — e hash igual com bytes diferentes, não.
+
+### O resíduo, dito
+
+Entre a última releitura e o `open(out, "w")` existe uma janela em que a árvore pode
+mudar sem ser notada. Fechá-la exigiria manter descritores abertos de toda a árvore
+durante a escrita, ou um `renameat2`/snapshot que o sistema de arquivos não oferece
+portavelmente. O alvo declarado é mutação ordinária durante a execução do construtor,
+e essa janela é de milissegundos entre duas operações locais. Não afirmo mais que isso.
+
+### Uma asserção minha estava errada, não o código
+
+`test_R3_14b` exigia que **todo** o corpo do ramo reprovado fosse `continue`, e ele é
+`recusas.append(motivo)` seguido de `continue`. O teste falhou, e a correção foi no
+teste: o que importa é que o último comando abandone a iteração e que o ramo não leia o
+arquivo. Registro porque a distinção entre "o código está errado" e "eu escrevi a
+asserção errada" é a que decide onde mexer.
+
+---
+
+## §38.4 — D2E-A6-R4: apliquei na função, não no módulo
+
+Quarto bloqueio da A6, e é o **mesmo defeito da R3** — no lugar que eu não olhei ao
+consertá-lo.
+
+Fechei a releitura por caminho em `percorre_e_aprova` e deixei intacta, trinta linhas
+abaixo, no `main`:
+
+```python
+with open(compat, encoding="utf-8") as fh:
+    manifesto["adapter_compat_id"] = compat_id_por_ast(fh.read())
+```
+
+`open` por nome, depois da aprovação. E o campo é justamente o `adapter_compat_id` — a
+identidade que amarra o plugin implantado ao adaptador que a A4 revisou.
+
+### Por que a conferência de deriva não via
+
+A janela é A→B→A. `compat.py` é aprovado e hasheado como A; B fica no caminho durante a
+segunda leitura; A volta antes do `confere_deriva`. A deriva compara com o estado
+**restaurado** e não encontra nada. O manifesto sai com `plugin_files` descrevendo A e
+`adapter_compat_id` derivado de B, e o construtor retorna 0.
+
+Uma conferência posterior não detecta o que existiu apenas no meio. Só a leitura única
+detecta — porque não há meio.
+
+### A correção
+
+`le_e_hasheia` retém os bytes do arquivo cujo conteúdo o manifesto usa depois, e a
+retenção é decidida por comparação com **constante** (`rel == COMPAT_RELATIVE`), não por
+parâmetro: quem chama não escolhe de qual arquivo os bytes ficam guardados. O
+`adapter_compat_id` sai daqueles bytes, decodificados em UTF-8 **estrito e explícito** —
+decodificação de plataforma faria o mesmo byte produzir identidades diferentes em
+máquinas diferentes.
+
+### A auditoria que o §12 pediu
+
+Dezenove campos no manifesto. Dezessete são constante ou argumento de linha de comando;
+`plugin_files` e `file_count` vêm dos registros aprovados; `adapter_compat_id` era o
+único derivado de arquivo governado, e era o defeito. Nenhum outro campo tem a mesma
+forma — e há teste estrutural que percorre o dicionário do manifesto e falha se algum
+campo passar a referenciar a árvore.
+
+### A frase que eu tinha acabado de escrever
+
+Na §38.3, sobre a R3:
+
+> *Eu tinha o princípio documentado no repositório, num módulo que escrevi, e não o
+> apliquei no arquivo ao lado.*
+
+Aqui eu o apliquei na função e não no módulo. A escala do descuido diminuiu; a forma
+não. Vale registrar sem consolo: escrever a lição não é o mesmo que tê-la aprendido, e
+o teste que a mede é o único que prova qual dos dois aconteceu.
+
+### O placar honesto da A6
+
+Quatro achados, quatro bloqueios, e **nenhum dos meus testes pegou nenhum**. Os 92
+testes de A6 medem o que eu pensei em medir. As quatro coisas que passaram eram
+exatamente as que eu não pensei — inclusive esta, que eu tinha descrito em prosa como a
+lição da rodada anterior.
