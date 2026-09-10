@@ -23,7 +23,7 @@ from creditum_hermes_telegram.ingress import GovernedTelegramIngressV1  # noqa: 
 from creditum_hermes_telegram.planning import PlanningRefusal, plan_from_admitted_ingress
 
 from .test_d2e_telegram_adapter import (
-    ContextoFalso, MensagemFalsa, desinstala_hermes, evento, instala_hermes,
+    ContextoFalso, MensagemFalsa, desinstala_hermes, entrega, evento, instala_hermes,
 )
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -64,15 +64,11 @@ class ViaDeProducao(unittest.TestCase):
 
     def _adaptador(self):
         cls = register(ContextoFalso(), self.capturados.append)
-        inst = cls.__new__(cls)
-        inst.allow = {"123456789"}
-        inst.enfileirados = []
-        inst.entregues = []
-        return inst
+        return cls._creditum_adapter_factory(object())
 
     def _planeja(self, **ev):
         a = self._adaptador()
-        a._handle_text_message(MensagemFalsa("123456789", evento(**ev)))
+        entrega(a, MensagemFalsa("123456789", evento(**ev)))
         self.assertEqual(len(self.capturados), 1)
         return plan_from_admitted_ingress(self.capturados[-1])
 
@@ -137,7 +133,7 @@ class ViaDeProducao(unittest.TestCase):
             update_id: str = "1"
             text: str = TEXTO
             telegram_timestamp: str = "2026-09-02T21:06:00Z"
-            admission_evidence: str = "hermes_telegram_post_allowlist_enqueue_intercept/v1"
+            admission_evidence: str = "hermes_telegram_registered_dispatch_post_allowlist_intercept/v2"
             hermes_version: str = "0.20.4"
             adapter_compat_id: str = compat.ADAPTER_COMPAT_ID
             source_message_count: int = 1
@@ -154,7 +150,7 @@ class ViaDeProducao(unittest.TestCase):
         """
         from dataclasses import replace
         a = self._adaptador()
-        a._handle_text_message(MensagemFalsa("123456789", evento()))
+        entrega(a, MensagemFalsa("123456789", evento()))
         real = self.capturados[-1]
         for campo, valor in (("admission_evidence", "eu-que-digo"),
                              ("hermes_version", "0.20.5"),
@@ -250,7 +246,7 @@ class ViaDeProducao(unittest.TestCase):
 
     def test_F_remetente_nao_autorizado_nao_chega_ao_planejamento(self) -> None:
         a = self._adaptador()
-        a._handle_text_message(MensagemFalsa("000000", evento()))
+        entrega(a, MensagemFalsa("000000", evento()))
         self.assertEqual(self.capturados, [])
 
 
@@ -268,7 +264,7 @@ class Proveniencia(ViaDeProducao):
 
     def _real(self) -> GovernedTelegramIngressV1:
         a = self._adaptador()
-        a._handle_text_message(MensagemFalsa("123456789", evento()))
+        entrega(a, MensagemFalsa("123456789", evento()))
         return self.capturados[-1]
 
     def test_A_dataclass_GENUINO_construido_a_mao_e_recusado(self) -> None:
@@ -315,20 +311,20 @@ class Proveniencia(ViaDeProducao):
         # Chamar `_handle_text_message` é permitido: ele atravessa a autorização
         # NATIVA, que o guarda provou dominante.
         a = self._adaptador()
-        a._handle_text_message(MensagemFalsa("000000", evento()))
+        entrega(a, MensagemFalsa("000000", evento()))
         self.assertEqual(self.capturados, [])
 
     def test_G_remetente_autorizado_emite_exatamente_um(self) -> None:
         a = self._adaptador()
-        a._handle_text_message(MensagemFalsa("123456789", evento()))
+        entrega(a, MensagemFalsa("123456789", evento()))
         self.assertEqual(len(self.capturados), 1)
         _, p = plan_from_admitted_ingress(self.capturados[0])
         self.assertTrue(p.execution_id.startswith("tg-"))
 
     def test_17_duas_rapidas_dao_DUAS_emissoes_e_dois_candidatos(self) -> None:
         a = self._adaptador()
-        a._handle_text_message(MensagemFalsa("123456789", evento("A", mid="1", uid=1)))
-        a._handle_text_message(MensagemFalsa("123456789", evento("B", mid="2", uid=2)))
+        entrega(a, MensagemFalsa("123456789", evento("A", mid="1", uid=1)))
+        entrega(a, MensagemFalsa("123456789", evento("B", mid="2", uid=2)))
         self.assertEqual(len(self.capturados), 2)
         pa = plan_from_admitted_ingress(self.capturados[0])[1]
         pb = plan_from_admitted_ingress(self.capturados[1])[1]
@@ -374,7 +370,7 @@ class PonteAteOTypeScript(ViaDeProducao):
     def _candidato(self, **ev):
         from creditum_hermes_telegram.planning import build_production_candidate
         a = self._adaptador()
-        a._handle_text_message(MensagemFalsa("123456789", evento(**ev)))
+        entrega(a, MensagemFalsa("123456789", evento(**ev)))
         return build_production_candidate(self.capturados[-1])
 
     def test_15_ponta_a_ponta_produz_o_plano_REAL(self) -> None:

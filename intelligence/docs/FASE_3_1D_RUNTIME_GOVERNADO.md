@@ -4529,3 +4529,1238 @@ Quatro achados, quatro bloqueios, e **nenhum dos meus testes pegou nenhum**. Os 
 testes de A6 medem o que eu pensei em medir. As quatro coisas que passaram eram
 exatamente as que eu não pensei — inclusive esta, que eu tinha descrito em prosa como a
 lição da rodada anterior.
+
+---
+
+## §39 — D2E-A8-R1: os artefatos de migração, e o que só o G3 ainda impede
+
+A a8-d1 fechou dois portões que a a8 tinha deixado abertos, e a r1 fechou o terceiro.
+Sobra **um**.
+
+### Cadeia de suprimento, medida em vez de suposta
+
+`hermes-agent 0.20.4`, instalado por `uv` em modo editável de `file:///opt/hermes-agent`,
+do commit `e624e9fde561e1add9388384012b295fde669ade`, com evidência em
+`.hermes_build_sha`. O `Dockerfile` reconstrói isso em duas etapas e recusa **por forma
+antes de qualquer rede**: 40 hex obrigatórios, `latest`/`main`/`master`/`HEAD` rejeitados
+por nome, `git rev-parse HEAD` comparado com o pedido, `sha256sum uv.lock` comparado com
+o esperado, e `uv sync --frozen` para não haver resolução nova.
+
+**Uma autoridade móvel escapou na minha primeira versão:**
+`COPY --from=ghcr.io/astral-sh/uv:latest`. `:latest` no arquivo que existe para proibir
+`:latest`. Agora é `ARG UV_VERSION` sem padrão, e há teste que percorre as diretivas
+recusando `:latest`, `:main` e `:master` em qualquer `FROM`, `COPY`, `RUN`, `ARG` ou
+`ADD` — ignorando o texto das mensagens de erro, que precisam citar o proibido para
+explicá-lo.
+
+### Ler duas vezes, de novo, e a lição pegou
+
+A primeira versão do `Dockerfile` lia a versão do Hermes com um `python -c` próprio. Era
+uma **segunda implementação** da leitura que `versao_do_hermes_instalado` já faz e já
+tem teste. Peguei antes do regate, o que é a primeira vez nesta fase que peguei um caso
+dessa família por conta própria — e a razão é que agora eu procuro por ela.
+
+### O livro-razão é estado de segurança
+
+O achado que a classificação da a8 expôs e que a a8-d1 confirmou:
+`/data/creditum_hermes_runtime/execution-ledger/v1` guarda os `execution_id` consumidos,
+e é o `mkdir` atômico dele que faz a reserva ser de uso único. **Subir a VPS sem ele
+permitiria reservar de novo uma execução já consumida** — reexecutar uma mensagem que já
+executou.
+
+`migrate-execution-ledger.py` compara `S1 == S2 == D`. Duas decisões merecem registro:
+
+**Diretórios entram no instantâneo.** `attempts/<chave>/` vazio **já é uma reserva**: o
+`mkdir` é a reserva, e o `reservation.json` vem depois. Um instantâneo que listasse só
+arquivos perderia exatamente as reservas em voo — e perder reserva é permitir repetição.
+
+**Instantâneo comparado basta, e não precisa travar a origem.** A semântica do
+livro-razão é create/append: nenhuma entrada muda de bytes depois de escrita. Se a
+origem ganhou atividade durante a cópia, `S1 != S2` e a migração recusa, descartando o
+destino parcial. Travar a origem travaria o Hermes de produção — e a ordem das etapas
+(poller parado primeiro) é que evita a deriva; a comparação é conferência.
+
+### `state.db`: `mode=ro` em vez de disciplina
+
+Abrir normal e "só não escrever" depende de eu não escrever. `file:...?mode=ro` faz o
+SQLite **recusar** — a diferença entre disciplina e garantia. O backup é pela API do
+SQLite, com `quick_check` e comparação de esquema no destino, e o SHA-256 da origem é
+reconferido para provar que ela não mudou. Nenhum `SELECT` em tabela de aplicação:
+mensagem e sessão não têm por onde vazar, nem por acidente.
+
+### A prova offline, e a inferência declarada como inferência
+
+`probe-plugin-winner.py` audita por AST e então executa `register(ctx)` com um contexto
+que **levanta** em qualquer método além de `register_platform`. Medido: 1 registro,
+0 outras chamadas, 0 instâncias construídas, 0 ingressos coletados.
+
+O que **não** é medido: que a chave do registro seja `telegram`. A `register()` da a4
+passa só a classe, e como o Hermes deriva a chave não foi observado. A classe governada
+é subclasse da nativa e herda o que ela expuser — isso é **inferência**, está dito como
+inferência no código e na saída, e não é afirmado como medição.
+
+### A casca do plugin não planeja
+
+O sumidouro de ingresso guarda e não deriva. Planejar ali faria uma mensagem do Telegram
+disparar derivação canônica automática, e automática é meio caminho para execução
+automática. Admissão de transporte e aprovação humana são dois portões desde a a4, e
+continuam sendo dois.
+
+### Três falsos positivos de texto numa rodada, todos meus, todos em teste
+
+O teste do SQL acusou o **docstring** que explica que o script não faz `SELECT`. O teste
+de literais acusou o docstring da sonda que documenta `gateway run` ao dizer que não o
+chama. E acusou a **lista de guarda** da sonda, que nomeia `start_polling` para
+proibi-lo — nomear a chamada proibida num guarda é o oposto de chamá-la.
+
+Os três viraram AST de chamada e import: o invariante real é *não importa rede, não
+chama efeito*, e não há como chamar o que não se importa. A lista de guarda passa a ser
+dado, não código.
+
+---
+
+## §39.1 — D2E-A8-R2: inferência num relatório de prova é o defeito
+
+A a8-r1 reportou `OFFLINE WINNER PROBE: PASS` e disse, à parte, que a chave `telegram`
+era **inferida** da herança. As duas frases estavam no mesmo relatório e ambas eram
+verdadeiras — e ainda assim aquilo era um defeito, porque **quem lê "PASS" não lê o
+rodapé**.
+
+Não é a inferência que está errada: a classe governada é subclasse da nativa e herda o
+que a nativa expuser, e isso segue sendo um raciocínio válido. O errado é uma inferência
+sustentando um veredito de prova.
+
+### O que a medição precisava, e o que esta máquina não tem
+
+Medido, não presumido: `hermes_cli`, `hermes_agent`, `hermes`, `gateway` e `plugins` são
+**todos ausentes**; nenhuma das quatro distribuições está instalada; `/opt/hermes-agent`
+e `/opt/venv` não existem. O registro não existe aqui, e o §2 proíbe rede enquanto o §8
+proíbe a Hostinger — as duas únicas formas de obtê-lo.
+
+Então a medição pedida **não é executável nesta máquina**, e dizer que foi seria pior
+que a inferência que a r1 cometeu.
+
+### A correção é estrutural, não de redação
+
+A sonda passou a **não ter como reportar PASS por inferência**:
+
+`medir_chave` localiza a entrada de registro **por conteúdo** — percorre o grafo de
+atributos do contexto até achar um mapeamento cujo valor seja a classe governada, ou a
+contenha — e devolve a chave sob a qual ela ficou. Buscar por conteúdo em vez de ler
+`ctx.registry` ou `ctx._platforms` é deliberado: como o Hermes nomeia o registro não foi
+observado, e chutar o nome do campo seria inventar API. Assim a medição funciona
+qualquer que seja o mecanismo de derivação, e o que se lê é o valor **armazenado**.
+
+Não achar é recusa. Achar duas chaves é recusa. E o veredito exige a distribuição
+**genuína** instalada, porque medir a chave contra um dublê mediria o dublê — a mesma
+circularidade que eu estaria cometendo se aceitasse o `ContextoFalso` como registro.
+
+Nesta máquina a sonda sai `3` com `KEY_NOT_MEASURABLE_HERE`, e diz o que continua
+provado: 1 registro, identidade governada, 0 adaptadores construídos, 0 contato com
+Telegram.
+
+### O controle negativo, e por que ele importa
+
+O §6 pedia prova de que a asserção depende do estado observado. Com o Hermes real
+simulado e a classe guardada sob `whatsapp`, a sonda sai `2` com
+`REGISTRY_KEY_UNEXPECTED`; com ela sob `telegram`, sai `0`. Os dois lados existem, então
+o resultado não é constante — que é exactamente o que um controle negativo tem de
+excluir.
+
+### Um teste da r1 ficou obsoleto, e isso é correto
+
+`test_A8R1_9` esperava `main() == 0`. Agora espera `3`, e mede à parte o que sobrevive à
+recusa: a identidade do vencedor. Expectativa obsoleta por mudança deliberada de
+veredito não é regressão — mas confundir as duas coisas seria, então fica registrado
+qual das duas foi.
+
+---
+
+## §39.2 — D2E-A8-R3: a chave não era derivada, era escolhida
+
+O staging genuíno do Hermes 0.20.4 foi reconstruído (commit
+`e624e9fde561e1add9388384012b295fde669ade`, `uv.lock`
+`8fd868b9…0fddec`, Python 3.13.15), e a sonda de registro finalmente rodou contra o
+Hermes de verdade em vez de contra um dublê.
+
+A pergunta da a8-r2 era *como* o Hermes deriva a chave do registro. A resposta medida:
+**ele não deriva.**
+
+```python
+# gateway/platform_registry.py:533
+entries[entry.name] = entry
+```
+
+A chave armazenada **é** o argumento `name` que o plugin passou, verbatim. Não há
+função de derivação, não há normalização, não há inferência de herança ou de nome de
+classe. O plugin embutido genuíno passa `name="telegram"` literal
+(`plugins/platforms/telegram/adapter.py:10867`).
+
+Isso reformula a premissa da r2. Eu fui medir uma derivação e descobri que quem
+escolhe `name` escolhe quem vence. Não havia inferência a corrigir: havia um argumento
+a passar, e a a4-r5 não passava nenhum.
+
+A sonda recusou antes de chegar lá, no portão de compatibilidade da própria a4:
+
+```
+CompatRefusal: NATIVE_ENQUEUE_CALLERS_UNEXPECTED: _handle_command,_handle_text_message
+```
+
+O guarda estava **certo**. Errado estava o contrato que ele certificava. Registrar e
+descobrir depois é o que essa fase inteira existe para evitar, e o guarda evitou.
+
+---
+
+## §40 — D2E-A4-R6: quatro suposições, e três que falhavam em silêncio
+
+A a4-r5 estava SHIP, CLOSED e FROZEN. O staging genuíno mostrou que ela não carregava.
+Quatro divergências, medidas — não auditadas por desconfiança.
+
+### F1 — o enfileiramento nativo tem DOIS chamadores
+
+`_enqueue_text_event` é chamado de `_handle_text_message` (`:9529`) **e** de
+`_handle_command` (`:9561`). O segundo roteia colagens de comando com
+`len(texto) >= _SPLIT_THRESHOLD` pelo mesmo pipeline de lote, para não órfãos as
+continuações que o Telegram divide.
+
+A capacidade da a4 cobria só o manipulador de texto. Consequência: um `/comando` longo
+**legítimo e autorizado** chegava à interceptação sem capacidade ativa e era
+**RECUSADO**. O único dos quatro que falhava alto.
+
+A r6 fixou o conjunto como **igualdade**, nos dois sentidos: um terceiro chamador
+recusa, e a remoção de um dos dois também. Contrato mudado é revisão governada, não
+aceitação por "sobrou só o que a gente já suportava".
+
+E a dominância da autorização é provada **para cada um** por AST, separadamente. O §2
+do brief proíbe inferir de um para o outro, e a proibição virou teste: só o portão do
+comando é invertido, e a recusa tem de nomear `_handle_command`.
+
+### F1b — os manipuladores recebem DOIS argumentos
+
+`async def _handle_text_message(self, update, context)`. A sobrescrita da r5 declarava
+`(self, message)`, e o python-telegram-bot chama com dois: `TypeError` na primeira
+mensagem real. Provado agora em runtime — aridade e natureza assíncrona.
+
+### F1c — `handle_message` é assíncrono, e a corrotina era descartada
+
+O pior dos quatro. A interceptação fazia:
+
+```python
+return self.handle_message(event)      # r5 — corrotina devolvida
+```
+
+de dentro de um método **síncrono** que o nativo chama **sem `await`**. A corrotina era
+criada e jogada fora. O ingresso governado ficava registrado, o sink era chamado, a
+procedência ficava impecável — e **a mensagem nunca chegava ao agente**.
+
+Sucesso silencioso: tudo o que a a4 mede diria PASS enquanto o usuário não recebia
+resposta. A r6 despacha pelo mesmo mecanismo do nativo — uma task no loop corrente,
+que é o que `_enqueue_text_event` nativo faz com seu próprio flush — e mantém
+referência forte enquanto pendente, porque uma task recolhida pelo coletor sumiria do
+mesmo jeito.
+
+### F2 — `register_platform(classe)` não é a API
+
+Genuína: `register_platform(name, label, adapter_factory, check_fn, ...)`, quatro
+obrigatórios. Medido: `TypeError: missing a required argument: 'label'`. E
+`adapter_factory` recebe `PlatformConfig` e devolve a **instância** — não é a classe
+como descritor implícito.
+
+A r6 prova a assinatura **antes** de chamar. Descobrir contrato por `TypeError` no meio
+de um registro é descobrir depois.
+
+Duas decisões que a correção obrigou:
+
+**A chave é uma constante governada, conferida contra o embutido.** Como a chave é
+escolhida (§39.2), `PLATFORM_NAME = "telegram"` é a escolha, e o guarda lê por AST o
+`name`/`label` que o plugin embutido registra e recusa na divergência. Sem isso,
+registraríamos *ao lado* do embutido em vez de *no lugar* dele, e "vencedor" seria
+coincidência.
+
+**Os campos operacionais são herdados, não reescritos.** Registrar sob `telegram`
+**desloca** a entrada embutida — o Hermes é last-writer-wins. Uma entrada nossa com só
+os quatro obrigatórios derrubaria entrega de cron, fiação de allowlist por env, config
+em yaml, envio autônomo e limite de mensagem. Em silêncio. Então o `register` embutido
+é executado com um contexto que só **grava**, e o resultado é a base da nossa entrada
+com `adapter_factory` trocada. Executá-lo é seguro porque o guarda prova antes que o
+corpo dele é **exatamente uma** chamada a `register_platform`.
+
+### F3 — o retorno era descartado, e ele pode ser `None`
+
+```python
+# hermes_cli/plugins.py:2842
+if current[0] is not entry or current[1] is not None:
+    return None
+```
+
+Registro que não venceu **retorna None**, não levanta. A r5 descartava o retorno: o
+plugin relatava sucesso e o vencedor era outro. A r6 recusa com
+`PLATFORM_REGISTRATION_NOT_WINNER`, e confere `key`, `kind` e `active` do handle —
+só o que a API expõe.
+
+### O compat id virou v2
+
+`creditum_telegram_adapter_compat/0.20.4/v1` certificava o contrato de um chamador,
+que o runtime refutou. Redefinir v1 faria toda evidência antiga descrever um contrato
+inexistente. `.../v2` é contrato novo, e o manifesto da a6 deriva o id dos bytes
+aprovados — regenerar já traz v2, sem tocar semântica da a6.
+
+### O que o registro genuíno mede agora
+
+```
+chaves no escopo         ['telegram']
+chave_armazenada         telegram          ← lida do PlatformRegistry real
+plugin_name              creditum-telegram-governed
+adapter_factory          register.<locals>.fabrica_governada
+fabrica_e_a_governada    True
+loader_diferido_restante False             ← nenhum concorrente em vigor
+```
+
+Registros de plugin são escopados por `HERMES_HOME`. Ler o escopo errado daria
+"nenhuma chave" com o registro intacto — um falso negativo que pareceria falha de
+produção. A sonda usa `registered_names()` e `snapshot_registration(nome, scope=)`, e
+**evita** `all_entries()`/`plugin_entries()`: os dois chamam `_resolve_all()`, que
+importaria os ~20 plugins de plataforma embarcados. Efeito colateral fabricado pela
+própria medição é efeito colateral.
+
+### A lição, e ela não é sobre Telegram
+
+**Um dublê que não é fiel não é um teste: é uma segunda opinião sobre a mesma
+suposição.** As 162 provas da a4 passavam. Passavam contra um dublê que eu escrevi a
+partir do mesmo entendimento que gerou o código — então concordavam por construção.
+Nenhuma quantidade delas encontraria F1, F1b, F1c ou F2, porque todas herdavam o erro.
+
+O que encontrou foi o runtime genuíno. E o que **conteve** o erro foi o guarda de
+compatibilidade recusar em vez de registrar: nenhuma das quatro divergências chegaria
+a produção em silêncio, porque a r5 já não carregava.
+
+A r5 não passa a ter passado. Ela é o portão local histórico, superado pela r6 quando
+o runtime genuíno existiu para medi-la.
+
+---
+
+## §40.1 — D2E-A4-R6A: um contêiner que se conserta sozinho não é o contêiner selado
+
+### O invariante
+
+> **Dependência de runtime é autoridade de tempo de IMPLANTAÇÃO, não autoridade de
+> reparo em runtime.**
+
+O runtime exato é construído e selado antes do deploy: commit fixado, `uv.lock` com
+SHA provado, versões críticas conferidas, hashes governados no manifesto. Dependência
+faltando em runtime é evidência de **imagem inválida**, **deriva** ou **implantação
+incompleta**. Evidência disso tem de causar **recusa**, não autorreparo.
+
+Um contêiner que instala o que falta deixou de ser o contêiner que foi selado — e a
+cadeia de suprimento passa a descrever outra coisa. Pior: passa a descrever algo que
+ninguém pode reproduzir, porque o que foi instalado depende de quando o processo subiu.
+
+### O que a r6 herdou sem querer
+
+A r6 herdava os campos operacionais do registro embutido de propósito: registrar sob
+`telegram` **desloca** a entrada embutida, e uma entrada com só os quatro campos
+obrigatórios derrubaria entrega de cron, allowlist por env, config em yaml e envio
+autônomo — em silêncio.
+
+Junto vinha `ensure_deps_fn=check_telegram_requirements`, que chama
+`tools.lazy_deps.ensure("platform.telegram", prompt=False)`: instalação de pacote no
+venv ativo, **sem prompt**, porque o gateway é não-interativo.
+
+Medido por AST sobre a fonte genuína, dos sete chamáveis herdados esse é o **único**
+que alcança um instalador:
+
+```
+adapter_factory        _build_adapter                limpo
+apply_yaml_config_fn   _apply_yaml_config            limpo
+check_fn               telegram_deps_present         limpo
+ensure_deps_fn         check_telegram_requirements   *** INSTALA *** [ensure, tools.lazy_deps]
+is_connected           _is_connected                 limpo
+setup_fn               interactive_setup             limpo
+standalone_sender_fn   _standalone_send              limpo
+```
+
+### A semântica genuína, lida antes de escolher
+
+`gateway/platform_registry.py:618`:
+
+```python
+deps_ok = bool(entry.check_fn())
+if not deps_ok and entry.ensure_deps_fn is not None:
+    deps_ok = bool(entry.ensure_deps_fn())        # ← o instalador
+if not deps_ok:
+    logger.warning("Platform '%s' requirements not met%s", label, hint)
+    return None                                   # ← adaptador NÃO é criado
+```
+
+E um segundo consumidor, `gateway/config.py:2716`, no passe de habilitação:
+
+```python
+if not deps_ok and entry.ensure_deps_fn is None:
+    continue                                      # ← não habilita a plataforma
+```
+
+### A escolha: `ensure_deps_fn=None`
+
+Não é contorno, é a representação genuína. O campo é `Optional`, e o comentário nativo
+define `None` como *"no auto-install; a False check_fn is then a hard block (correct
+for platforms with no optional deps)"*. Com `None`, o ramo do instalador **nem é
+entrado** — não há tentativa, nem sequer logada.
+
+Um "chamável de recusa governado" no lugar seria pior: o Hermes entraria no ramo,
+logaria `"dependencies missing — attempting install..."` — que seria **falso** — e
+chegaria ao mesmo `deps_ok=False`, com mais peças móveis. Descartado por evidência,
+não por gosto.
+
+Duas correções que a leitura obrigou:
+
+**`install_hint` foi substituída.** A embutida diz *"Run `hermes setup` to install
+Telegram support"*, e é o **próprio aviso do Hermes** que a imprime. Sob esta política
+isso é conselho errado saindo pela boca do runtime. A governada aponta para deriva de
+imagem e diz explicitamente para não instalar nada na máquina.
+
+**A recusa explícita mora na fábrica.** Com `ensure_deps_fn=None` o `create_adapter`
+já recusa antes de chamar a fábrica, então a checagem lá é redundante no caminho do
+Hermes — de propósito. O que ela acrescenta é a recusa **explícita** na fronteira
+governada, porque o outro consumidor (o passe de habilitação) apenas deixa de
+habilitar com um `logger.debug`: fechado, mas **quieto**. E a fábrica pode ser chamada
+direto, fora do `create_adapter`. O detector usado é o **mesmo** `check_fn` que a
+entrada registra — dois detectores dariam duas respostas possíveis, e valeria a última
+consultada.
+
+### O guarda que faltava: campo novo não se herda em silêncio
+
+A lição da a6 aplicada aqui. Herdar campos operacionais é certo; herdar um campo
+**novo**, que uma versão futura acrescente carregando autoridade que ninguém revisou,
+é o mesmo defeito com outra roupa. `CAMPOS_HERDAVEIS` é uma allowlist positiva, e
+campo desconhecido recusa com `BUNDLED_REGISTRATION_FIELD_UNKNOWN`.
+
+### Medido no Hermes genuíno
+
+```
+ensure_deps_fn na entrada    None
+check_fn                     telegram_deps_present (plugins.platforms.telegram.adapter)
+install_hint manda instalar? False
+
+§5 normal   check_fn() True  · 0 adaptadores · 0 violações
+§4 ausente  check_fn() False · create_adapter → None · 0 adaptadores
+            instalador tocado 0 · subprocessos 0 · sockets 0 · dns 0
+            TELEGRAM_AVAILABLE segue False (o instalador o viraria para True)
+TOTAL DE VIOLAÇÕES  0
+```
+
+Medido por **interceptação de chamada** — `tools.lazy_deps.ensure`, `subprocess.*`,
+`os.system/execv/spawnv`, `socket`, `getaddrinfo` levantam se tocados — e não por
+procurar a palavra "pip" em arquivo. O controle negativo existe dos dois lados: com a
+entrada **embutida**, o mesmo algoritmo instala e devolve um adaptador.
+
+### Um achado lateral que justifica uma regra antiga
+
+Ao provar o caminho normal eu construí o adaptador, e o guarda de socket disparou:
+`TelegramAdapter.__init__` **abre socket**. Não é defeito da política — é a razão
+empírica pela qual a prova governada de vencedor é por **identidade de entrada e
+fábrica**, nunca por construção. A regra da r6 §14 estava certa, e agora está medida.
+
+### O escopo do `compat id`, dito explicitamente
+
+`creditum_telegram_adapter_compat/0.20.4/v2` certifica o contrato de
+**compatibilidade** com o runtime nativo, e o `CompatibilityProof` registra
+exatamente isso: versão do Hermes, módulo e classe nativos, conjunto de chamadores do
+enfileiramento, limiar de divisão, chave e rótulo da plataforma.
+
+Ele **não** certifica a política de dependência da Creditum. Por isso a r6a preserva
+v2: nenhuma evidência selada com v2 se torna semanticamente falsa. Deixo o limite
+escrito para que uma rodada futura não precise redescobri-lo.
+
+---
+
+## §40.2 — D2E-A4-R6B: admissão é um direito de uso único, não autoridade ambiente
+
+O regate final da a4-r6 voltou BLOCK, e o achado era real. Reproduzi antes de corrigir.
+
+### O defeito
+
+`intercepta` verificava a capacidade e seguia — com a capacidade **ainda ativa** —
+para chamar o sink fornecido pelo chamador e para criar a task de entrega. Isso
+transformava um direito de admissão em **autoridade ambiente** para todo o
+processamento a jusante.
+
+Um sink que reentrasse no enfileiramento recebia procedência genuína. Reprodução
+local, uma única mensagem legítima:
+
+```
+sink reentrante ACEITO
+ISSUED    ['LEGIT','FORJADO','FORJADO','FORJADO', ... ]   ← até estourar a pilha
+DELIVERED ['FORJADO','FORJADO', ... ,'LEGIT']
+```
+
+Pior que o relatado: recursão até `RecursionError`, cunhando centenas de ingressos.
+
+### A frase que estava errada
+
+*"Está dentro de um manipulador nativo"* e *"esta é a mensagem admitida"* não são a
+mesma afirmação. A a4-r3 modelou a capacidade como **escopo** — verdadeira durante a
+execução do manipulador — quando o que ela precisa representar é **um direito sobre
+um evento**, gasto ao ser exercido.
+
+É a mesma família das rodadas anteriores: autoridade que sobrevive ao seu propósito.
+A d2b aprendeu que despacho mutável não carrega autoridade; a a4-r5, que quem escolhe
+o verificador escolhe a resposta; aqui, que autoridade com validade maior que o ato
+que ela autoriza vira autoridade de qualquer um que rode depois.
+
+### A correção
+
+A capacidade é **consumida na entrada**, antes de qualquer outra coisa:
+
+```python
+if contexto.get() is not capacidade:
+    raise IngressRefusal("INGRESS_OUTSIDE_NATIVE_ADMISSION")
+contexto.set(None)          # ← CONSOME
+```
+
+Três consequências, todas deliberadas:
+
+**Antes até do `capture_ingress`.** Se o evento tivesse uma propriedade com efeito
+colateral, nem ela alcançaria uma segunda emissão.
+
+**O sink roda em contexto limpo.** Código do chamador não herda direito de admissão.
+
+**A task copia contexto limpo.** `create_task` copia o contexto no momento da
+criação; criá-la depois do consumo é o que faz `handle_message` rodar sem
+autoridade. Criar antes daria à entrega exatamente o que acabáramos de tirar do sink.
+
+E o `finally` do envelope nativo faz `reset(token)`, que restaura o valor **anterior**
+à admissão — limpo. Restaurar limpo sobre consumido continua limpo; não há caminho
+que reative.
+
+### A precondição, medida
+
+O consumo só é seguro se o nativo enfileirar no máximo uma vez por invocação. Se uma
+versão futura enfileirasse duas, o consumo derrubaria a segunda **em silêncio** — e
+silêncio é o que esta fase persegue. Então virou prova:
+`NATIVE_ENQUEUE_NOT_SINGLE_PER_HANDLER`, medida em cada um dos dois manipuladores.
+
+### Provado onde, e o limite dito
+
+No runtime **genuíno** (CPython 3.13.15, `TelegramAdapter` genuína):
+
+```
+classe governada       CreditumGovernedTelegramAdapter | creditum_hermes_telegram.adapter
+enfileiramento DIRETO  RECUSADO: INGRESS_OUTSIDE_NATIVE_ADMISSION
+após consumo, no pai   None
+dentro da task         None          ← a task copia contexto limpo
+após o reset externo   None          ← o reset NÃO reativa
+```
+
+No **dublê fiel**: sink reentrante recusado, reentrância de dentro da task recusada,
+uma emissão por admissão, segundo enfileiramento na mesma admissão recusado, exceção
+não deixa a capacidade presa, e os dois caminhos nativos seguem passando.
+
+O limite dito em vez de encoberto: dirigir o manipulador nativo ponta a ponta no
+genuíno exigiria fornecer estado para oito métodos genuínos, e uma prova com oito
+stubs é um dublê com crachá de genuíno. O que é dependente do runtime — semântica de
+`ContextVar`/`create_task` na 3.13.15, e a classe governada sobre a nativa real —
+está provado lá; o resto está no dublê, e o relatório não mistura os dois.
+
+### O compat id
+
+`v2` certifica o contrato de **compatibilidade** com o runtime nativo. O
+`CompatibilityProof` registra versão, módulo e classe nativos, chamadores do
+enfileiramento, limiar, chave e rótulo — nada sobre o tempo de vida da capacidade,
+que é comportamento do adaptador governado e não da estrutura nativa.
+
+Nada que v2 afirmava foi mostrado falso pelo achado. A r6b **acrescenta** uma
+asserção sobre a mesma estrutura nativa (enfileiramento único por manipulador), o que
+torna v2 mais estrito, não mentiroso. Artefatos com bytes diferentes já são
+distinguidos pelo hash do manifesto da a6. v2 preservado.
+
+---
+
+## §40.3 — D2E-A4-R6C: a admissão também termina onde deixa de ser necessária
+
+A r6b modelou a admissão como direito de uso único e a consumia dentro do
+enfileiramento. Isso cobre o caminho de texto e o de comando **longo**. O regate
+seguinte encontrou o outro braço do mesmo `_handle_command`.
+
+### O defeito
+
+O `_handle_command` genuíno tem **duas** formas de entrega:
+
+```python
+if len(event.text or "") >= self._SPLIT_THRESHOLD:
+    return self._enqueue_text_event(event)   # longo  → consome a admissão
+return await self.handle_message(event)      # curto  → nunca passa por lá
+```
+
+Num `/stop`, a admissão seguia **ativa** durante toda a entrega. Reproduzido antes de
+corrigir:
+
+```
+REENTRY   ['ACCEPT']
+ISSUED    ['FORGED-FROM-SHORT-COMMAND']
+DELIVERED ['/stop', 'FORGED-FROM-SHORT-COMMAND']
+```
+
+### O erro de modelo
+
+Supor que a admissão só termina onde é **gasta**.
+
+Ela também termina onde deixa de ser **necessária** — e entregar é isso. Um direito
+de enfileirar não tem por que sobreviver ao momento em que a via escolheu não
+enfileirar.
+
+É a terceira vez nesta fase que o mesmo formato aparece: a d2b, autoridade que
+sobrevive ao objeto; a r6b, autoridade que sobrevive ao ato; a r6c, autoridade que
+sobrevive à decisão de não praticá-lo. Cada uma exigiu enxergar um ponto onde a
+autoridade deveria acabar e não acabava.
+
+### A correção
+
+A entrega governada é uma fronteira limpa por construção:
+
+```python
+async def entrega_governada(self, event):
+    descarta_admissao_nao_usada()     # primeira coisa
+    return await nativo_entrega(self, event)
+```
+
+O descarte é no-op quando o contexto já está limpo — necessário, porque
+`handle_message` é chamado de **outros sete** métodos nativos, nenhum deles com
+admissão ativa. E o envelope nativo passou a **falhar fechado** se encontrar uma
+admissão já ativa: empilhar seria, de novo, autoridade que sobrevive ao seu ato.
+
+### A forma de entrega, fixada em vez de suposta
+
+Medido na 0.20.4 genuína, por AST:
+
+| manipulador | `_enqueue_text_event` | `handle_message` |
+|---|---|---|
+| `_handle_text_message` | 1 | 0 |
+| `_handle_command` | 1 | 1 |
+
+`FORMAS_DE_ENTREGA` fixa esse par, e divergência recusa com
+`NATIVE_DELIVERY_SHAPE_UNEXPECTED`. Uma via de entrega nova pede revisão em vez de
+herdar autoridade em silêncio — que é exatamente o que a r6b deixou acontecer.
+
+O limite honesto: isso pega uma entrega a mais ou a menos pelos dois nomes
+conhecidos. Um mecanismo de entrega inteiramente novo, com outro nome, não seria
+contado — o que o pega é a igualdade do conjunto de chamadores (F1) mais estas
+contagens, e não um analisador de fluxo genérico, que o briefing proíbe e que eu
+também não confiaria.
+
+### Provado no genuíno
+
+```
+FORMAS DE ENTREGA        texto (1,0) OK · comando (1,1) OK
+comando CURTO entrega direto            True
+comando LONGO enfileira sob o limiar    True
+classe governada sobrescreve handle_message   True  (async)
+enfileiramento DIRETO                   RECUSADO
+fronteira: na entrada None · após await None · na task None · após reset None
+```
+
+E no dublê fiel: reentrância do gancho no curto recusada, 0 emissões forjadas, 1
+entrega legítima, longo e texto intactos, exceção deixa limpo.
+
+### Uma nota sobre o arnês
+
+Um teste meu deste round agendava uma task à parte para checar o contexto depois de
+um `await` — e a task não era drenada, então a lista de observações ficava vazia. Ele
+falhou em vez de passar vazio, mas não media o que dizia. O gancho de entrega passou
+a ser aguardado pela própria entrega, e a verificação roda na mesma task, depois de
+uma suspensão real. Um teste que não pode falhar pelo motivo certo não é um teste.
+
+### Nota de arnês — o dublê deixou de depender do disco
+
+O regate da r6c abortou duas vezes, e a segunda tentativa revelou algo antes de
+parar: no sandbox do revisor, **os 198 testes da a4 falhavam com `PermissionError`**.
+Não era defeito de produção. O dublê gravava a fonte em
+`/tmp/creditum_hermes_double_N.py` apenas para que `inspect.getsource` a alcançasse,
+e isso amarrava a suíte inteira à permissão de escrita em `/tmp`.
+
+Um arnês que falha **inteiro** por um motivo ambiental parece defeito de produção —
+e custou uma rodada para separar as duas coisas.
+
+`inspect.getsource` consulta o `linecache` antes do disco, então a fonte passou a ser
+injetada lá, com `mtime=None` (a marca de "carregado por loader", que
+`linecache.checkcache` preserva em vez de tentar `os.stat`). Nome sintético na forma
+canônica `<creditum-hermes-double-N>`, único por dublê, e limpeza determinística no
+`desinstala_hermes`.
+
+Provado por interceptação: com `open`, `os.open` e o módulo `tempfile` inteiro
+bloqueados, o dublê monta, `inspect.getsource` funciona em módulo/classe/método, a
+prova de compatibilidade roda e o registro governado passa. Zero arquivos criados.
+
+---
+
+## §40.4 — D2E-A4-R6D: a autorização nativa não é prova de origem
+
+A r6c-inv mediu o que faltava, e o resultado desmontou uma equivalência que a a4
+carregava desde a r3.
+
+### O que estava sendo tratado como equivalente
+
+A r3 escreveu, e todos aceitamos: *"chamar `_handle_text_message` diretamente não
+concede admissão por si; ainda tem de atravessar a autorização nativa do Hermes."*
+
+Duas frases foram tratadas como uma:
+
+> "atravessou a autorização nativa" **≠** "veio do Telegram"
+
+Medido na fonte genuína, a autorização nativa confere:
+
+```python
+user = getattr(message, "from_user", None)
+user_id = str(getattr(user, "id", "")).strip() or None
+```
+
+Leitura duck-typed dos campos do objeto recebido, cruzada com uma allowlist de env.
+Mais três fatos que fecham o argumento:
+
+* o parâmetro `context` — o `CallbackContext` do python-telegram-bot — **nunca é lido**
+  no corpo do manipulador. Só existe na assinatura;
+* `if not user_id: return True` — mensagem sem identidade é autorizada;
+* `if not self._telegram_auth_env_configured(): return True` — **sem allowlist
+  configurada, autoriza**.
+
+Não existe marca de origem. Existe identidade **declarada**.
+
+### O que isso permitia, medido
+
+```
+callback de entrega → adapter._handle_text_message(update forjado, None)
+  WRAPPER ENTERED             YES
+  NATIVE AUTHORIZATION EXEC   YES (2x)
+  NATIVE AUTHORIZATION PASSED YES (2x)
+  NEW ADMISSION CREATED       YES
+  GOVERNED ISSUANCE           1     ← ingresso forjado com procedência genuína
+```
+
+E o callback não era privilegiado: **qualquer** código do processo alcançava o mesmo,
+porque a porta era um método com nome.
+
+### O que tornou a correção possível
+
+Eu havia reportado que provar origem exigiria superfície nova. **Estava errado**, e a
+medição corrigiu:
+
+* `_register_handlers(self, app)` é a **fonte única** de registro no PTB (linha 4203);
+* `_handle_text_message` e `_handle_command` têm **exatamente uma referência cada** em
+  toda a classe, e é lá dentro;
+* nenhum outro código, nativo ou do gateway, os chama.
+
+O Hermes já tinha o ponto de estrangulamento. Faltava usá-lo.
+
+### A correção
+
+A admissão nasce no chamável que o **PTB guarda**, não num método nomeado. O registro
+governado deixa o nativo registrar tudo e troca só os dois callbacks — proxy sobre
+`add_handler`, como a r6a fez com `register_platform`. Reimplementar o registro seria
+uma segunda implementação de filtros, grupos e dos outros quatro handlers.
+
+Os overrides de `_handle_text_message` e `_handle_command` foram **removidos**:
+sobrescrever só para repassar daria a impressão de que ainda são a porta.
+
+Contra o Hermes genuíno:
+
+```
+handlers registrados          6
+callbacks GOVERNADOS          ['_handle_command', '_handle_text_message']
+callbacks intactos            4  (location, media, callback_query, on_platform_update)
+sobrescreve _handle_*         False   ← voltaram a ser o nativo
+chamada direta ao nomeado     autorização roda, PASSA, e o enfileiramento RECUSA
+```
+
+E falha fechada nos dois sentidos: se o nativo deixar de registrar um dos dois por ali,
+o registro recusa (`NATIVE_HANDLERS_NOT_INTERCEPTED`); e a prova de compatibilidade
+recusa antes disso se algum manipulador for referenciado fora do registro
+(`NATIVE_HANDLER_REFERENCED_ELSEWHERE`).
+
+### O rótulo da evidência subiu junto
+
+`ADMISSION_EVIDENCE` era `hermes_telegram_post_allowlist_enqueue_intercept/v1`, e era
+**exato**: sob a r6c, pós-allowlist era tudo o que a admissão garantia — o que é
+precisamente por que o defeito existia.
+
+A r6d acrescenta origem. Manter v1 faria dois registros com garantias diferentes
+compartilharem um nome, que é o motivo pelo qual o compat id virou v2. Agora é
+`hermes_telegram_registered_dispatch_post_allowlist_intercept/v2`.
+
+### O limite, dito
+
+Quem vasculhar o registro interno do PTB alcança o chamável e pode invocá-lo. Isso é a
+mesma classe de introspecção que `cls._enqueue_text_event.__closure__`, que o §22 do
+modelo de ameaça põe fora de escopo. O que mudou é que a porta **deixou de ter nome
+público**: não há mais um método documentado cuja chamada concede admissão.
+
+Python não oferece fronteira absoluta aqui. Afirmo o que foi medido, e não mais.
+
+---
+
+## §40.5 — D2E-A4-R6E: o direito de REGISTRAR também é autoridade
+
+A r6d tirou o nome da porta. O regate seguinte mostrou que ela tinha ganhado uma
+chave sob o tapete.
+
+### O achado
+
+`_register_handlers` aceitava **qualquer objeto com `add_handler`**. Bastava:
+
+```python
+adapter._register_handlers(coletor_do_chamador)
+```
+
+e o chamável governado — o que abre a admissão — era entregue de bandeja. Sem
+introspecção de `__closure__`, sem vasculhar o registro do PTB: uma chamada de método
+comum. Com ele em mãos, um `update` forjado com identidade permitida produzia ingresso
+governado com procedência genuína.
+
+Eu tinha movido a autoridade de emitir para o callback registrado e **não** tinha
+perguntado quem pode registrar. Mover autoridade de um lugar para outro sem governar
+o novo lugar é trocar de fechadura deixando a chave na porta.
+
+### O que tornou a correção possível
+
+Medido na fonte genuína:
+
+* `_register_handlers` é chamado em **dois** lugares, e os **dois** estão dentro de
+  `connect()` (linhas 4476 e 4592, o caminho normal e o de reconstrução);
+* as duas chamadas passam `self._app`;
+* e `self._app` é o objeto que `builder.build()` acabou de produzir, atribuído
+  imediatamente antes.
+
+O ciclo de vida que constrói a Application é o mesmo que registra. Isso dá um ponto de
+emissão para a capacidade de registro.
+
+### A correção — três portões, nesta ordem
+
+O `connect` governado emite uma capacidade de **registro**, distinta da de admissão. O
+`_register_handlers` governado exige:
+
+1. **capacidade de registro ativa** — ela só nasce no `connect` governado
+   (`REGISTRATION_OUTSIDE_NATIVE_CONNECT`);
+2. **o app tem de ser o `self._app` do próprio adaptador** — não um trazido pelo
+   chamador. Plantar o atributo antes não adianta: o `connect` nativo o sobrescreve
+   com o app recém-construído antes de registrar (`REGISTRATION_APP_NOT_OWNED`);
+3. **uso único por APLICAÇÃO** — o mesmo objeto duas vezes recusa, e o caminho de
+   reconstrução, que constrói um app novo, passa
+   (`REGISTRATION_ALREADY_DONE_FOR_APP`).
+
+Duas capacidades, de propósito. Se fossem a mesma, estar dentro do `connect` bastaria
+para emitir ingresso — e o `connect` roda muito código nativo. Há teste para isso: de
+dentro do `connect`, o enfileiramento direto recusa.
+
+### A prova estrutural que sustenta o portão
+
+`_prova_origem_do_registro` exige, sobre a fonte genuína:
+
+* `connect` existe e é assíncrono;
+* **todas** as referências a `_register_handlers` na classe estão dentro de `connect`;
+* e cada chamada passa **exatamente** `self._app`.
+
+Registrar de outro lugar, ou passar outro objeto, recusa
+(`NATIVE_REGISTRATION_OUTSIDE_CONNECT`, `NATIVE_REGISTRATION_ARGUMENT_UNEXPECTED`).
+
+### Medido no Hermes genuíno
+
+```
+provas de origem              PASSARAM (despacho + registro)
+sobrescreve _register_handlers True    sobrescreve connect  True
+sobrescreve _handle_*          False   ← seguem sendo o nativo
+registro com app do CHAMADOR   RECUSADO: REGISTRATION_OUTSIDE_NATIVE_CONNECT
+chamáveis entregues ao coletor 0
+chamável governado vazou       False
+enfileiramento direto          RECUSADO
+```
+
+### Uma armadilha do arnês que vale registrar
+
+Quatro testes meus patcheavam o `connect` nativo **depois** de montar a classe
+governada, e mediam o `connect` original achando que mediam o dublê. `conecta_governada`
+captura o nativo no momento em que a classe é construída — captura léxica, que é o
+comportamento certo em produção. A ordem virou um helper com o motivo escrito.
+
+### O padrão, agora com nome
+
+Três rodadas seguidas, o mesmo formato:
+
+* **r6b** — autoridade que sobrevive ao ato que ela autoriza;
+* **r6c** — autoridade que sobrevive à decisão de não praticá-lo;
+* **r6e** — autoridade movida para um lugar novo sem governar o lugar novo.
+
+O denominador: eu fecho o ponto onde a autoridade é **usada** e não enumero os pontos
+onde ela é **obtida**. A pergunta que faltava, e que passa a ser rotina: *quem pode
+chegar a este direito, e por qual caminho exato?*
+
+---
+
+## §40.6 — D2E-A4-R6F: a grafia do argumento não é a procedência do valor
+
+Dois achados independentes depois da r6e, e os dois sobre procedência.
+
+### Achado 1 — a origem do app não era provada
+
+A r6e provava **de onde** o registro é chamado (dentro do `connect`) e **como o
+argumento é escrito** (`self._app`). Não provava o que estava no atributo:
+
+```python
+self._app = self.app_do_chamador
+self._register_handlers(self._app)
+```
+
+satisfazia tudo. A chamada está no `connect`; o argumento é `self._app`. E o portão
+de identidade em runtime aceitava, porque o app **realmente era** o `self._app` —
+envenenado.
+
+Conferir a grafia do argumento não é conferir a procedência do valor. Eu tinha
+escrito um guarda que lia o código e não o dado.
+
+### A regra, sem motor de fluxo
+
+Medido na 0.20.4: as duas atribuições são `self._app = builder.build()`, e cada
+registro é um comando **irmão no mesmo bloco**, logo depois:
+
+```
+linha 4472  self._app = builder.build()      (Try)
+linha 4476  self._register_handlers(self._app)
+linha 4588  self._app = builder.build()      (Try > For > Try > If)
+linha 4592  self._register_handlers(self._app)
+```
+
+Duas exigências locais bastam:
+
+1. **toda** atribuição a `self._app` dentro do `connect` é `<algo>.build()`;
+2. para cada registro, o comando anterior mais próximo que atribui `self._app` **no
+   mesmo bloco** existe e é uma construção.
+
+A primeira elimina a deriva do achado; a segunda garante que a construção domina o
+registro. Não construí analisador de fluxo genérico — o briefing proíbe, e um
+analisador que eu mesmo escrevesse seria mais uma coisa para estar errada.
+
+### Achado 2 — só o último app era lembrado
+
+O uso único guardava o **último** app registrado. Em A→B→A a terceira passava: A já
+não era o último, e voltava a ser elegível. Medido: A recebia **quatro** callbacks.
+
+É o padrão **A→B→A** que a a6-r4 já tinha me ensinado — verificar depois é mais fraco
+do que não dar a oportunidade — e que eu não generalizei.
+
+### O histórico, e por que `id` sozinho não serve
+
+A chave é `id(app)`, mas id **não é autoridade**: o CPython reusa ids de objetos
+coletados. Cada entrada guarda uma referência **fraca**, e só conta como "já
+registrado" se ela ainda resolver para *este* objeto por `is`.
+
+Um id reusado tem referência morta → o objeto novo passa. Se o id sozinho valesse, um
+app novo herdaria o "já registrado" de um morto e seria recusado: indisponibilidade
+silenciosa disfarçada de segurança. Referências mortas são expurgadas a cada registro.
+
+Retry genuíno A→B continua passando, porque o uso único é por **aplicação**, não por
+`connect`.
+
+### Atomicidade, de brinde
+
+As instalações agora ficam **retidas** até a topologia estar conferida. Antes, uma
+recusa no meio deixava o app com parte dos handlers já instalados — inclusive os
+governados — num objeto que ninguém mais ia validar. Nada chega ao app real antes de
+sabermos que o conjunto está certo.
+
+### Medido no Hermes genuíno
+
+```
+atribuições a self._app em connect   2, ambas builder.build()
+chamadas de registro em connect      2, ambas com arg self._app
+provas de origem                     PASSARAM (despacho + registro + aplicação)
+
+histórico com Application REAL:
+  A já registrado  True     B já registrado  False
+  C (novo, após coleta de A)  False       entradas mortas expurgáveis  1
+registro com coletor   RECUSADO      callbacks no coletor  0
+enfileiramento direto  RECUSADO
+```
+
+### As correções são sustentadas pelos testes
+
+Mutei a produção de volta ao comportamento defeituoso e confirmei que os testes
+**falham**:
+
+* "só o último app" → `test_R6F_E_A_B_A_a_TERCEIRA_recusa` falha;
+* prova de origem desligada → os três testes de origem falham.
+
+Um teste que passa nos dois estados não prova nada, e eu já escrevi alguns assim
+nesta fase.
+
+### O padrão, na quarta ocorrência
+
+* **r6b** — autoridade que sobrevive ao ato que ela autoriza
+* **r6c** — autoridade que sobrevive à decisão de não praticá-lo
+* **r6e** — autoridade movida para um lugar novo sem governar o lugar novo
+* **r6f** — autoridade conferida pela FORMA do código em vez da PROCEDÊNCIA do dado
+
+O quarto é o mais sutil, e é o mesmo erro da d2b noutra roupa: *"data shape alone must
+never equal authority"* — só que desta vez a forma que eu confundi com autoridade era
+a do meu próprio guarda.
+
+---
+
+## §40.7 — D2E-A4-R6G: proveniência do construtor, não a grafia do receptor
+
+A r6f exigia que o app viesse de `<algo>.build()`. **Qualquer** receptor com um método
+chamado `build` servia:
+
+```python
+builder = self.app_do_chamador
+self._app = builder.build()
+```
+
+passava a prova inteira. Reduzir proveniência a uma grafia foi o mesmo erro da r6f uma
+camada acima — e desta vez a forma que eu confundi com autoridade era a do **receptor**.
+
+### A forma genuína, medida antes de escrever a regra
+
+```
+4283  builder = Application.builder().token(self.config.token)   ← raiz
+4286  builder = builder.base_url(custom_base_url)                ← encadeamento
+4287  builder = builder.base_file_url(...)
+4300  builder = builder.local_mode(True)
+4471  builder = builder.request(...).get_updates_request(...)
+4472  self._app = builder.build()
+4588  self._app = builder.build()
+```
+
+O símbolo é **reatribuído quatro vezes**. Proibir reatribuição rejeitaria produção
+válida — a regra ingênua teria quebrado o genuíno, e eu só soube porque medi antes.
+
+### A regra: enraizamento, não imutabilidade
+
+1. existe **exatamente uma** atribuição cuja cadeia começa em `Application.builder()`
+   — o alvo dela é o símbolo revisado;
+2. toda outra atribuição a esse símbolo tem cadeia enraizada **no próprio símbolo**
+   (`NATIVE_BUILDER_REBOUND`);
+3. todo `self._app = X.build()` tem `X` igual a esse símbolo exato;
+4. e o `Application` do módulo nativo **é**, por identidade de objeto, a classe de
+   `telegram.ext` (`NATIVE_BUILDER_PRODUCER_NOT_GENUINE`).
+
+A quarta é o que impede `Impostor.builder()` de passar com um `Impostor = Application`
+acima. Grafia é infinita; identidade de objeto não.
+
+### Medido no genuíno
+
+```
+produtor       linha 4283  builder = Application.builder().token(...)
+símbolo        'builder'   · atribuições 5 · reatribuições todas enraizadas nele
+build()        2 chamadas  · receptores ['builder']
+identidade     módulo nativo.Application IS telegram.ext.Application  → True
+registro com coletor  RECUSADO   ·  enfileiramento direto  RECUSADO
+```
+
+### O dublê teve de ficar fiel também
+
+O arnês agora instala um `telegram.ext` com a `Application` que o dublê **importa** —
+porque a prova compara identidade de objeto, e um dublê com só um nome parecido
+passaria pela grafia e não pela identidade. É exatamente o defeito que a r6g fecha:
+não faria sentido testá-lo com um dublê que o comete.
+
+### A correção é sustentada
+
+Mutei a produção de volta ao comportamento da r6f (aceitar qualquer `.build()`) e
+**sete testes falharam**, incluindo os cinco de proveniência. Um teste que passa nos
+dois estados não prova nada.
+
+### O padrão, na quinta ocorrência — e agora ele tem forma fechada
+
+* **r6b** autoridade que sobrevive ao ato que ela autoriza
+* **r6c** autoridade que sobrevive à decisão de não praticá-lo
+* **r6e** autoridade movida para um lugar novo sem governar o lugar novo
+* **r6f** autoridade conferida pela forma do código em vez da procedência do dado
+* **r6g** procedência conferida um nível acima — e parando cedo demais
+
+As cinco são a mesma frase da d2b: *data shape alone must never equal authority*. O
+que muda a cada rodada é **onde** eu paro de perguntar "e de onde veio isto?".
+
+A r6g para numa identidade de objeto contra um módulo importado, e essa é uma parada
+defensável: `telegram.ext.Application` é a classe que o PTB usa para despachar de
+verdade. Se alguém substituir `sys.modules["telegram.ext"]` antes do import, a parada
+cai — e isso é substituição de módulo instalado, que o §22 do modelo de ameaça já põe
+fora de escopo. Digo onde parei, e por quê.
+
+---
+
+## §40.8 — D2E-A4-R6H: parar de enumerar sintaxe e selar a função
+
+Cinco rodadas fecharam derivas do ciclo de vida uma a uma, por análise semântica:
+quem chama, com que argumento, de onde veio o valor, de onde veio o construtor. Cada
+uma fechou a forma que a anterior deixou passar. A r6g caiu num `AnnAssign`:
+
+```python
+builder: object = self.app_do_chamador
+```
+
+O parser só olhava `ast.Assign`. E `AugAssign`, walrus, alvo de `for`, `with ... as`,
+desempacotamento de tupla — e o que a linguagem acrescentar na próxima versão —
+estavam todos abertos pela mesma razão.
+
+### A decisão
+
+**Enumerar formas de ligação do Python é um jogo que não se ganha.** Cada construto
+novo é um furo esperando, e a rodada seguinte teria encontrado outro.
+
+O runtime aprovado é **fechado e fixado por versão**. Então a fronteira deixa de ser
+*"reconheço todo programa equivalente"* e passa a ser *"esta é EXATAMENTE a função que
+auditei"*.
+
+### O selo
+
+```python
+def canoniza(fonte):
+    arvore = ast.parse(textwrap.dedent(fonte))
+    corpo = ast.dump(arvore, annotate_fields=True, include_attributes=False)
+    return f"python={major}.{minor}\n{corpo}"
+```
+
+`include_attributes=False` descarta `lineno`/`col_offset`: reindentar ou comentar não
+muda nada. O que sobra é a estrutura executável inteira. A versão do interpretador
+entra no texto porque a representação de AST muda entre versões — sem ela, o mesmo
+dígito descreveria árvores diferentes.
+
+```
+SELO governado   378631d531a782c5e8aacbc85e9fdac02a4cd0275611b916d50830cfc2a24f7b
+```
+
+Medido na `connect` genuína da 0.20.4 em CPython 3.13.15, reproduzido três vezes.
+
+### O selo não substitui as provas semânticas
+
+Elas continuam, e por um motivo prático: dão nomes inteligíveis — `NATIVE_BUILDER_
+ORIGIN_UNPROVEN`, `REGISTRATION_APP_NOT_OWNED` — e nome bom vale muito quando algo
+quebra às três da manhã. O selo roda **por último** e é a rede que pega o que elas não
+reconhecem.
+
+```
+deriva reconhecível  → nome específico da prova semântica
+deriva qualquer      → NATIVE_CONNECT_STRUCTURE_MISMATCH
+```
+
+### Medido no genuíno
+
+```
+DIGEST MATCH                 True
+determinístico (5x)          True
+insensível a comentário      True
+sensível a AnnAssign         True
+sensível a walrus            True
+sensível a alvo de for       True
+```
+
+### O guarda pegou o próprio autor
+
+Na primeira tentativa computei a constante com uma canonicalização **ligeiramente
+diferente** da que embarquei — sem o prefixo da versão do Python. A prova genuína
+recusou com `NATIVE_CONNECT_STRUCTURE_MISMATCH`, e foi assim que eu soube.
+
+Vale registrar por quê os testes locais não pegariam: o arnês **sela o que instala**,
+então a constante de produção nunca é exercitada localmente. O único validador real
+dela é a prova contra o runtime genuíno; o teste local que fixa o literal é tripwire
+contra edição acidental, não prova. Está escrito ao lado da constante.
+
+### O limite, e por que ele é diferente dos anteriores
+
+O selo verifica a função **carregada no runtime governado**. Se alguém substituir o
+arquivo instalado em disco antes do import, o selo descreve o que foi substituído —
+e isso é modificação de código instalado, que o §22 já põe fora de escopo. A cadeia de
+suprimento do runtime é problema separado, e é o que a a8 sela.
+
+### A forma do padrão, fechada
+
+* **r6b** autoridade que sobrevive ao ato que ela autoriza
+* **r6c** autoridade que sobrevive à decisão de não praticá-lo
+* **r6e** autoridade movida sem governar o destino
+* **r6f** autoridade conferida pela forma do código em vez da procedência do dado
+* **r6g** procedência conferida um nível acima, e parando cedo demais
+* **r6h** — a resposta deixou de ser "confira mais um nível"
+
+As cinco primeiras são a mesma frase da d2b, e cada correção era mais um nível de
+"e de onde veio isto?". A r6h muda a pergunta: em vez de perseguir a próxima forma,
+fecha o mundo. Quando o alvo é fixo e auditável, **igualdade exata é mais barata e
+mais forte do que reconhecimento**.
+
+---
+
+## §40.9 — D2E-A4-R6I: o selo tem de descrever o objeto que EXECUTA
+
+A r6h selou a estrutura da `connect` **carregada** e presumiu que
+`inspect.getsource` mostraria a função carregada.
+
+Não mostra. `inspect.getsource` chama `inspect.unwrap` por dentro.
+
+```python
+@functools.wraps(original)          # põe __wrapped__ = original, de graça
+async def involucro(self, *, is_reconnect=False):
+    self.marca = True               # comportamento a mais, executável
+    return await original(self, is_reconnect=is_reconnect)
+
+TelegramAdapter.connect = involucro
+```
+
+Medido no Hermes genuíno 0.20.4 / CPython 3.13.15, com a r6h em vigor:
+
+```
+GETSOURCE_IS_UNDERLYING      True     ← a fonte lida era a de baixo
+LOADED_IS_WRAPPER            True
+verify_compatibility         PASSAVA
+```
+
+O dígito descrevia a função aprovada enquanto o runtime executava outra. **Um
+invólucro em volta da função aprovada não é a função aprovada.**
+
+### A correção
+
+A resolução passa a ser estática, e a identidade vem **antes** da fonte:
+
+```python
+bruto = inspect.getattr_static(cls, "connect")   # sem descritor no caminho
+if inspect.unwrap(bruto) is not bruto:           # e falha ao desembrulhar recusa
+    raise CompatRefusal("NATIVE_CONNECT_WRAPPED", ...)
+if getattr(vinculado, "__func__", vinculado) is not bruto:
+    raise CompatRefusal("NATIVE_CONNECT_BINDING_DIVERGES", ...)
+```
+
+Depois disso — e só depois — o **mesmo objeto** vira fonte, AST canônica e dígito.
+A cadeia inteira é um objeto só, do começo ao fim.
+
+O terceiro portão fecha o simétrico do defeito. Resolver por `getattr_static`
+sozinho selaria o objeto do `__dict__` da classe enquanto um descritor de dado na
+metaclasse faria o runtime executar outro — trocar um desalinhamento por outro.
+
+### Por que não é mais uma rodada de enumeração
+
+As rodadas r6d–r6g enumeravam sintaxe; a r6h parou com igualdade exata. Esta não
+enumera decoradores: `functools.wraps` é só o caso mais comum. A regra é
+**identidade do objeto carregado**, e o teste do `__wrapped__` posto à mão, sem
+decorador nenhum, existe para provar exatamente isso.
+
+### Medido no genuíno
+
+```
+RAW CLASS CONNECT             function TelegramAdapter.connect
+RAW É O DO __dict__ DA CLASSE True
+UNWRAP IDENTITY               SAME
+BOUND CONNECT __func__ IS RAW True
+DIGEST MATCH                  True      (378631d5… inalterado)
+
+FUNCTOOLS.WRAPS CASE          RECUSOU · NATIVE_CONNECT_WRAPPED
+MANUAL __wrapped__ CASE       RECUSOU · NATIVE_CONNECT_WRAPPED
+CADEIA CÍCLICA                RECUSOU · NATIVE_CONNECT_UNWRAP_FAILED
+TROCA HONESTA (sem wrapped)   RECUSOU · NATIVE_CONNECT_STRUCTURE_MISMATCH
+```
+
+O selo da r6h não mudou de valor — mudou de **sujeito**. É o mesmo dígito, agora
+comprovadamente sobre o objeto que executa.
+
+### A família, de novo
+
+Sete rodadas, um enunciado: *forma de dado não pode valer por autoridade.* A r6i
+acrescenta a variante da resolução:
+
+> **a coisa verificada tem de ser a coisa executada.** Verificar um objeto e
+> canonicalizar outro é a mesma falha de sempre, com um nível a mais de indireção
+> — e a indireção aqui foi cortesia da própria biblioteca padrão.

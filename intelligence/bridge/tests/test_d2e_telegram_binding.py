@@ -212,7 +212,7 @@ class PonteIngressoParaPlano(unittest.TestCase):
             sender_user_id="123456789", destination_chat_id="123456789",
             destination_thread_id=None, message_id="4242", update_id="987654321",
             text=TEXTO, telegram_timestamp="2026-09-02T21:06:00Z",
-            admission_evidence="hermes_telegram_post_allowlist_enqueue_intercept/v1",
+            admission_evidence="hermes_telegram_registered_dispatch_post_allowlist_intercept/v2",
             hermes_version="0.20.4", adapter_compat_id="x", source_message_count=1)
         base.update(over)
         return GovernedTelegramIngressV1(**base)
