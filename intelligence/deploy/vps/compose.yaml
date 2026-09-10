@@ -1,0 +1,83 @@
+# D2E-A8 — a implantação governada. Um serviço, um consumidor, nenhuma porta.
+#
+# ─── Por que nenhuma porta publicada ──────────────────────────────────────────
+#
+# O adaptador Telegram nativo faz LONG POLLING — está documentado no `adapter.py` da
+# a4, entre o que a subclasse governada herda: "polling, credencial, allowlist, envio,
+# ciclo de vida, erros". Polling é conexão de SAÍDA. Não há webhook, então não há nada
+# para o Telegram alcançar de fora.
+#
+# O que o container Managed expõe além disso — `server.py` no PID 12, e qualquer UI
+# web do gateway — NÃO foi observado pela a7-r1, e este repositório não sabe porta
+# nenhuma. Publicar porta por precaução seria abrir superfície que ninguém mediu.
+# Enquanto a descoberta não acontecer, o desenho não publica nada.
+services:
+  hermes:
+    build:
+      context: ../..
+      dockerfile: deploy/vps/Dockerfile
+      args:
+        # Sem valor padrão: o build FALHA até cada autoridade ser fornecida.
+        #
+        # `HERMES_COMMIT` é o commit oficial exato — 40 hex, e o build recusa `latest`,
+        # `main`, `master` e `HEAD` por forma, antes de qualquer rede.
+        HERMES_COMMIT: ${HERMES_COMMIT:?commit exato do hermes-agent e obrigatorio}
+        # O `uv.lock` daquela revisão. Sem ele o `uv sync --frozen` instalaria de um
+        # lock não conferido, e "travado" sem hash é travado na palavra.
+        HERMES_LOCK_SHA256: ${HERMES_LOCK_SHA256:?sha256 do uv.lock e obrigatorio}
+        # `UV_VERSION` saiu na a8-r4c: a ferramenta de build passou a ser fixada por
+        # DÍGITO OCI literal no Dockerfile. Argumento de build para isso deixava a
+        # ferramenta como escolha de quem chama, e o mesmo estado do repositório
+        # podia produzir imagens construídas por `uv` diferentes.
+    container_name: creditum-hermes
+
+    # ─── §3: nada de `command:` ───────────────────────────────────────────────
+    #
+    # `command` viraria argumento do ENTRYPOINT, e argumento é seletor de comando.
+    # O envelope ignora `$@`, mas não declarar é melhor que declarar e ignorar.
+
+    # ─── /data é o estado, e é volume nomeado ─────────────────────────────────
+    #
+    # A a7-r1 provou que `/data` do Managed persiste através de reinício de container.
+    # Aqui a persistência é nossa e explícita. `/opt/hermes-agent` NÃO é volume: a
+    # a7-r1 achou evidência de reconstrução dele no arranque do container, então
+    # tratá-lo como superfície persistente do cliente seria montar sobre algo que o
+    # runtime reescreve.
+    volumes:
+      - creditum-hermes-data:/data
+
+    # ─── §8: segredo por env_file protegido, nunca em git ────────────────────
+    #
+    # O arquivo vive só na VPS, com 0600 e dono do operador. Nenhum valor entra em
+    # git, artefato, log, relatório, teste ou terminal. Este compose referencia o
+    # CAMINHO; o conteúdo nunca passa por aqui.
+    env_file:
+      - /etc/creditum/hermes.env
+
+    # ─── reinício: `on-failure` NÃO, e a razão importa ───────────────────────
+    #
+    # Recusa do portão é decisão, não falha transitória. `on-failure` transformaria
+    # "o plugin governado está errado" em laço de reinício que esconde a recusa e
+    # gasta a evidência. `unless-stopped` reinicia o container quando o HOST reinicia
+    # — e nesse caminho o portão roda de novo, do zero, como tem de rodar.
+    restart: unless-stopped
+
+    stop_grace_period: 30s
+
+    # Endurecimento mínimo. Não é projeto de hardening: é não deixar frouxo o que
+    # custa uma linha.
+    read_only: false          # o Hermes escreve em /data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  creditum-hermes-data:
+    name: creditum-hermes-data

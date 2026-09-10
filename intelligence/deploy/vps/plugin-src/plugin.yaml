@@ -1,0 +1,34 @@
+# D2E-A8-R1 §6 — o manifesto do plugin, no formato de diretório do Hermes 0.20.4.
+#
+# Este arquivo NÃO declara os próprios hashes. A autoridade é o manifesto de
+# implantação gerado FORA do plugin pelo `build-telegram-plugin-manifest.py` da a6 —
+# o objeto verificado não é sua própria autoridade.
+name: telegram-platform
+kind: platform
+version: 1.0.0
+description: >-
+  Adaptador Telegram governado da Creditum. Intercepta o enfileiramento ANTES do lote
+  nativo para que uma execução viva corresponda a exatamente uma mensagem.
+
+# ─── por que a mesma chave do plugin embutido ─────────────────────────────────
+#
+# A a7-r1 provou a precedência `embutido < usuário < projeto < entrypoint`. Como
+# plugin de USUÁRIO em /data/plugins, esta chave SOMBREIA o manifesto embutido
+# `telegram-platform` — que é a intenção: o consumidor do Telegram passa a ser a
+# subclasse governada, e não há dois.
+#
+# O portão da a6 confere que ninguém de precedência maior reivindica esta chave.
+
+creditum:
+  # Alvo do `register_platform`. Declarado aqui para ser verificável SEM importar o
+  # plugin: no momento em que o portão roda, o gateway ainda não subiu.
+  runtime_platform: telegram
+  # A a4 está em v2 desde a r6d, quando a admissão passou para o callback
+  # registrado. Este campo ficou em v1 até a a8-r4a — declaração falsa que
+  # portão nenhum lia, porque o verificador da a6 deriva a identidade do AST
+  # do compat.py. Um campo que ninguém confere é onde a mentira mora.
+  adapter_compat_id: creditum_telegram_adapter_compat/0.20.4/v2
+  supported_hermes_version: 0.20.4
+  # O que este plugin NÃO faz ao registrar: não constrói adaptador, não conecta, não
+  # faz polling, não chama provedor. Há prova offline em `probe-plugin-winner.py`.
+  registers_only: true

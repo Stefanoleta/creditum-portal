@@ -5764,3 +5764,628 @@ acrescenta a variante da resolução:
 > **a coisa verificada tem de ser a coisa executada.** Verificar um objeto e
 > canonicalizar outro é a mesma falha de sempre, com um nível a mais de indireção
 > — e a indireção aqui foi cortesia da própria biblioteca padrão.
+
+---
+
+## §41 — D2E-A8-R4: autoridade de runtime reprodutível
+
+Duas lacunas ficaram abertas quando a a4-r6i fechou. Nenhuma era um defeito de
+código: as duas eram **números sem procedência**.
+
+### A primeira — um inventário que ninguém sabia recomputar
+
+`runtime_inventory_sha256` chegou como `01ba45ae…67aee1`, fornecido pela
+reconstrução do staging. Não havia algoritmo neste repositório que o produzisse, e
+selar um número que não se pode recomputar é transformar um recebido em autoridade.
+
+A a8-r4 implementou o algoritmo: `creditum_hermes_runtime_inventory/v1`.
+
+```
+creditum_hermes_runtime_inventory/v1
+python.implementation=cpython
+python.version=3.13.15
+hermes.distribution=hermes-agent
+hermes.version=0.20.4
+hermes.source_commit=e624e9fde561e1add9388384012b295fde669ade
+hermes.lock_sha256=8fd868b9…0fddec
+package.aiohttp=3.14.3
+package.fastapi=0.133.1
+package.httpx=0.28.1
+package.openai=2.24.0
+package.pydantic=2.13.4
+package.python-telegram-bot=22.8
+package.pyyaml=6.0.3
+package.uvicorn=0.41.0
+```
+
+SHA-256 desses bytes. Sem relógio, sem caminho de máquina, sem rede, sem
+subprocesso, sem ordem de dicionário. O conjunto de pacotes é **constante do
+código** — se viesse do manifesto, quem mudasse o manifesto mudaria junto o que o
+inventário mede, e a conferência viraria tautologia.
+
+**Por que mínimo.** Hashear a árvore do runtime seria mais forte e inútil:
+`__pycache__`, `RECORD` e caminhos absolutos entrariam no dígito, o valor mudaria a
+cada instalação legítima, e um guarda que grita a cada build é desligado. O
+inventário identifica o runtime aprovado, não o disco. Pelo mesmo motivo ele **não
+toca o `state.db`**: código imutável e estado operacional mutável são coisas
+distintas, e misturá-las faria o inventário mudar sozinho.
+
+### O recomputado não bate — e não foi ajustado para bater
+
+```
+FORNECIDO    01ba45ae2ecde279ec53b6d8dabdeae85a7caf2eca74823e526e10666367aee1
+RECOMPUTADO  8674149d18b5f1e804561af33bf85ebbe646550c0aeb8755dab0f2c928a18f1d
+```
+
+Três processos independentes no runtime genuíno, mesmo dígito. **Todos os fatos
+conferem** — python, hermes, commit, lock, os oito pacotes. O que difere é a
+codificação, e o §3 é explícito: não se ajusta o algoritmo para reproduzir o número
+recebido. Então o campo continua **nulo** e o `--check` continua recusando. Adotar o
+recomputado é decisão, não efeito colateral de tê-lo calculado.
+
+### A segunda — um manifesto que só existia naquela máquina
+
+O manifesto da a6 revisado, `1766db9f…`, era válido contra aqueles bytes e
+**irreprodutível em qualquer outra máquina**. Ele embutia:
+
+```
+source_commit   bb91fb2000000000000000000000000000000000   ← 33 zeros
+config_path     /private/tmp/claude-501/…/scratchpad/a4r6-cfg/config.yaml
+precedence      /private/tmp/claude-501/…/scratchpad/a4r6-cfg/proj
+```
+
+Os sete hashes de arquivo estavam certos. Os três campos acima vieram dos meus
+argumentos de linha de comando, e eu os passei sem perceber que entravam no
+documento. O construtor nunca abre esses caminhos — só os registra —, então nada
+falhou e nada avisou.
+
+Com as entradas governadas (commit real do checkpoint, `/data/config.yaml`,
+`/opt/hermes-agent/.hermes/plugins`), o manifesto é reproduzível:
+
+```
+ddbda0a771afb4c6772df1edc4cd49fcddf104e32f34d3fd500a713a2e414dab
+```
+
+Reproduzido na máquina de desenvolvimento (CPython 3.9) e dentro do runtime genuíno
+(3.13.15): mesmo SHA. As entradas passaram a viver no `runtime-manifest.json`, em
+`plugin_artifact.a6_manifest_inputs`.
+
+### `--check` deixou de conferir presença
+
+O antigo aceitava campo não-nulo. Presença não é autoridade — um número digitado
+passava igual a um número medido. O novo **recomputa**:
+
+```
+hashes governados   relê e rehasheia
+artefato do plugin  remonta os 7 arquivos e compara byte a byte
+manifesto da a6     reconstrói com as entradas governadas e compara o SHA
+inventário          observa o runtime vivo e compara o dígito
+```
+
+O inventário só é observável de dentro do runtime que descreve, então `--check`
+exige `--runtime-root`. Sem a raiz: **recusa**, não "não deu para conferir".
+
+### O que ainda não está selado, e por quê
+
+```
+artefato de plugin    REPRODUZÍVEL   7/7 arquivos, duas montagens byte-idênticas
+manifesto da a6       REPRODUZÍVEL   ddbda0a7…
+inventário            RECOMPUTADO    8674149d… ≠ 01ba45ae… fornecido
+runtime-manifest      NÃO SELADO     falta a decisão sobre qual valor é autoridade
+```
+
+Não há SELADO parcial: um manifesto meio selado é usado como se fosse selado.
+
+### Uma terceira coisa, encontrada de passagem
+
+`deploy/vps/plugin-src/plugin.yaml` declara, num bloco que nenhum portão lê:
+
+```yaml
+adapter_compat_id: creditum_telegram_adapter_compat/0.20.4/v1
+```
+
+A a4 está em **v2** desde a r6d. O verificador da a6 deriva a identidade do AST do
+`compat.py` e nunca lê esse campo, então nada quebra — o que é justamente o
+problema: é uma declaração falsa que ninguém confere. Corrigir é uma linha, e a
+linha muda os bytes do `plugin.yaml`, o hash do artefato e o SHA do manifesto da a6.
+Fica registrado para decisão, não corrigido por conta própria.
+
+---
+
+## §41.1 — D2E-A8-R4A: as três decisões, e o selo fechado
+
+A r4 mediu, mostrou as divergências e parou. A r4a decide.
+
+### Decisão 1 — o inventário canônico é o recomputado
+
+```
+AUTORIDADE   8674149d18b5f1e804561af33bf85ebbe646550c0aeb8755dab0f2c928a18f1d
+HISTÓRICO    01ba45ae2ecde279ec53b6d8dabdeae85a7caf2eca74823e526e10666367aee1
+```
+
+O fornecido continua no manifesto, em campos marcados `_historical`, porque
+procedência importa: ele registra de onde o número veio e por que não serve. O que
+ele não é, em lugar nenhum do `--check`, é autoridade. Um teste percorre todos os
+campos de `hermes_source` e falha se o valor histórico reaparecer fora deles.
+
+O algoritmo **não foi torcido** para reproduzi-lo — e o teste que garante isso é
+literal: a string `01ba45ae…` não aparece em `runtime-inventory.py`.
+
+### Decisão 2 — o manifesto antigo é histórico
+
+`1766db9f…` fica classificado como **PRÉ-REPRODUTIBILIDADE, não autoridade
+implantável**. Os sete hashes de arquivo dele eram válidos, então isto não reabre a
+a4 nem a semântica da a6. O que ele carregava de errado eram metadados: caminhos de
+scratchpad e um `source_commit` com 33 zeros.
+
+Agora o `--check` recusa isso por construção, antes de olhar o produto:
+
+```python
+PREFIXOS_GOVERNADOS = ("/data/", "/opt/")
+```
+
+Caminho fora daí é recusa; `source_commit` que termina em doze zeros é recusa.
+
+### Decisão 3 — o `plugin.yaml` passou a dizer a verdade
+
+```diff
+- adapter_compat_id: creditum_telegram_adapter_compat/0.20.4/v1
++ adapter_compat_id: creditum_telegram_adapter_compat/0.20.4/v2
+```
+
+Seis rodadas com uma declaração falsa e nada quebrou, porque o verificador da a6
+deriva a identidade do AST do `compat.py` e nunca lê esse campo. **É exatamente por
+isso que ela sobreviveu.** Um campo que ninguém confere é onde a mentira mora, e o
+teste novo amarra o yaml ao `ADAPTER_COMPAT_ID` do `compat.py`: se um dos dois
+mudar sozinho, falha.
+
+### O que `source_commit` significa
+
+O campo é o **checkpoint congelado da implementação da a4** — `32234255…` —, não
+"o commit que contém todas as entradas de empacotamento". As entradas da a8 são
+governadas por conta própria: caminho, bytes, hash em `plugin_artifact.files`,
+montador determinístico e o SHA final.
+
+Apontá-lo para o commit que contém este manifesto seria o documento provando a si
+mesmo. O teste `test_A8R4A_source_commit_NAO_e_circular` lê a árvore daquele commit
+e exige que o `compat.py` esteja lá e que `runtime-manifest.json`, `plugin.yaml` e
+o montador **não** estejam. Se um dia estiverem, a distinção se perdeu, e o teste
+diz isso em voz alta.
+
+### O artefato final
+
+```
+__init__.py                            251cc88e88bedc21…
+creditum_hermes_telegram/__init__.py   93d1313c1dd72613…
+creditum_hermes_telegram/adapter.py    24f42cabe98dd86f…   ← a4 congelada
+creditum_hermes_telegram/compat.py     159d032d667408a7…   ← a4 congelada
+creditum_hermes_telegram/ingress.py    e6ae04a759558b21…
+creditum_hermes_telegram/planning.py   c8062978d95cd2b5…
+plugin.yaml                            d16d8f7370dcc476…   ← mudou: v1 → v2
+
+MANIFESTO A6   182a977b2f94d499911ee33a555c983a39ac6445dea821fe2badf11a7d6a7ca1
+```
+
+Duas montagens independentes, bytes idênticos; duas gerações do manifesto, mesmo
+SHA; reproduzido tanto na 3.9 de desenvolvimento quanto dentro do runtime genuíno.
+
+### O selo, fechado
+
+```
+seal-runtime-manifest.py --check --runtime-root <árvore genuína>
+
+  inventário    8674149d…  observado no runtime vivo, igual ao selado
+  manifesto a6  182a977b…  remontado dos fontes, igual ao selado
+  SELADO — o build pode conferir contra este manifesto.                    exit 0
+```
+
+Sem `--runtime-root`, o mesmo comando sai **2**. Não é regressão: é a regra. Um
+valor declarado num JSON não é autoridade até alguém observar o runtime e chegar
+nele. Foi o que faltou em `01ba45ae…` desde o começo.
+
+### O que continua fora
+
+`state.db` e o livro-razão de execução seguem governados à parte, como estado
+operacional mutável — nenhum dos dois entra no inventário imutável, e o código de
+migração não foi tocado. G3 segue sendo bloqueador externo de cutover.
+
+---
+
+## §41.2 — D2E-A8-R4B: a evidência tem de existir onde o runtime roda
+
+A r4 e a r4a passaram. Contra a árvore errada.
+
+O inventário lia `hermes.source_commit` do `.git` da raiz. O Dockerfile faz isto:
+
+```dockerfile
+real="$(git rev-parse HEAD)"
+[ "$real" = "${HERMES_COMMIT}" ] || exit 2          # confere
+lock="$(sha256sum uv.lock | cut -d' ' -f1)"
+[ "$lock" = "${HERMES_LOCK_SHA256}" ] || exit 2     # confere
+printf '%s\n' "${HERMES_COMMIT}" > /opt/hermes-agent/.hermes_build_sha
+rm -rf /opt/hermes-agent/.git                       # ← e o .git some
+```
+
+A imagem implantável **não tem `.git`**. O inventário funcionava exatamente onde
+ninguém precisa dele, e nenhuma fixture positiva percebeu porque **todas criavam
+`.git`**. A suíte provava a bancada, não o produto.
+
+### A correção
+
+A evidência do runtime passa a ser o marcador de build:
+
+```
+.hermes_build_sha   AUTORIDADE, obrigatória
+.git ausente        normal — é a forma do estágio final
+.git presente e concordante   ok, conferência cruzada
+.git presente e discordante   RECUSA
+.git presente sem marcador    RECUSA
+```
+
+A última linha é a que mantém bancada e imagem no **mesmo mecanismo**. Deixar o
+`.git` substituir um marcador ausente criaria duas autoridades: a reconstrução
+passaria por uma via, a imagem por outra, e as duas nunca seriam comparadas. Foi
+esse descolamento que produziu o defeito.
+
+### O formato, medido no produtor
+
+```
+printf '%s\n' "${HERMES_COMMIT}"   →   40 hex minúsculos + UM \n   =   41 bytes
+```
+
+Nada de `.strip()` genérico: ele aceitaria `\r\n`, espaço em volta, linha extra e
+arquivo vazio-com-quebra — quatro coisas que o produtor nunca escreve.
+
+**E a primeira versão do guarda tinha um furo.** `re.compile(rb"^[0-9a-f]{40}\n$")`
+aceita `<commit>\n\n`, porque em Python `$` casa **também** logo antes de uma quebra
+final. Um arquivo com linha a mais passaria como se viesse do produtor. Quem pegou
+foi o próprio teste de forma malformada, na primeira execução. Trocado por `\Z`.
+
+### Medido
+
+```
+forma do estágio final (sem .git)   8674149d…  igual
+.git concordante                    8674149d…  igual
+.git conflitante                    RECUSA · RUNTIME_COMMIT_EVIDENCE_CONFLICT
+marcador ausente                    RECUSA · RUNTIME_BUILD_SHA_MISSING
+marcador sem quebra (40 bytes)      RECUSA · RUNTIME_BUILD_SHA_MALFORMED
+marcador com linha extra (42 bytes) RECUSA · RUNTIME_BUILD_SHA_MALFORMED
+
+árvore de staging crua              RECUSA · o .git não substitui o marcador
+```
+
+O dígito **não mudou**, e não podia mudar: o fato observado é o mesmo commit; o que
+mudou foi de onde ele é lido. Se tivesse mudado, a r4b teria trocado a autoridade em
+vez de consertar a leitura.
+
+### O que continua em aberto
+
+A prova exigida pelo §10 é rodar isto **dentro da imagem final de verdade**. Não há
+Docker nesta máquina — `docker`, `podman` e `colima` ausentes —, então a imagem não
+pode ser construída nem inspecionada aqui. O que existe é uma reconstrução da
+**forma** do estágio final: cópia da árvore genuína, marcador escrito com o mesmo
+`printf` do Dockerfile, `.git` removido. É mais forte do que a fixture de bancada e
+**não é** a imagem. Fica declarado como tal, não como prova de imagem final.
+
+---
+
+## §41.3 — D2E-A8-R4C: a ferramenta que constrói também tem dono
+
+`UV_VERSION` era `ARG` sem valor padrão. Isso falha fechado — melhor que
+`:latest`, que foi o defeito da primeira versão — mas deixava a **ferramenta de
+build como escolha de quem chama**. Dois builds do mesmo estado do repositório
+podiam usar dois `uv` diferentes, e nada notava. *Reprodutível com um insumo livre
+é reprodutível na palavra.*
+
+### O ambiente genuíno tinha desaparecido
+
+Primeira coisa que a rodada encontrou: `/private/tmp` foi limpo. Sumiram
+`hermes-lock-authority-clean` (a árvore genuína), `hermes-stage-venv-final` (o
+runtime), `python-3.13.15-pkg-expanded`, `hermes-uv-cache` e o scratchpad inteiro.
+
+Então o §1 — "inspecione a evidência genuína" — não era observável na forma
+pedida. O que sobrou observável foi o `uv` da própria estação:
+
+```
+$ uv --version
+uv 0.11.19 (7b2cff1c3 2026-06-03 x86_64-apple-darwin)
+```
+
+**É a ferramenta que reconstruiu o staging aprovado** — a que produziu os fatos que
+o inventário sela em `8674149d…`. Não é observação do build de produção, e é um
+build macOS enquanto a imagem usa linux. Fixar essa versão é, portanto, uma
+**decisão ancorada numa observação**, e a nota no manifesto diz isso com essas
+palavras. É a diferença que faltou em `01ba45ae…`: lá o problema era não haver
+algoritmo; aqui o valor é observável e o dígito é autoverificável — o que se
+declara é o **escopo** da relevância.
+
+### Por dígito, não por tag, não por argumento
+
+```
+ghcr.io/astral-sh/uv@sha256:b46b03ddfcfbf8f547af7e9eaefdf8a39c8cebcba7c98858d3162bd28cf536f6
+```
+
+Índice OCI, `linux/amd64` + `linux/arm64`. **Autoverificável:** busquei o manifesto
+*por dígito* e rehasheei o corpo recebido — bateu. Ou seja, não é preciso confiar no
+mapeamento de tag do registro; o dígito é o hash dos próprios bytes. A tag `0.11.19`
+aponta para este índice hoje; a tag pode mover, o dígito não.
+
+E não há `ARG`. O `FROM` traz o dígito literal, então não existe valor para quem
+chama escolher. `UV_VERSION` saiu do `Dockerfile` e do `compose.yaml`.
+
+### O que o `--check` passou a recusar
+
+```
+build_toolchain ausente                          RECUSA
+uv_image_digest fora da forma sha256:<64 hex>    RECUSA
+build_arg não nulo                               RECUSA
+Dockerfile com dígito != o governado             RECUSA
+Dockerfile com tag móvel no estágio do uv        RECUSA
+Dockerfile com ${…} no estágio do uv             RECUSA
+ARG UV_VERSION ressurgindo                       RECUSA
+UV_VERSION voltando no compose                   RECUSA
+```
+
+A primeira versão desse guarda recusava o repositório limpo: procurava
+`ARG UV_VERSION` no texto inteiro e achava **o próprio comentário** que explica que
+o ARG saiu. Guarda que confunde prosa com diretiva grita à toa, e guarda que grita à
+toa é desligado. Agora só linha que começa com `ARG` conta.
+
+### Por que o `uv` NÃO entrou no inventário do runtime
+
+O inventário descreve o runtime da **aplicação**: interpretador e as distribuições
+governadas que determinam comportamento. `uv` é ferramenta de build. Acrescentá-lo
+mudaria o texto canônico e portanto o dígito selado — reabrir uma autoridade fechada
+por causa de uma ferramenta. E a identidade dela já está fixada por **dígito OCI**,
+que é mais forte que uma string de versão num inventário.
+
+**Um fato inconveniente, registrado:** o binário é copiado para
+`/usr/local/bin/uv` no estágio final, então **o `uv` fica na imagem implantável**.
+Isso está declarado em `build_toolchain.uv_resident_in_final_image`. Não é medido
+pelo inventário, e a distinção está escrita. Se o modelo de ameaça passar a querer
+medir residência de ferramenta no runtime, isso é um `v2` do inventário — decisão
+explícita, não efeito colateral. Remover o `uv` do estágio final também é opção, e
+seria redesenho de estágio, fora do escopo desta rodada.
+
+### O que continua bloqueado
+
+A prova dentro da imagem final continua pendente por **duas** razões agora: não há
+Docker nesta máquina, e o ambiente genuíno de reconstrução foi apagado. A segunda é
+nova e mais séria — nenhuma das sondas genuínas das rodadas anteriores pode ser
+reexecutada até o staging ser reconstruído.
+
+---
+
+## §41.4 — D2E-A8-R4E: o build passa a produzir o runtime que o selo mede
+
+A r4d reconstruiu o staging do zero e mediu duas coisas que nenhuma rodada tinha
+visto — porque nenhuma tinha **executado** o passo de instalação.
+
+### Defeito 1 — o extra `messaging`
+
+```
+uv sync --frozen --no-dev   →   59 pacotes, SEM aiohttp e SEM python-telegram-bot
+```
+
+Os dois vivem em `[project.optional-dependencies].messaging` do Hermes, não nas
+dependências base. E os dois estão no inventário governado. Ou seja: o adaptador do
+Telegram, dentro da imagem, sem a biblioteca do Telegram — e o inventário recusaria
+com `RUNTIME_PACKAGE_MISSING`.
+
+```
+uv sync --frozen --no-dev --extra messaging   →   78 pacotes, os dois presentes
+```
+
+Chegam **pelo lock**, pelo grafo do extra. Nada de `pip install` à mão, nada de
+regenerar o lock.
+
+### Defeito 2 — `VIRTUAL_ENV` é ignorado, e o uv escolhe o Python
+
+```
+VIRTUAL_ENV=/opt/venv uv sync ...
+warning: VIRTUAL_ENV=... does not match the project environment path `.venv`
+         and will be ignored; use --active
+```
+
+O uv 0.11.19 instalou em `<projeto>/.venv` e **criou esse ambiente com um Python que
+ele mesmo escolheu** — medido: `CPython 3.11.15` da coleção gerenciada, porque o
+Hermes aceita `>=3.11,<3.14`. O `/opt/venv` ficava vazio, e o próprio check de
+`/opt/venv/bin/hermes` recusava: falha fechada, mas **a imagem não se construía**.
+
+### O contrato agora
+
+```dockerfile
+ENV UV_PYTHON_DOWNLOADS=never \
+    UV_NO_MANAGED_PYTHON=1
+
+RUN base="$(command -v python3)"; \
+    visto="$("$base" -c '...version_info[:3]...')"; \
+    [ "$visto" = "${PYTHON_VERSION_ESPERADA}" ] || exit 2; \
+    uv venv --no-python-downloads --python "$base" /opt/venv; \
+    VIRTUAL_ENV=/opt/venv PATH="/opt/venv/bin:${PATH}" \
+      uv sync --frozen --no-dev --extra messaging --active \
+              --no-python-downloads --python /opt/venv/bin/python; \
+    [ ! -e /opt/hermes-agent/.venv ] || exit 2
+```
+
+Quatro freios, cada um fechando uma via medida: a versão da base é conferida **antes**
+de criar o venv; o uv não pode baixar nem gerenciar interpretador; `--active` manda o
+sync para `/opt/venv`; e o `.venv` do projeto **aparecer** é recusa.
+
+### O portão pós-build passou de três fatos para onze
+
+Ele conferia `hermes`, `python` e `openai`. Foi justamente um pacote **fora** dessa
+lista — `python-telegram-bot` — que ficou ausente do passo de instalação sem que nada
+percebesse. *Portão que mede menos que o selo deixa exatamente essa fenda.*
+
+Agora o esperado vem do `runtime-manifest.json` **copiado para dentro da imagem**, não
+de uma segunda lista escrita no Dockerfile: duas listas da mesma verdade divergem, e a
+que ninguém confere é a que mente.
+
+```
+pacote AUSENTE            → VERSION_UNSUPPORTED … AUSENTE, esperado '1.0'
+versão errada             → VERSION_UNSUPPORTED PyYAML: '6.0.3' != '0.0.1'
+python 3.11.15 esperado   → VERSION_UNSUPPORTED python: '3.13.15' != '3.11.15'
+```
+
+E a leitura do Hermes passou a falhar **com nome** em vez de com traceback: o build cai
+nos dois casos, mas a diferença é saber por quê às três da manhã.
+
+### Provado no staging reconstruído
+
+```
+CPython 3.13.15 (pkg oficial python.org, expandido — nunca instalado)
+commit  e624e9fd…669ade   CONFERE
+uv.lock 8fd868b9…0fddec   CONFERE
+
+hermes-agent 0.20.4 · aiohttp 3.14.3 · fastapi 0.133.1 · httpx 0.28.1
+openai 2.24.0 · pydantic 2.13.4 · python-telegram-bot 22.8 · PyYAML 6.0.3
+uvicorn 0.41.0                                              CONTRATO SATISFEITO
+
+RUNTIME_INVENTORY_SHA256  8674149d18b5f1e804561af33bf85ebbe646550c0aeb8755dab0f2c928a18f1d
+```
+
+**O dígito governado saiu de uma reconstrução feita do zero, pelo caminho declarado.**
+Até aqui ele era reproduzível *por algoritmo* mas não pelo caminho do build; agora é
+pelos dois.
+
+### Dois falsos positivos do meu próprio arnês, no caminho
+
+O portão foi para um heredoc (`RUN … <<'VERIFICA'`), e o parser de diretivas do teste
+não entendia heredoc: o corpo desaparecia, e dois testes que exigem **ver** o que o
+portão chama falharam sem nada errado no Dockerfile. Parser que não entende a sintaxe
+que o arquivo usa mede outra coisa.
+
+E o guarda "não enumere nomes de distribuição" acusou `versoes["hermes_agent"]` — uma
+**chave de dicionário** do manifesto, não uma enumeração. O defeito real é
+`metadata.version('hermes-agent')`; é isso que ele proíbe agora. Décimo quarto falso
+positivo de texto-contra-estrutura desta fase, e meu de novo.
+
+### O que continua fora de alcance aqui
+
+`cryptography==50.0.0` não tem wheel macOS x86_64 e o sdist exige Rust. Esta máquina é
+Intel; o alvo do runtime é Linux. A reconstrução local exclui esse pacote — declarado,
+não escondido — e a prova final segue pendente de Linux com Docker.
+
+---
+
+## §41.5 — D2E-A8-R4F: o laboratório de evidência, e o portão que fechou primeiro
+
+A decisão de arquitetura era: não instalar Docker no Mac; usar um runner Linux
+gratuito do GitHub Actions como laboratório descartável de build + evidência.
+
+**O portão de segurança fechou antes de qualquer push.**
+
+### O repositório é PÚBLICO
+
+```
+GET https://api.github.com/repos/Stefanoleta/creditum-portal   (anônimo)
+  HTTP 200 · private: False · visibility: public
+
+git ls-remote https://github.com/Stefanoleta/creditum-portal   (sem credencial)
+  4a7fb7d…  refs/heads/feature/intelligence-poc
+  70f48b5…  refs/heads/main
+```
+
+Três sinais independentes, e o terceiro é o decisivo: `git ls-remote` **anônimo**
+funciona. O §1 exige `visibility = PRIVATE` e proíbe empurrar código de projeto
+para repositório cuja privacidade não esteja objetivamente estabelecida. Aqui ela
+está — estabelecida como pública. Então **nenhum commit e nenhum push** aconteceu.
+
+Vale registrar o que isso significa em números: há **7 commits locais** que nunca
+foram publicados, incluindo o checkpoint `3223425` da a4-r6i. O `origin` está em
+`4a7fb7d`. Publicar a branch de evidência publicaria também toda essa história.
+
+### O que ficou pronto para quando a decisão vier
+
+Tudo, menos o push. O laboratório está escrito, validado e testado:
+
+```
+.github/workflows/a8-r4-final-image-evidence.yml     59796555…  11 passos
+intelligence/deploy/vps/verify-final-image.py        1b7b3acd…  evidência na imagem
+intelligence/deploy/vps/ci-evidence-env.py           f5b541e1…  autoridades do manifesto
+intelligence/deploy/vps/ci-evidence-summary.py       a81074fb…  sumário legível
+```
+
+Propriedades que os testes fixam (25 novos, na suíte da a8-r4):
+
+```
+gatilho                 workflow_dispatch, e só
+permissions             contents: read, e nada mais
+runner                  ubuntu-24.04 fixo — nunca ubuntu-latest
+actions                 uma só, oficial, fixada por COMMIT (v7.0.1 = 3d3c42e5…)
+token do runner         persist-credentials: false
+segredos                zero referências
+docker run              4, todos com --network none E --entrypoint sobreposto
+volumes                 um só: o repositório, :ro
+produção                nenhum /data, .env, state.db ou ledger
+publicação              nenhum push, login, tag ou release
+autoridade              nenhum dígito literal no YAML — tudo vem do manifesto
+```
+
+**Nada de programa dentro de YAML.** A primeira versão embutia o verificador como
+Python dentro de string dentro de YAML. Quebrou na indentação — e o motivo de não
+insistir é melhor que o erro: bytes que só existem no CI não são revisáveis nem
+testáveis, e a a8 passou rodadas estabelecendo que entrada de build tem de ser
+fonte governada. A lógica virou script do repositório; o workflow só executa.
+
+### A base do Python deixou de ser tag
+
+O §3 mandava classificar cada `FROM`. Resultado antes:
+
+```
+python:3.13.15-slim-bookworm  (×2, via ARG)   TAG MUTÁVEL
+ghcr.io/astral-sh/uv@sha256:b46b03dd…         DÍGITO IMUTÁVEL
+```
+
+O comentário do próprio Dockerfile já prometia: "`PYTHON_BASE_DIGEST` fixa a imagem
+quando o dígito for conhecido". Agora é conhecido, resolvido no registro e
+**autoverificado** — o dígito é o sha256 dos bytes do índice OCI:
+
+```
+python@sha256:ed86c82274b3c69b52fb5820f358f0bd7df0b603332063cb5c6e32bd220c3e6e
+  índice OCI · linux/amd64, arm, arm64, 386, ppc64le
+```
+
+**Tag fixa a VERSÃO; dígito fixa os BYTES.** `3.13.15-slim-bookworm` é reconstruída
+a cada correção de segurança do Debian, então duas builds da mesma tag não são a
+mesma imagem — e um build que existe para ser reprodutível não pode depender disso.
+E não há mais `ARG`: a base não é escolha de quem chama, pelo mesmo motivo que a
+ferramenta de build deixou de ser na r4c. A medição de `sys.version_info` continua:
+o dígito prova **qual** imagem é, a medição prova **qual** Python ela traz.
+
+Os três `FROM` são dígito agora, e o `--check` recusa qualquer `FROM` sem `@sha256:`.
+
+### O guarda de G3 ganhou, e estava certo
+
+O verificador provava "sem rede" resolvendo `api.telegram.org` e concluindo pela
+falha. O teste da a8-r1 — *"nenhum script sob `deploy/vps/` contata Telegram nem
+sobe o gateway"* — acusou o `import socket`. **Não afrouxei o guarda.** Um import de
+`socket` está a uma linha de uma conexão, e guarda de G3 não se negocia.
+
+A prova passou a ser lida do kernel: um contêiner com `--network none` tem só `lo`
+em `/sys/class/net`. Sem módulo de rede, e mais forte — resolução que falha também
+falha por DNS quebrado.
+
+### Prosa contra guarda de texto: seis vezes nesta fase
+
+`ARG UV_VERSION` no comentário (r4c), `"hermes_agent"` como chave de dicionário
+(r4e), o parser que não entendia heredoc (r4e), e agora três de uma vez: o
+cabeçalho do workflow explica que **não** há `secrets.`, que **não** se usa
+`ubuntu-latest` e que toda evidência roda com `--network none` — e a busca por
+substring encontrou as três coisas exatamente onde estavam sendo negadas.
+
+A correção é sempre a mesma e vale escrever: **o guarda olha diretiva, não prosa.**
+O teste novo remove as linhas de comentário antes de conferir.
+
+### O que falta
+
+Uma decisão, não código:
+
+```
+repositório privado (tornar este privado, ou apontar para outro)  → push, CI, PASS
+```
+
+O build precisa de rede (clone da fonte, imagens OCI fixadas por dígito, wheels do
+lock); a evidência roda com `--network none`. FIRST LIVE segue NÃO em qualquer
+desfecho.

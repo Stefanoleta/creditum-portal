@@ -1,0 +1,134 @@
+{
+  "manifest_id": "creditum_hermes_vps_runtime_build/v1",
+  "manifest_version": "1.0.0",
+  "purpose": "Autoridade não-secreta da construção do runtime. O build compara o que produziu contra este documento; divergência é recusa.",
+  "hermes_source": {
+    "repository": "https://github.com/NousResearch/hermes-agent",
+    "commit": "e624e9fde561e1add9388384012b295fde669ade",
+    "commit_evidence": "/opt/hermes-agent/.hermes_build_sha",
+    "install_root": "/opt/hermes-agent",
+    "install_mode": "editable",
+    "installer": "uv",
+    "lock": "uv.lock",
+    "lock_sha256": "8fd868b9da8b6bc2f4aa94a845e210eccdd5e31be7a0b404f0a8527ced0fddec",
+    "lock_sha256_note": "PROVADO na a4-r6: `shasum -a 256 uv.lock` na árvore de staging genuína, no commit fixado acima e com o git limpo. Não foi obtido do Managed nem da rede.",
+    "branch_authority_forbidden": [
+      "latest",
+      "main",
+      "master",
+      "HEAD"
+    ],
+    "lock_sha256_evidence": "staging genuíno reconstruído · git HEAD == commit · hermes-agent 0.20.4 · Python 3.13.15 · uv sync --frozen sem regenerar o lock",
+    "runtime_inventory_sha256": "8674149d18b5f1e804561af33bf85ebbe646550c0aeb8755dab0f2c928a18f1d",
+    "runtime_inventory_sha256_note": "AUTORIDADE. Recomputado pelo algoritmo governado `creditum_hermes_runtime_inventory/v1` (deploy/vps/runtime-inventory.py) contra o runtime genuíno reconstruído, em três processos independentes, mesmo dígito. O `--check --runtime-root` observa o runtime vivo e reproduz este valor; não confere presença de campo.",
+    "runtime_inventory_algorithm": "creditum_hermes_runtime_inventory/v1",
+    "runtime_inventory_sha256_historical": "01ba45ae2ecde279ec53b6d8dabdeae85a7caf2eca74823e526e10666367aee1",
+    "runtime_inventory_sha256_historical_note": "HISTÓRICO · NÃO AUTORITATIVO · SUPERADO pelo inventário governado v1. Chegou fornecido pela reconstrução do staging, produzido por uma codificação que nunca esteve neste repositório e que não pode ser reexecutada. Os FATOS que ele pretendia certificar conferem um a um com o inventário governado — python, hermes, commit, lock, os oito pacotes. O que não existe é o algoritmo. Fica registrado para rastrear a procedência, e não é aceito como autoridade em lugar nenhum do --check."
+  },
+  "runtime_versions": {
+    "hermes_agent": "0.20.4",
+    "python": "3.13.15",
+    "openai": "2.24.0"
+  },
+  "critical_packages": {
+    "python-telegram-bot": "22.8",
+    "aiohttp": "3.14.3",
+    "pydantic": "2.13.4",
+    "PyYAML": "6.0.3",
+    "httpx": "0.28.1",
+    "uvicorn": "0.41.0",
+    "fastapi": "0.133.1"
+  },
+  "governed_paths": {
+    "hermes_home": "/data",
+    "workdir": "/opt/hermes-agent",
+    "project_plugin_root": "/opt/hermes-agent/.hermes/plugins",
+    "user_plugin_root": "/data/plugins",
+    "execution_ledger_root": "/data/creditum_hermes_runtime/execution-ledger/v1",
+    "archive_only": [
+      "/data/creditum_hermes_runtime/r6_r6"
+    ]
+  },
+  "entrypoint_groups_checked": [
+    "hermes_agent.plugins",
+    "hermes_agent.plugin_capabilities"
+  ],
+  "governed_artifact_hashes": {
+    "note": "Preenchidos por scripts/seal-runtime-manifest.py a partir dos arquivos governados. Nulo significa não selado, e o build recusa.",
+    "Dockerfile": "941b5e7e4593d84d8cfab1f9cf0c4f3ff364a63f9df81ccf277cfe58aa73ee94",
+    "prestart-gate.sh": "3b40870cb1d79321eade5ee42db04f7c8539fb42aa4b8ed60412fe827bf12001",
+    "compose.yaml": "a305b7ee72474c9cf332b25879f29637c16454099ad0b24f2cba0b1c94e63242"
+  },
+  "contains_secrets": false,
+  "network_used_by_manifest": "nenhuma",
+  "plugin_artifact": {
+    "note": "As entradas de que o artefato de 7 arquivos e o manifesto de implantação da a6 são reproduzidos. Antes da a8-r4 a casca e o montador viviam fora do controle de versão e o manifesto revisado embutia caminhos de scratchpad da máquina de quem montou — o que o tornava válido contra aqueles bytes e irreprodutível em qualquer outra máquina.",
+    "assembler": "deploy/vps/assemble-plugin-artifact.py",
+    "shell_source": "deploy/vps/plugin-src",
+    "package_source": "bridge/creditum_hermes_telegram",
+    "manifest_builder": "scripts/build-telegram-plugin-manifest.py",
+    "a6_manifest_inputs": {
+      "source_commit": "32234255e03cdf90be6f865d623fe75e805213eb",
+      "plugin_root": "/data/plugins/creditum-telegram-governed",
+      "plugin_version": "1.0.0",
+      "artifact_version": "d2e-a4-r6i",
+      "config_path": "/data/config.yaml",
+      "config_enabled_list_path": "plugins.enabled",
+      "precedence_paths": [
+        "/opt/hermes-agent/.hermes/plugins"
+      ]
+    },
+    "file_count": 7,
+    "files": {
+      "__init__.py": "251cc88e88bedc214f351002d74c286e65c8bedfb6a2842259afaac83e05e893",
+      "creditum_hermes_telegram/__init__.py": "93d1313c1dd72613115043c185efef00438ec03bba95eb0560b210f1bdd10788",
+      "creditum_hermes_telegram/adapter.py": "24f42cabe98dd86f51be4495fd74681398f22a0e88acde83d254af3a21c5f63f",
+      "creditum_hermes_telegram/compat.py": "159d032d667408a7b2a313ab5164241115922243c1206f0de8647d2f3461c779",
+      "creditum_hermes_telegram/ingress.py": "e6ae04a759558b2156b65eda0777d85253693e04f72b791ec2a9adb760140ed9",
+      "creditum_hermes_telegram/planning.py": "c8062978d95cd2b506ef52ba0f7652bf629607accc2a37f70931c1f4dd785a2a",
+      "plugin.yaml": "d16d8f7370dcc476377393be35f7169bfe743a38ce2aa36827ae3deef891902a"
+    },
+    "a6_manifest_sha256": "182a977b2f94d499911ee33a555c983a39ac6445dea821fe2badf11a7d6a7ca1",
+    "a6_manifest_sha256_note": "Selado por seal-runtime-manifest.py --seal a partir da montagem real, com as entradas governadas acima. Mudou na a8-r4a porque o plugin.yaml passou a declarar v2, que é a verdade.",
+    "a6_manifest_inputs_note": "source_commit é o CHECKPOINT CONGELADO da implementação governada da a4 que fornece o adapter/compat autoritativos — 32234255e03cdf90be6f865d623fe75e805213eb. Ele NÃO significa 'o commit que contém todas as entradas de empacotamento'. As entradas de empacotamento introduzidas na a8 são governadas por conta própria: caminho exato no repositório, bytes e hash em plugin_artifact.files, montador determinístico e o SHA final deste manifesto. Apontar source_commit para o commit que contém este manifesto seria proveniência circular — o documento provando a si mesmo — e é exatamente o que o teste test_A8R4A_source_commit_NAO_e_circular impede de voltar.",
+    "a6_manifest_sha256_historical": "1766db9ffe83b15b7bd1f8781d82c4b0b48e9b5f87db7924bc81ae46be1d7d9e",
+    "a6_manifest_sha256_historical_note": "HISTÓRICO · PRÉ-REPRODUTIBILIDADE · NÃO É AUTORIDADE IMPLANTÁVEL. Gerado no regate da a4-r6i com metadados não governados: source_commit preenchido com zeros e caminhos de scratchpad da estação de trabalho. Os sete hashes de arquivo dele eram válidos, então isto NÃO reabre a a4 nem a semântica de verificação da a6 — o que ele não é, é reprodutível fora daquela máquina."
+  },
+  "build_toolchain": {
+    "note": "A ferramenta que CONSTRÓI o runtime, governada à parte do runtime que ela constrói. Antes da a8-r4c o Dockerfile exigia --build-arg UV_VERSION sem padrão: falhava fechada, mas deixava a ferramenta como escolha de quem chama, e dois builds do mesmo estado do repositório podiam usar dois uv diferentes sem que nada notasse.",
+    "installer": "uv",
+    "uv_version": "0.11.19",
+    "uv_version_observation": "OBSERVADO no uv que reconstruiu o runtime de staging aprovado nesta estação de trabalho: `uv 0.11.19 (7b2cff1c3 2026-06-03 x86_64-apple-darwin)`. É a ferramenta que produziu os fatos que o inventário governado sela (8674149d…). NÃO é observação do build de produção nem da Managed, e é um build macOS x86_64 enquanto a imagem usa linux. Fixar esta versão é portanto uma DECISÃO ancorada nessa observação, não uma medição da produção — e está escrito aqui para que ninguém a leia como se fosse.",
+    "uv_image": "ghcr.io/astral-sh/uv",
+    "uv_image_digest": "sha256:b46b03ddfcfbf8f547af7e9eaefdf8a39c8cebcba7c98858d3162bd28cf536f6",
+    "uv_image_digest_note": "Índice OCI (application/vnd.oci.image.index.v1+json), linux/amd64 e linux/arm64. AUTOVERIFICÁVEL: o dígito é o sha256 dos bytes do próprio índice, então não é preciso confiar no mapeamento de tag do registro. Conferido buscando o manifesto POR DÍGITO e rehasheando o corpo recebido — bateu. A tag 0.11.19 aponta para este mesmo índice hoje; a tag pode mover, o dígito não.",
+    "uv_image_platforms": [
+      "linux/amd64",
+      "linux/arm64"
+    ],
+    "consumed_by": "deploy/vps/Dockerfile — FROM ghcr.io/astral-sh/uv@<dígito> AS ferramenta_uv",
+    "build_arg": null,
+    "build_arg_note": "Nulo de propósito: não existe argumento de build para o uv. O dígito é literal no Dockerfile, então não há valor que quem chama possa escolher.",
+    "mutable_references_forbidden": [
+      "latest",
+      "main",
+      "master",
+      "HEAD"
+    ],
+    "uv_resident_in_final_image": true,
+    "uv_resident_note": "O binário é copiado para /usr/local/bin/uv no estágio final (Dockerfile: COPY --from=ferramenta_uv /uv /usr/local/bin/uv), então o uv FICA na imagem implantável. Ele não entra em creditum_hermes_runtime_inventory/v1: o inventário descreve o runtime da APLICAÇÃO — interpretador e distribuições governadas —, e acrescentar um campo mudaria o texto canônico e portanto o dígito selado. A identidade da ferramenta já está fixada aqui, por dígito OCI, que é mais forte que uma string de versão no inventário. Se o modelo de ameaça passar a querer medir RESIDÊNCIA de ferramenta no runtime, isso é um v2 do inventário — decisão explícita, não efeito colateral.",
+    "python_base_image": "python",
+    "python_base_tag_observed": "3.13.15-slim-bookworm",
+    "python_base_digest": "sha256:ed86c82274b3c69b52fb5820f358f0bd7df0b603332063cb5c6e32bd220c3e6e",
+    "python_base_digest_note": "Indice OCI (application/vnd.oci.image.index.v1+json), 5 plataformas: linux/amd64, arm, arm64, 386, ppc64le. AUTOVERIFICAVEL: o digito e o sha256 dos bytes do proprio indice, conferido buscando o manifesto no registro e rehasheando o corpo recebido. Ate a a8-r4f a base era a TAG `python:3.13.15-slim-bookworm` num argumento de build. Tag fixa a VERSAO; digito fixa os BYTES — e `3.13.15-slim-bookworm` e reconstruida a cada correcao de seguranca do Debian, entao duas builds da mesma tag nao sao a mesma imagem. A conferencia de sys.version_info dentro da imagem CONTINUA: o digito prova que imagem e, a medicao prova que Python ela traz.",
+    "python_base_build_arg": null,
+    "python_base_build_arg_note": "Nulo de proposito: a base nao e escolha de quem chama, pelo mesmo motivo que a ferramenta de build deixou de ser na r4c. O digito e literal nos dois FROM.",
+    "python_base_platforms": [
+      "linux/amd64",
+      "linux/arm",
+      "linux/arm64",
+      "linux/386",
+      "linux/ppc64le"
+    ]
+  }
+}
