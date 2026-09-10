@@ -6389,3 +6389,128 @@ repositório privado (tornar este privado, ou apontar para outro)  → push, CI,
 O build precisa de rede (clone da fonte, imagens OCI fixadas por dígito, wheels do
 lock); a evidência roda com `--network none`. FIRST LIVE segue NÃO em qualquer
 desfecho.
+
+---
+
+## §41.6 — D2E-A8-R4G: a autoridade ligada ao que de fato executa
+
+O regate da a8-r4 completou e bloqueou. Um achado, e ele é dos bons.
+
+### O defeito
+
+A imagem copiava `scripts/prestart-gate.sh` **intacto** e o instalava como
+`ENTRYPOINT`. O template traz, de propósito, um sentinela:
+
+```sh
+MANIFESTO_SHA="__PREENCHER_NO_ARTEFATO__"
+if [ "${MANIFESTO_SHA}" = "__PREENCHER_NO_ARTEFATO__" ]; then
+    echo "RECUSA PRESTART_MANIFEST_SHA_NOT_PINNED" >&2
+    exit 3
+fi
+```
+
+Então **todo arranque normal da imagem morria com `exit 3`**, antes da
+verificação da a6. E o selo, enquanto isso, recomputava o manifesto da a6 e
+dava PASS.
+
+A autoridade existia. Não estava **ligada** ao caminho executável.
+
+**Por que sobreviveu tanto tempo:** toda execução de evidência sobrepunha o
+`ENTRYPOINT` — `--entrypoint /opt/venv/bin/python`, `--entrypoint /bin/sh`. O
+caminho de arranque nunca foi exercitado. *O que não é exercitado não é
+provado* — a mesma frase que a a4 escreveu oito vezes, agora do lado da
+implantação.
+
+### A ligação, e por que uma substituição só
+
+`bind-prestart-envelope.py` roda num estágio próprio do build: reconstrói os
+sete arquivos do plugin, reconstrói o manifesto da a6 **pelas funções já
+governadas** (`reproduz_artefato`, `reproduz_manifesto_a6` — nada de segundo
+algoritmo), exige que o dígito bata com o governado e substitui a **atribuição**:
+
+```
+atribuição ligada   1 · sentinela remanescente (guarda) 1 · SHA embutido 1
+```
+
+**Substituir as duas ocorrências quebraria o guarda.** Ele viraria
+`[ "$X" = "$X" ]`, sempre verdadeiro, e a imagem recusaria em todo arranque. A
+comparação mantém o sentinela literal porque é ela que faz o guarda funcionar.
+O §3 do brief pedia "sentinela após a ligação: 0"; o correto é 1, e é o do
+guarda — está declarado, medido e testado.
+
+### Template e instalado são artefatos diferentes
+
+```
+template   scripts/prestart-gate.sh          sentinela ×2   hash 3b40870c…  (autoridade de FONTE)
+instalado  /opt/creditum/prestart-gate.sh    SHA da a6 ×1   hash muda com o SHA
+```
+
+Exigir que os hashes de arquivo batessem seria exigir que a ligação não tivesse
+acontecido. A autoridade do instalado é o **SHA embutido**, e é isso que o
+`--check` confere.
+
+### A cadeia, agora fechada
+
+```
+fonte do plugin → artefato de 7 arquivos → manifesto da a6 → SHA da a6
+  → envelope instalado → ENTRYPOINT
+```
+
+`seal-runtime-manifest.py --check` passou a exigir `--installed-entrypoint`. Sem
+ele: recusa. Com ele: compara o SHA embutido contra o manifesto **recomputado**
+naquela mesma execução.
+
+### O build recusa o template cru
+
+```
+ENTRYPOINT_NAO_LIGADO      atribuição sem SHA de 64 hex
+ENTRYPOINT_COM_SENTINELA   o template cru foi instalado
+ENTRYPOINT_SEM_GUARDA      a ligação destruiu o guarda
+```
+
+A primeira versão desse bloco tinha um defeito de shell que vale registrar:
+`grep -q ... && { exit 2; }` sob `set -e` **aborta quando o grep NÃO encontra** —
+o inverso do pretendido. Virou `if grep; then falha; fi`, que diz o que quer dizer.
+
+### O `ENTRYPOINT` REAL, exercitado
+
+O passo que faltava, e sem ele nada disso estaria provado:
+
+```
+docker run --rm --network none creditum-hermes:a8-r4-final-evidence
+  exit do ENTRYPOINT real: 2
+  RECUSA PRESTART_GATE_FAILED — gateway NÃO iniciado
+```
+
+Sem `--entrypoint`. O portão executou de verdade, chegou à verificação da a6
+(não morreu no sentinela — `PRESTART_MANIFEST_SHA_NOT_PINNED` ausente), recusou
+por falta do manifesto em `/data` (condição inválida controlada: não há `/data`
+montado) e **o gateway não subiu**. Sem rede, sem token, sem credencial, sem
+estado de produção.
+
+### Medido na imagem final (execução #2)
+
+```
+image id                   sha256:dc0ff2c1704fce39bf52f34cc2f0b3afe037a7782f5fdaeb6cee1ff845b39daa
+envelope_presente          True
+envelope_sha_embutido      182a977b…a7ca1
+envelope_atribuicao_com_sentinela  False
+envelope_guarda_presente   True
+envelope_executavel        True
+
+entrypoint a6              182a977b…a7ca1   ← instalado
+manifesto a6 observado     182a977b…a7ca1   ← recomputado
+manifesto a6 esperado      182a977b…a7ca1   ← governado
+RUNTIME_INVENTORY_SHA256   8674149d…a18f1d  (inalterado)
+SELADO — o build pode conferir contra este manifesto.
+```
+
+Três valores, um acordo. Era esse acordo que faltava.
+
+### Nono falso positivo de texto-contra-estrutura
+
+O guarda "nenhum comando invoca o gateway" acusou o workflow — porque o passo
+novo **procura** por `gateway run` para falhar o job se o gateway subir. O guarda
+encontrou a própria negação daquilo que guarda. Agora ele olha **comando por
+comando**, com continuações juntadas, e não o texto inteiro. Nove vezes nesta
+fase; a correção foi sempre a mesma, e sempre no guarda, nunca no que ele guarda.
