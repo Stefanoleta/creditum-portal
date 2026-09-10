@@ -39,6 +39,14 @@ import sys
 
 MARCADOR = ".hermes_build_sha"
 
+#: O ENTRYPOINT que a imagem instala. A a8-r4g existe porque ele era o template
+#: CRU, com o sentinela, e recusava com `exit 3` em todo arranque normal — e
+#: nenhuma evidência via, porque toda execução de CI sobrepunha o ENTRYPOINT.
+ENVELOPE = "/opt/creditum/prestart-gate.sh"
+SENTINELA = "__PREENCHER_NO_ARTEFATO__"
+import re as _re  # noqa: E402 — usado só na leitura da atribuição
+ATRIBUICAO = _re.compile(r'^MANIFESTO_SHA="([0-9a-f]{64})"$', _re.MULTILINE)
+
 
 class Divergencia(Exception):
     """Um fato observado que não é o esperado."""
@@ -84,6 +92,44 @@ def forma_do_sistema_de_arquivos(raiz: pathlib.Path, venv: pathlib.Path,
         fatos[chave] = alvo.is_file()
         if not fatos[chave]:
             ruins.append(f"{alvo} ausente")
+
+
+def envelope_instalado(caminho: pathlib.Path, a6_governado: str,
+                       fatos: dict, ruins: list) -> None:
+    """
+    O ENTRYPOINT instalado carrega a autoridade da a6, e o guarda continua lá.
+
+    Duas coisas distintas, e a distinção importa: o TEMPLATE do repositório tem
+    de conter o sentinela (é envelope reutilizável); o INSTALADO tem de conter o
+    SHA concreto. Exigir que os dois tenham o mesmo hash de arquivo seria exigir
+    que a ligação não tivesse acontecido.
+    """
+    fatos["envelope_presente"] = caminho.is_file()
+    if not fatos["envelope_presente"]:
+        ruins.append(f"{caminho} ausente — não há ENTRYPOINT instalado")
+        return
+    texto = caminho.read_text(encoding="utf-8")
+
+    achado = ATRIBUICAO.search(texto)
+    fatos["envelope_sha_embutido"] = achado.group(1) if achado else None
+    if achado is None:
+        ruins.append("o ENTRYPOINT instalado não atribui um SHA de 64 hex")
+    elif achado.group(1) != a6_governado:
+        ruins.append(f"ENTRYPOINT ligado a {achado.group(1)[:16]}… != a6 governado "
+                     f"{a6_governado[:16]}…")
+
+    # A ATRIBUIÇÃO não pode ter sobrado com o sentinela; a COMPARAÇÃO tem de ter.
+    fatos["envelope_atribuicao_com_sentinela"] = (
+        f'MANIFESTO_SHA="{SENTINELA}"' in texto)
+    if fatos["envelope_atribuicao_com_sentinela"]:
+        ruins.append("o ENTRYPOINT instalado ainda é o template cru")
+    fatos["envelope_guarda_presente"] = (
+        f'= "{SENTINELA}" ]' in texto)
+    if not fatos["envelope_guarda_presente"]:
+        ruins.append("o guarda do envelope foi destruído pela ligação")
+    fatos["envelope_executavel"] = caminho.stat().st_mode & 0o111 != 0
+    if not fatos["envelope_executavel"]:
+        ruins.append(f"{caminho} não é executável")
 
 
 def versoes(esperado: dict, fatos: dict, ruins: list) -> None:
@@ -136,6 +182,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--runtime-root", required=True)
     p.add_argument("--manifest", required=True)
     p.add_argument("--venv", default="/opt/venv")
+    p.add_argument("--envelope", default=ENVELOPE)
     p.add_argument("--json", action="store_true")
     a = p.parse_args(argv)
 
@@ -177,6 +224,9 @@ def main(argv: list[str] | None = None) -> int:
         if fatos["marcador_valor"] != fonte["commit"]:
             ruins.append("marcador != commit governado")
 
+    envelope_instalado(pathlib.Path(a.envelope),
+                       doc["plugin_artifact"]["a6_manifest_sha256"], fatos, ruins)
+
     fatos["rede_desligada"], fatos["interfaces"] = rede_esta_desligada()
     if not fatos["rede_desligada"]:
         ruins.append(f"há rede (interfaces: {fatos['interfaces']}): a evidência "
@@ -193,7 +243,9 @@ def main(argv: list[str] | None = None) -> int:
         print("=== evidência da imagem final ===")
         for chave in ("git_ausente", "venv_do_projeto_ausente", "marcador_presente",
                       "marcador_bytes", "marcador_valor", "marcador_forma_valida",
-                      "venv_tem_python", "venv_tem_hermes", "python",
+                      "venv_tem_python", "venv_tem_hermes", "envelope_presente",
+                      "envelope_sha_embutido", "envelope_atribuicao_com_sentinela",
+                      "envelope_guarda_presente", "envelope_executavel", "python",
                       "python_implementation", "python_prefix", "uv_lock_sha256",
                       "rede_desligada", "interfaces"):
             if chave in fatos:

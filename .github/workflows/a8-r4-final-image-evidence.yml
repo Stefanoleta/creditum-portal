@@ -132,7 +132,8 @@ jobs:
             --entrypoint /opt/venv/bin/python \
             creditum-hermes:a8-r4-final-evidence \
             -B deploy/vps/seal-runtime-manifest.py --check \
-               --runtime-root /opt/hermes-agent | tee selo.txt
+               --runtime-root /opt/hermes-agent \
+               --installed-entrypoint /opt/creditum/prestart-gate.sh | tee selo.txt
           grep -q SELADO selo.txt
           A6=$(awk '/manifesto a6/ {print $3}' selo.txt | tail -1)
           echo "manifesto a6 observado: ${A6}"
@@ -147,6 +148,41 @@ jobs:
             --entrypoint /bin/sh creditum-hermes:a8-r4-final-evidence -c \
             'ps ax; ps ax | grep -v grep | grep -E "hermes .*run|gateway|polling" && exit 2 || echo "nenhum processo de gateway ou poller"'
           echo "nenhum conteiner de evidencia executou o ENTRYPOINT governado"
+
+      # ─── o ENTRYPOINT REAL, sem sobreposicao ────────────────────────────
+      #
+      # Este passo existe porque o defeito da a8-r4g sobreviveu a varias rodadas:
+      # TODA execucao de evidencia sobrepunha o ENTRYPOINT, entao ninguem nunca
+      # exercitou o caminho de arranque normal. O que nao e exercitado nao e
+      # provado.
+      #
+      # A condicao invalida e controlada e verdadeira: nao ha /data montado, entao
+      # o manifesto que o portao exige nao existe. O portao roda, verifica, recusa
+      # e sai != 0 — ANTES de qualquer `hermes gateway run`. Sem rede, sem token,
+      # sem credencial, sem estado de producao.
+      - name: ENTRYPOINT REAL executa e recusa antes do gateway
+        run: |
+          set -uo pipefail
+          set +e
+          docker run --rm --network none \
+            creditum-hermes:a8-r4-final-evidence > entrypoint.txt 2>&1
+          CODIGO=$?
+          set -e
+          echo "exit do ENTRYPOINT real: ${CODIGO}"
+          cat entrypoint.txt
+          test "${CODIGO}" -ne 0
+          # O portao chegou a rodar a verificacao da a6 — nao morreu no sentinela.
+          if grep -q PRESTART_MANIFEST_SHA_NOT_PINNED entrypoint.txt; then
+            echo "ENVELOPE_NAO_LIGADO: o template cru foi instalado" >&2
+            exit 1
+          fi
+          grep -qE "PRESTART_GATE_FAILED|MANIFEST" entrypoint.txt
+          # E o gateway nunca subiu.
+          if grep -qE "gateway run|Application started|polling" entrypoint.txt; then
+            echo "GATEWAY_SUBIU" >&2
+            exit 1
+          fi
+          echo "ENTRYPOINT real: executou, recusou, gateway nao subiu"
 
       - name: sumario de evidencia legivel por maquina
         run: |

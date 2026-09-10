@@ -102,6 +102,30 @@ RUN set -eu; \
 # que o dígito daqui seja o dígito de lá.
 FROM ghcr.io/astral-sh/uv@sha256:b46b03ddfcfbf8f547af7e9eaefdf8a39c8cebcba7c98858d3162bd28cf536f6 AS ferramenta_uv
 
+# ─── a8-r4g: o envelope de arranque, LIGADO à autoridade da a6 ───────────────
+#
+# A imagem copiava `scripts/prestart-gate.sh` INTACTO e o instalava como
+# ENTRYPOINT. O template traz um sentinela de propósito e recusa com `exit 3`
+# enquanto ele estiver lá — então todo arranque normal morria ANTES da
+# verificação da a6. E nenhuma evidência via, porque toda execução de CI
+# sobrepunha o ENTRYPOINT. O selo dava PASS sobre uma autoridade que não estava
+# ligada ao caminho executável.
+#
+# Este estágio reconstrói os sete arquivos do plugin, reconstrói o manifesto da
+# a6, exige que o SHA bata com o governado e só então substitui a ATRIBUIÇÃO do
+# sentinela. Uma substituição, provada: a comparação do guarda permanece intacta.
+#
+# Estágio separado de propósito: as fontes de construção não entram na imagem
+# final. O runtime recebe só o arquivo resultante.
+FROM python@sha256:ed86c82274b3c69b52fb5820f358f0bd7df0b603332063cb5c6e32bd220c3e6e AS envelope
+COPY deploy/vps /build/deploy/vps
+COPY scripts /build/scripts
+COPY bridge/creditum_hermes_telegram /build/bridge/creditum_hermes_telegram
+COPY bridge/creditum_hermes_prestart /build/bridge/creditum_hermes_prestart
+RUN set -eu; \
+    python3 -B /build/deploy/vps/bind-prestart-envelope.py \
+      --repo /build --out /out/prestart-gate.sh
+
 FROM python@sha256:ed86c82274b3c69b52fb5820f358f0bd7df0b603332063cb5c6e32bd220c3e6e AS runtime
 ARG HERMES_COMMIT
 ARG HERMES_VERSION_ESPERADA=0.20.4
@@ -158,9 +182,21 @@ RUN set -eu; \
 # aqui seria uma SEGUNDA implementação da mesma leitura — o defeito que a a6 passou
 # quatro rodadas fechando.
 COPY bridge/creditum_hermes_prestart /opt/creditum/creditum_hermes_prestart
-COPY scripts/prestart-gate.sh /opt/creditum/prestart-gate.sh
+# O ENTRYPOINT vem do estágio `envelope`, já ligado ao SHA da a6. Copiar o
+# template cru aqui foi o defeito que a a8-r4g fechou.
+COPY --from=envelope /out/prestart-gate.sh /opt/creditum/prestart-gate.sh
 COPY deploy/vps/runtime-manifest.json /opt/creditum/runtime-manifest.json
-RUN chmod 0755 /opt/creditum/prestart-gate.sh
+RUN set -eu; \
+    chmod 0755 /opt/creditum/prestart-gate.sh; \
+    grep -q '^MANIFESTO_SHA="[0-9a-f]\{64\}"$' /opt/creditum/prestart-gate.sh \
+      || { echo "ENTRYPOINT_NAO_LIGADO: atribuicao sem SHA de 64 hex" >&2; exit 2; }; \
+    if grep -q '^MANIFESTO_SHA="__PREENCHER_NO_ARTEFATO__"$' \
+         /opt/creditum/prestart-gate.sh; then \
+      echo "ENTRYPOINT_COM_SENTINELA: o template cru foi instalado" >&2; exit 2; \
+    fi; \
+    grep -q 'if \[ "${MANIFESTO_SHA}" = "__PREENCHER_NO_ARTEFATO__" \]' \
+      /opt/creditum/prestart-gate.sh \
+      || { echo "ENTRYPOINT_SEM_GUARDA: a ligacao destruiu o guarda" >&2; exit 2; }
 
 ENV PYTHONPATH=/opt/creditum
 

@@ -142,7 +142,12 @@ class ContratoDoDockerfile(unittest.TestCase):
         self.assertFalse(any(a.startswith("PYTHON_BASE=") for a in args),
                          "PYTHON_BASE voltou a ser argumento de build")
         de_python = [f for f in froms if f.startswith("python")]
-        self.assertEqual(len(de_python), 2, "esperados 2 estágios de base")
+        # A a8-r4g acrescentou o estágio `envelope`, que liga o SHA da a6 ao
+        # ENTRYPOINT. O invariante nunca foi a CONTAGEM — é que todo estágio de
+        # base use o mesmo dígito governado. Fixar o número obrigaria a mexer no
+        # guarda a cada estágio novo, e guarda que se mexe por rotina para de
+        # guardar.
+        self.assertGreaterEqual(len(de_python), 2, "esperados ao menos 2 estágios")
         for f in de_python:
             self.assertIn("@sha256:", f, "a base do Python não é fixada por dígito")
             self.assertNotIn("${", f)

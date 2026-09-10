@@ -1124,6 +1124,24 @@ def diretivas_do_workflow() -> str:
                       if not l.lstrip().startswith("#"))
 
 
+def comandos_docker() -> list[str]:
+    """
+    Os `docker run` do workflow, com as continuacoes `\\` JUNTADAS.
+
+    Contar por linha media outra coisa: `--entrypoint` vive numa linha de
+    continuacao, entao toda execucao pareceria nao sobrepor. Setimo falso
+    positivo de texto-contra-estrutura desta fase.
+    """
+    juntadas, acumulado = [], ""
+    for linha in diretivas_do_workflow().splitlines():
+        acumulado += " " + linha.strip().rstrip("\\")
+        if linha.rstrip().endswith("\\"):
+            continue
+        juntadas.append(acumulado.strip())
+        acumulado = ""
+    return [c for c in juntadas if "docker run" in c]
+
+
 class LaboratorioDeEvidenciaCI(Bancada):
     """
     A8-R4F — o workflow que constroi a imagem final e um LABORATORIO descartavel.
@@ -1197,11 +1215,26 @@ class LaboratorioDeEvidenciaCI(Bancada):
         imagem sem sobrepor seria iniciar o runtime — e esta fase e evidencia de
         runtime IMUTAVEL, nao arranque.
         """
-        self.assertEqual(self.dirs.count("docker run"),
-                         self.dirs.count("--entrypoint"),
-                         "algum docker run nao sobrepoe o entrypoint")
-        for proibido in ("hermes run", "gateway run", "start_polling"):
-            self.assertNotIn(proibido, self.dirs)
+        # A a8-r4g acrescentou UMA execucao deliberada com o ENTRYPOINT real —
+        # sem ela o defeito do envelope nao ligado sobrevive, porque o que nao e
+        # exercitado nao e provado. Toda a OUTRA execucao continua sobrepondo.
+        corridas = comandos_docker()
+        sem_override = [c for c in corridas if "--entrypoint" not in c]
+        self.assertEqual(len(sem_override), 1,
+                         "esperada exatamente 1 execucao com o ENTRYPOINT real")
+        self.assertEqual(len(corridas) - 1, self.dirs.count("--entrypoint"),
+                         "alguma outra execucao deixou de sobrepor o entrypoint")
+        # E a execucao real e a de FALHA CONTROLADA: exige exit != 0.
+        self.assertIn('test "${CODIGO}" -ne 0', self.dirs)
+        self.assertIn("GATEWAY_SUBIU", self.dirs)
+        # O invariante e que nenhum COMANDO invoque o gateway. As ocorrencias de
+        # "gateway run" no workflow estao dentro de greps que FALHAM o job se o
+        # gateway subir — o oposto de invoca-lo. Oitava vez nesta fase que um
+        # guarda de texto acusa a propria negacao do que ele guarda.
+        for comando in corridas:
+            for proibido in ("hermes run", "gateway run", "start_polling"):
+                self.assertNotIn(proibido, comando,
+                                 f"docker run invoca {proibido}: {comando[:70]}")
 
     def test_A8R4F_nada_de_producao_e_montado(self) -> None:
         for proibido in ("/data:", ".env", "state.db", "execution-ledger"):
@@ -1267,8 +1300,14 @@ class EvidenciaDentroDaImagem(Bancada):
         rodadas fechando. O inventario e o selo tem suas ferramentas.
         """
         fonte = self.VERIFICADOR.read_text(encoding="utf-8")
-        for proibido in ("canoniza", "RUNTIME_INVENTORY", "creditum_hermes_runtime_inventory",
-                         "a6_manifest"):
+        # Ler o valor GOVERNADO e legitimo — a a8-r4g precisa dele para conferir o
+        # envelope instalado. O que se proibe e RECONSTRUIR: inventario e manifesto
+        # tem suas ferramentas, e segunda verdade sobre a mesma coisa e o defeito
+        # que a a6 passou quatro rodadas fechando.
+        for proibido in ("canoniza", "RUNTIME_INVENTORY",
+                         "creditum_hermes_runtime_inventory",
+                         "reproduz_manifesto_a6", "reproduz_artefato",
+                         "build-telegram-plugin-manifest"):
             self.assertNotIn(proibido, fonte,
                              f"o verificador reimplementa {proibido}")
 
@@ -1341,7 +1380,9 @@ class BaseDoPythonFixada(Bancada):
         depender disso.
         """
         froms = [l for l in self.dockerfile.splitlines() if l.startswith("FROM")]
-        self.assertEqual(len(froms), 3)
+        # A a8-r4g acrescentou o estagio `envelope`. O que se guarda e que TODO
+        # FROM seja por digito — nao quantos existem.
+        self.assertGreaterEqual(len(froms), 3)
         for linha in froms:
             self.assertIn("@sha256:", linha, f"FROM sem digito: {linha[:60]}")
             self.assertNotIn("${", linha)
@@ -1352,7 +1393,11 @@ class BaseDoPythonFixada(Bancada):
         f = self.doc["build_toolchain"]
         self.assertEqual(f["python_base_digest"], self.DIGESTO)
         self.assertIsNone(f["python_base_build_arg"])
-        self.assertEqual(self.dockerfile.count(f"python@{self.DIGESTO}"), 2)
+        self.assertGreaterEqual(self.dockerfile.count(f"python@{self.DIGESTO}"), 2)
+        # e nenhum FROM de python escapa do digito governado
+        for linha in self.dockerfile.splitlines():
+            if linha.startswith("FROM python"):
+                self.assertIn(f"@{self.DIGESTO}", linha)
 
     def test_A8R4F_a_medicao_da_versao_CONTINUA(self) -> None:
         """O digito prova QUE imagem e; a medicao prova QUE Python ela traz."""
@@ -1362,6 +1407,221 @@ class BaseDoPythonFixada(Bancada):
     def test_A8R4F_a_ARG_da_base_NAO_ressuscita(self) -> None:
         self.assertFalse(any(l.strip().startswith("ARG PYTHON_BASE=")
                              for l in self.dockerfile.splitlines()))
+
+
+# =============================================================================
+class EnvelopeDeArranqueLigado(Bancada):
+    """
+    A8-R4G — a autoridade da a6 ligada ao ENTRYPOINT que de fato executa.
+
+    A imagem copiava `scripts/prestart-gate.sh` INTACTO e o instalava como
+    ENTRYPOINT. O template traz um sentinela de proposito e recusa com `exit 3`
+    enquanto ele estiver la — entao todo arranque normal morria ANTES da
+    verificacao da a6.
+
+    O selo, enquanto isso, recomputava o manifesto e dava PASS. A autoridade
+    existia; nao estava LIGADA ao caminho executavel. E nada via, porque toda
+    execucao de CI sobrepunha o ENTRYPOINT: *o que nao e exercitado nao e
+    provado.*
+    """
+
+    TEMPLATE = RAIZ / "scripts" / "prestart-gate.sh"
+    LIGADOR = RAIZ / "deploy" / "vps" / "bind-prestart-envelope.py"
+    SENTINELA = "__PREENCHER_NO_ARTEFATO__"
+    A6 = "182a977b2f94d499911ee33a555c983a39ac6445dea821fe2badf11a7d6a7ca1"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.doc = json.loads(MANIFESTO_RUNTIME.read_text(encoding="utf-8"))
+        self.dockerfile = (RAIZ / "deploy" / "vps" / "Dockerfile").read_text(
+            encoding="utf-8")
+        self.ligador = carrega(f"_a8r4g_{len(list(self.tmp.iterdir()))}", self.LIGADOR)
+
+    # --- §2: o template CONTINUA template -----------------------------------
+
+    def test_A8R4G_o_template_do_repositorio_mantem_o_sentinela(self) -> None:
+        """
+        Ligar um SHA no template permanentemente faria o envelope reutilizavel da
+        a6 descrever uma implantacao especifica. A a8 e quem liga, na construcao.
+        """
+        texto = self.TEMPLATE.read_text(encoding="utf-8")
+        self.assertIn(f'MANIFESTO_SHA="{self.SENTINELA}"', texto)
+        self.assertEqual(texto.count(self.SENTINELA), 2,
+                         "template deve ter atribuicao E comparacao com o sentinela")
+        self.assertIn("PRESTART_MANIFEST_SHA_NOT_PINNED", texto)
+
+    # --- §3: a ligacao, e as contagens que ela prova -------------------------
+
+    def test_A8R4G_a_ligacao_substitui_a_ATRIBUICAO_e_so_ela(self) -> None:
+        """
+        Trocar as DUAS ocorrencias faria o guarda virar `[ "$X" = "$X" ]`, sempre
+        verdadeiro, e a imagem recusaria em todo arranque. Uma substituicao.
+        """
+        template = self.TEMPLATE.read_text(encoding="utf-8")
+        ligado = self.ligador.liga(template, self.A6)
+        self.assertIn(f'MANIFESTO_SHA="{self.A6}"', ligado)
+        self.assertNotIn(f'MANIFESTO_SHA="{self.SENTINELA}"', ligado)
+        self.assertEqual(ligado.count(self.A6), 1, "o SHA deve aparecer uma vez")
+        # O sentinela remanescente e o da COMPARACAO — e tem de permanecer.
+        self.assertEqual(ligado.count(self.SENTINELA), 1)
+        self.assertIn(self.ligador.GUARDA, ligado)
+
+    def test_A8R4G_o_guarda_ligado_NAO_dispara_e_o_cru_dispara(self) -> None:
+        """A prova de comportamento, nao so de texto."""
+        import subprocess
+        template = self.TEMPLATE.read_text(encoding="utf-8")
+        for texto, esperado in ((self.ligador.liga(template, self.A6), 1),
+                                (template, 0)):
+            sha = (self.A6 if esperado else self.SENTINELA)
+            r = subprocess.run(
+                ["/bin/sh", "-c",
+                 f'MANIFESTO_SHA="{sha}"; '
+                 f'if [ "${{MANIFESTO_SHA}}" = "{self.SENTINELA}" ]; '
+                 f'then exit 3; else exit 0; fi'])
+            self.assertEqual(r.returncode, 0 if esperado else 3)
+
+    def test_A8R4G_template_sem_a_atribuicao_RECUSA(self) -> None:
+        with self.assertRaises(self.ligador.LigacaoRecusada):
+            self.ligador.liga("sem atribuicao nenhuma\n", self.A6)
+
+    def test_A8R4G_template_com_atribuicao_DUPLICADA_RECUSA(self) -> None:
+        texto = self.TEMPLATE.read_text(encoding="utf-8")
+        duplicado = texto + f'\nMANIFESTO_SHA="{self.SENTINELA}"\n'
+        with self.assertRaises(self.ligador.LigacaoRecusada):
+            self.ligador.liga(duplicado, self.A6)
+
+    def test_A8R4G_template_sem_o_guarda_RECUSA(self) -> None:
+        texto = self.TEMPLATE.read_text(encoding="utf-8").replace(
+            self.ligador.GUARDA, "if false; then")
+        with self.assertRaises(self.ligador.LigacaoRecusada):
+            self.ligador.liga(texto, self.A6)
+
+    # --- §4: o SHA nao e escolha de quem chama ------------------------------
+
+    def test_A8R4G_nenhuma_autoridade_de_SHA_controlada_pelo_CHAMADOR(self) -> None:
+        """
+        Se um ARG/ENV/entrada de workflow controlasse o SHA instalado, a ligacao
+        provaria apenas que alguem digitou um numero.
+        """
+        self.assertIsNone(self.doc["plugin_artifact"]["prestart_envelope_build_arg"])
+        alvos = {
+            "Dockerfile": self.dockerfile,
+            "compose.yaml": (RAIZ / "deploy" / "vps" / "compose.yaml").read_text(
+                encoding="utf-8"),
+            "workflow": WORKFLOW.read_text(encoding="utf-8"),
+        }
+        for nome, texto in alvos.items():
+            for proibido in ("ARG MANIFESTO_SHA", "ENV MANIFESTO_SHA",
+                             "MANIFESTO_SHA=${", "MANIFESTO_SHA: "):
+                self.assertNotIn(proibido, texto,
+                                 f"{nome} deixa o SHA da a6 ser escolhido de fora")
+        # E o ligador nao aceita o valor de fora no caminho normal: `--expect` so
+        # existe para teste negativo, e o default vem do manifesto.
+        fonte = self.LIGADOR.read_text(encoding="utf-8")
+        self.assertIn("apenas para teste negativo", fonte)
+        self.assertIn('doc["plugin_artifact"]["a6_manifest_sha256"]', fonte)
+
+    def test_A8R4G_o_ligador_reusa_o_algoritmo_governado(self) -> None:
+        """§1: nada de segundo algoritmo para o mesmo manifesto."""
+        fonte = self.LIGADOR.read_text(encoding="utf-8")
+        self.assertIn("reproduz_artefato", fonte)
+        self.assertIn("reproduz_manifesto_a6", fonte)
+        self.assertNotIn("def reproduz_manifesto_a6", fonte)
+
+    def test_A8R4G_SHA_divergente_RECUSA_a_ligacao(self) -> None:
+        import subprocess
+        r = subprocess.run(
+            [sys.executable, "-B", str(self.LIGADOR), "--out",
+             str(self.tmp / "gate.sh"), "--expect", "0" * 64],
+            capture_output=True, text=True, cwd=str(RAIZ))
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("A6_MANIFEST_DIVERGENTE", r.stdout + r.stderr)
+        self.assertFalse((self.tmp / "gate.sh").exists(), "escreveu apesar da recusa")
+
+    def test_A8R4G_a_ligacao_real_produz_o_SHA_governado(self) -> None:
+        import subprocess
+        alvo = self.tmp / "gate-ok.sh"
+        r = subprocess.run([sys.executable, "-B", str(self.LIGADOR), "--out", str(alvo)],
+                           capture_output=True, text=True, cwd=str(RAIZ))
+        self.assertEqual(r.returncode, 0, r.stderr[-400:])
+        texto = alvo.read_text(encoding="utf-8")
+        self.assertIn(f'MANIFESTO_SHA="{self.doc["plugin_artifact"]["a6_manifest_sha256"]}"',
+                      texto)
+        self.assertTrue(alvo.stat().st_mode & 0o111, "instalado nao e executavel")
+
+    # --- §3/§15: o build recusa o template cru ------------------------------
+
+    def test_A8R4G_o_build_RECUSA_o_template_cru(self) -> None:
+        for marca in ("ENTRYPOINT_NAO_LIGADO", "ENTRYPOINT_COM_SENTINELA",
+                      "ENTRYPOINT_SEM_GUARDA"):
+            self.assertIn(marca, self.dockerfile)
+        # O ENTRYPOINT vem do estagio que liga, nao do template cru.
+        self.assertIn("COPY --from=envelope /out/prestart-gate.sh", self.dockerfile)
+        self.assertNotIn("COPY scripts/prestart-gate.sh", self.dockerfile)
+        self.assertIn('ENTRYPOINT ["/opt/creditum/prestart-gate.sh"]', self.dockerfile)
+
+    def test_A8R4G_o_estagio_envelope_roda_o_ligador(self) -> None:
+        self.assertIn("AS envelope", self.dockerfile)
+        self.assertIn("bind-prestart-envelope.py", self.dockerfile)
+        # Estagio separado: as fontes de construcao nao entram na imagem final.
+        i_env = self.dockerfile.index("AS envelope")
+        i_run = self.dockerfile.index("AS runtime")
+        self.assertLess(i_env, i_run)
+
+    # --- §6: o selo exige o elo -------------------------------------------
+
+    def test_A8R4G_o_selo_exige_o_ENTRYPOINT_ligado(self) -> None:
+        selador = carrega("_a8r4g_sel", SELADOR)
+        fonte = SELADOR.read_text(encoding="utf-8")
+        self.assertIn("--installed-entrypoint", fonte)
+        self.assertIn("não foi ligada ao caminho executável", fonte)
+        # Sem o flag, o --check recusa.
+        self.assertEqual(selador.main(["--check"]), 2)
+
+    def test_A8R4G_envelope_com_SHA_errado_derruba_o_selo(self) -> None:
+        selador = carrega("_a8r4g_sel2", SELADOR)
+        falso = self.tmp / "gate-errado.sh"
+        falso.write_text(self.ligador.liga(
+            self.TEMPLATE.read_text(encoding="utf-8"), "0" * 64), encoding="utf-8")
+        self.assertEqual(
+            selador.main(["--check", "--installed-entrypoint", str(falso)]), 2)
+
+    def test_A8R4G_envelope_com_sentinela_derruba_o_selo(self) -> None:
+        selador = carrega("_a8r4g_sel3", SELADOR)
+        self.assertEqual(
+            selador.main(["--check", "--installed-entrypoint", str(self.TEMPLATE)]), 2)
+
+    # --- §7: template e instalado sao artefatos DIFERENTES ------------------
+
+    def test_A8R4G_template_e_instalado_NAO_devem_ter_o_mesmo_hash(self) -> None:
+        """
+        Exigir que batessem seria exigir que a ligacao nao tivesse acontecido.
+        A autoridade do instalado e o SHA EMBUTIDO, nao o hash do arquivo.
+        """
+        art = self.doc["plugin_artifact"]
+        self.assertIsNone(art["prestart_envelope_sha256_installed"])
+        self.assertIn("NAO batem", art["prestart_envelope_note"])
+        # O hash do TEMPLATE continua sendo autoridade de fonte.
+        self.assertIsNotNone(self.doc["governed_artifact_hashes"]["prestart-gate.sh"])
+        template_sha = hashlib.sha256(self.TEMPLATE.read_bytes()).hexdigest()
+        self.assertEqual(self.doc["governed_artifact_hashes"]["prestart-gate.sh"],
+                         template_sha)
+        ligado = self.ligador.liga(self.TEMPLATE.read_text(encoding="utf-8"), self.A6)
+        self.assertNotEqual(hashlib.sha256(ligado.encode()).hexdigest(), template_sha)
+
+    # --- §8: o ENTRYPOINT real e exercitado no CI ---------------------------
+
+    def test_A8R4G_o_CI_exercita_o_ENTRYPOINT_REAL(self) -> None:
+        """
+        Este defeito existiu porque TODA execucao de CI sobrepunha o ENTRYPOINT.
+        Agora ha uma execucao que NAO sobrepoe, com condicao invalida controlada.
+        """
+        corridas = comandos_docker()
+        sem_override = [c for c in corridas if "--entrypoint" not in c]
+        self.assertEqual(len(sem_override), 1,
+                         "esperada exatamente 1 execucao com o ENTRYPOINT real")
+        self.assertIn("--network none", sem_override[0])
+        self.assertIn("ENTRYPOINT REAL", diretivas_do_workflow())
 
 
 if __name__ == "__main__":

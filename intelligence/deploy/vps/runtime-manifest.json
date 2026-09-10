@@ -55,7 +55,7 @@
   ],
   "governed_artifact_hashes": {
     "note": "Preenchidos por scripts/seal-runtime-manifest.py a partir dos arquivos governados. Nulo significa não selado, e o build recusa.",
-    "Dockerfile": "941b5e7e4593d84d8cfab1f9cf0c4f3ff364a63f9df81ccf277cfe58aa73ee94",
+    "Dockerfile": "91e39e2217c066f4f4951f8b932c20b794eb2924254a9e4fae37d924a3f7f4ab",
     "prestart-gate.sh": "3b40870cb1d79321eade5ee42db04f7c8539fb42aa4b8ed60412fe827bf12001",
     "compose.yaml": "a305b7ee72474c9cf332b25879f29637c16454099ad0b24f2cba0b1c94e63242"
   },
@@ -92,7 +92,15 @@
     "a6_manifest_sha256_note": "Selado por seal-runtime-manifest.py --seal a partir da montagem real, com as entradas governadas acima. Mudou na a8-r4a porque o plugin.yaml passou a declarar v2, que é a verdade.",
     "a6_manifest_inputs_note": "source_commit é o CHECKPOINT CONGELADO da implementação governada da a4 que fornece o adapter/compat autoritativos — 32234255e03cdf90be6f865d623fe75e805213eb. Ele NÃO significa 'o commit que contém todas as entradas de empacotamento'. As entradas de empacotamento introduzidas na a8 são governadas por conta própria: caminho exato no repositório, bytes e hash em plugin_artifact.files, montador determinístico e o SHA final deste manifesto. Apontar source_commit para o commit que contém este manifesto seria proveniência circular — o documento provando a si mesmo — e é exatamente o que o teste test_A8R4A_source_commit_NAO_e_circular impede de voltar.",
     "a6_manifest_sha256_historical": "1766db9ffe83b15b7bd1f8781d82c4b0b48e9b5f87db7924bc81ae46be1d7d9e",
-    "a6_manifest_sha256_historical_note": "HISTÓRICO · PRÉ-REPRODUTIBILIDADE · NÃO É AUTORIDADE IMPLANTÁVEL. Gerado no regate da a4-r6i com metadados não governados: source_commit preenchido com zeros e caminhos de scratchpad da estação de trabalho. Os sete hashes de arquivo dele eram válidos, então isto NÃO reabre a a4 nem a semântica de verificação da a6 — o que ele não é, é reprodutível fora daquela máquina."
+    "a6_manifest_sha256_historical_note": "HISTÓRICO · PRÉ-REPRODUTIBILIDADE · NÃO É AUTORIDADE IMPLANTÁVEL. Gerado no regate da a4-r6i com metadados não governados: source_commit preenchido com zeros e caminhos de scratchpad da estação de trabalho. Os sete hashes de arquivo dele eram válidos, então isto NÃO reabre a a4 nem a semântica de verificação da a6 — o que ele não é, é reprodutível fora daquela máquina.",
+    "prestart_envelope_template": "scripts/prestart-gate.sh",
+    "prestart_envelope_installed": "/opt/creditum/prestart-gate.sh",
+    "prestart_envelope_binder": "deploy/vps/bind-prestart-envelope.py",
+    "prestart_envelope_note": "SAO DOIS ARTEFATOS DIFERENTES, e a distincao e o ponto. O TEMPLATE do repositorio (governed_artifact_hashes['prestart-gate.sh']) contem o sentinela __PREENCHER_NO_ARTEFATO__ de proposito: e envelope reutilizavel da a6, cego a qual artefato concreto vai carregar, e recusa com exit 3 enquanto nao for ligado. O INSTALADO e produto da a8: a construcao reconstroi os sete arquivos do plugin, reconstroi o manifesto da a6, exige que o SHA bata com a6_manifest_sha256 e substitui a ATRIBUICAO do sentinela — uma substituicao, provada. A COMPARACAO do guarda mantem o sentinela literal, porque e ela que faz o guarda funcionar; trocar as duas tornaria o teste sempre verdadeiro e a imagem recusaria em todo arranque. Portanto o hash de arquivo do template e do instalado NAO batem, e nao devem: exigir que batessem seria exigir que a ligacao nao tivesse acontecido. A autoridade do instalado e o SHA EMBUTIDO, conferido pelo --check contra o manifesto recomputado.",
+    "prestart_envelope_sha256_installed": null,
+    "prestart_envelope_sha256_installed_note": "Nulo de proposito: o hash do arquivo instalado nao e autoridade. Ele muda sempre que o SHA da a6 muda, o que e o comportamento correto. O que se confere e o SHA embutido.",
+    "prestart_envelope_build_arg": null,
+    "prestart_envelope_build_arg_note": "Nulo de proposito: nao existe ARG, ENV, entrada de workflow, variavel de compose nem segredo que controle o SHA instalado. Ele e derivado internamente da reconstrucao governada — pela mesma funcao que prova o manifesto da a6."
   },
   "build_toolchain": {
     "note": "A ferramenta que CONSTRÓI o runtime, governada à parte do runtime que ela constrói. Antes da a8-r4c o Dockerfile exigia --build-arg UV_VERSION sem padrão: falhava fechada, mas deixava a ferramenta como escolha de quem chama, e dois builds do mesmo estado do repositório podiam usar dois uv diferentes sem que nada notasse.",

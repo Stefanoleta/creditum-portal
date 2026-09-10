@@ -32,6 +32,7 @@ import hashlib
 import importlib.util
 import json
 import pathlib
+import re
 import shutil
 import sys
 import tempfile
@@ -72,6 +73,11 @@ REFERENCIAS_MOVEIS = ("latest", "main", "master", "HEAD")
 
 #: O `FROM` que traz a ferramenta de build.
 ESTAGIO_DO_UV = "AS ferramenta_uv"
+
+#: O ENTRYPOINT instalado na imagem. A cadeia de autoridade só fecha quando ele
+#: carrega o SHA da a6 que ESTE selo acabou de recomputar.
+ENVELOPE_INSTALADO = "/opt/creditum/prestart-gate.sh"
+SENTINELA_DO_ENVELOPE = "__PREENCHER_NO_ARTEFATO__"
 MONTADOR = "deploy/vps/assemble-plugin-artifact.py"
 CONSTRUTOR_A6 = "scripts/build-telegram-plugin-manifest.py"
 INVENTARIO = "deploy/vps/runtime-inventory.py"
@@ -140,6 +146,10 @@ def main(argv: list[str] | None = None) -> int:
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument("--seal", action="store_true")
     g.add_argument("--check", action="store_true")
+    p.add_argument("--installed-entrypoint", default=None,
+                   help="o ENTRYPOINT instalado na imagem. Obrigatório no --check: "
+                        "sem ele a autoridade da a6 não é ligada ao caminho "
+                        "executável, e foi exatamente esse o defeito da a8-r4g.")
     p.add_argument("--runtime-root", default=None,
                    help="raiz da árvore de fonte do Hermes, DENTRO do runtime a "
                         "descrever. Obrigatória no --check: sem ela o inventário "
@@ -310,6 +320,35 @@ def main(argv: list[str] | None = None) -> int:
             elif sha_a6 != art["a6_manifest_sha256"]:
                 recusas.append(f"manifesto a6 reproduzido {sha_a6[:16]}… != selado "
                                f"{str(art['a6_manifest_sha256'])[:16]}…")
+
+            # ─── o último elo: o ENTRYPOINT que de fato executa ─────────────
+            #
+            # fonte → artefato → manifesto → SHA → envelope instalado → ENTRYPOINT.
+            # Sem este elo o selo dava PASS sobre uma autoridade que o arranque
+            # normal nunca consultava, porque o envelope instalado era o template
+            # cru e recusava antes com `exit 3`.
+            if a.installed_entrypoint is None:
+                recusas.append("--installed-entrypoint ausente — a autoridade da a6 "
+                               "não foi ligada ao caminho executável")
+            else:
+                envelope = pathlib.Path(a.installed_entrypoint)
+                if not envelope.is_file():
+                    recusas.append(f"ENTRYPOINT instalado ausente: {envelope}")
+                else:
+                    texto = envelope.read_text(encoding="utf-8")
+                    achado = re.search(r'^MANIFESTO_SHA="([0-9a-f]{64})"$', texto,
+                                       re.MULTILINE)
+                    ligado = achado.group(1) if achado else None
+                    print(f"  entrypoint a6    {ligado}")
+                    if ligado is None:
+                        recusas.append("ENTRYPOINT instalado sem SHA de 64 hex")
+                    elif ligado != sha_a6:
+                        recusas.append(f"ENTRYPOINT ligado a {ligado[:16]}… != "
+                                       f"manifesto recomputado {sha_a6[:16]}…")
+                    if f'MANIFESTO_SHA="{SENTINELA_DO_ENVELOPE}"' in texto:
+                        recusas.append("ENTRYPOINT instalado é o template cru")
+                    if f'= "{SENTINELA_DO_ENVELOPE}" ]' not in texto:
+                        recusas.append("o guarda do envelope instalado sumiu")
         except Exception as causa:  # noqa: BLE001 — reproduzir falhou: recusa.
             recusas.append(f"artefato não reproduzível: {type(causa).__name__}: {causa}")
         finally:
@@ -369,9 +408,13 @@ def main(argv: list[str] | None = None) -> int:
                            "voltou a ser escolha de quem chama")
         froms = [l for l in dockerfile.splitlines() if l.startswith("FROM")]
         de_python = [l for l in froms if l.startswith("FROM python")]
-        if len(de_python) != 2:
-            recusas.append(f"Dockerfile: {len(de_python)} estagios de base do Python; "
-                           "esperado exatamente 2")
+        # A a8-r4g acrescentou o estagio `envelope`, que tambem parte da base
+        # governada. O invariante nunca foi a CONTAGEM — e que todo estagio de
+        # base use o mesmo digito. Fixar o numero so obrigaria a mexer no guarda
+        # a cada estagio novo, e guarda que se mexe por rotina para de guardar.
+        if len(de_python) < 2:
+            recusas.append(f"Dockerfile: {len(de_python)} estagios de base do "
+                           "Python; esperado ao menos 2 (fonte e runtime)")
         for linha in de_python:
             if base and f"@{base}" not in linha:
                 recusas.append("Dockerfile: estagio de base sem o digito governado")
