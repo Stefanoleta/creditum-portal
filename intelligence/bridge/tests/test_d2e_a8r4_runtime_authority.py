@@ -275,6 +275,7 @@ class ArtefatoReprodutivel(Bancada):
         "creditum_hermes_telegram/compat.py",
         "creditum_hermes_telegram/ingress.py",
         "creditum_hermes_telegram/planning.py",
+        "creditum_hermes_telegram/telemetry.py",
         "plugin.yaml",
     )
 
@@ -297,14 +298,14 @@ class ArtefatoReprodutivel(Bancada):
     def test_A8R4_6b_duas_montagens_sao_byte_identicas(self) -> None:
         self.assertEqual(self.monta("a"), self.monta("b"))
 
-    def test_A8R4_6c_os_sete_arquivos_e_so_eles(self) -> None:
+    def test_A8R4_6c_os_oito_arquivos_e_so_eles(self) -> None:
         self.assertEqual(tuple(sorted(self.monta("c"))), self.ESPERADO)
 
     def test_A8R4_6d_o_selado_confere_com_a_montagem(self) -> None:
         doc = json.loads(MANIFESTO_RUNTIME.read_text(encoding="utf-8"))
         art = doc["plugin_artifact"]
         self.assertEqual(art["files"], self.monta("d"))
-        self.assertEqual(art["file_count"], 7)
+        self.assertEqual(art["file_count"], 8)
 
     def test_A8R4_7_deriva_de_byte_na_casca_muda_o_artefato(self) -> None:
         """

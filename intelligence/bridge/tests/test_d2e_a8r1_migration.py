@@ -307,6 +307,7 @@ class ArtefatoDePluginEProva(Bancada):
         "creditum_hermes_telegram/compat.py",
         "creditum_hermes_telegram/ingress.py",
         "creditum_hermes_telegram/planning.py",
+        "creditum_hermes_telegram/telemetry.py",
         "plugin.yaml",
     ]
 
@@ -423,6 +424,25 @@ class ArtefatoDePluginEProva(Bancada):
         for proibida in ("create_adapter", "connect", "start_polling",
                          "get_updates", "send_message", "create_task"):
             self.assertIn(proibida, sonda.PROIBIDAS_NA_VIA)
+
+    def test_A8R1_8b_a_auditoria_cobre_a_fachada_instrumentada(self) -> None:
+        """Efeito escondido no helper executado pelo register também é recusado."""
+        sonda = carrega("_sonda_helper", VPS / "probe-plugin-winner.py")
+        shell = self.artefato / "__init__.py"
+        original = shell.read_text(encoding="utf-8")
+        shell.write_text(
+            original.replace(
+                "journal = self._journal",
+                "socket()\n        journal = self._journal",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        achados = sonda.audita_via_de_registro(self.artefato)
+        self.assertTrue(any(
+            "_ContextoInstrumentado.register_platform chama socket()" in item
+            for item in achados
+        ), achados)
 
     def test_A8R1_10b_registrar_sem_hermes_RECUSA_e_nao_produz_ingresso(self) -> None:
         """

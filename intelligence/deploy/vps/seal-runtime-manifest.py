@@ -14,7 +14,7 @@ autoridade — um número escrito à mão num JSON passava igual a um número me
 Agora o `--check` RECOMPUTA:
 
     hashes dos governados   relê os arquivos e rehasheia
-    artefato do plugin      remonta os 7 arquivos e compara byte a byte
+    artefato do plugin      remonta os 8 arquivos e compara byte a byte
     manifesto da a6         reconstrói com as ENTRADAS GOVERNADAS e compara o SHA
     inventário do runtime   observa o runtime vivo e compara o dígito
 
@@ -57,6 +57,7 @@ ARTEFATO_ESPERADO = (
     "creditum_hermes_telegram/compat.py",
     "creditum_hermes_telegram/ingress.py",
     "creditum_hermes_telegram/planning.py",
+    "creditum_hermes_telegram/telemetry.py",
     "plugin.yaml",
 )
 

@@ -1,8 +1,14 @@
 # D2E-A8 — runbook da migração governada para VPS
 
-**Este runbook NÃO é executável ainda.** A a8-d1 e a a8-r1 fecharam três dos quatro
-portões; **G3 segue aberto**, e é o único bloqueio externo que resta. Executar a
-cutover com ele aberto seria adivinhar.
+**Este runbook NÃO é executável ainda.** A resposta humana da Hostinger não confirmou
+parada persistente, desativação seletiva do Telegram, ausência de religamento,
+preservação de estado nem retomada suportada. A arbitragem termina em **H8** e
+**G3 segue NOT SATISFIED**. Além disso, a última observação do hPanel mostrou a VPS
+`srv1811891.hstgr.cloud` como destruída e pendente de exclusão; portanto nem existe
+hoje um alvo de qualificação/cutover autorizado. Executar a cutover seria adivinhar.
+Entre os quatro portões governados, G3 permanece o **único bloqueio externo**; a
+ausência de uma VPS é uma pré-condição de infraestrutura adicional, não um quinto
+portão implicitamente inventado.
 
 `FIRST LIVE` não autorizado. Nenhuma ação de produção nesta fase.
 
@@ -49,12 +55,10 @@ staging genuína, no commit fixado e com o git limpo —
 `8fd868b9da8b6bc2f4aa94a845e210eccdd5e31be7a0b404f0a8527ced0fddec`. Está populado no
 `runtime-manifest.json`, e não veio do Managed nem da rede.
 
-**Pendência que segue aberta, e falha fechada:** o `runtime_inventory_sha256`. O valor
-`01ba45ae…67aee1` foi FORNECIDO pela reconstrução do staging, e não recomputado: o
-algoritmo de inventário governado que permitiria conferi-lo **não existe neste
-repositório**. Selar o que não se pode recomputar transformaria um número recebido em
-autoridade, então ele fica `null` e o `seal-runtime-manifest.py --check` recusa,
-nomeando exatamente essa causa. Definir o algoritmo é pré-requisito do build.
+**Fechado pela a8-r4:** `runtime-inventory.py` define o algoritmo governado e
+`runtime_inventory_sha256` está selado. O `--check` ainda exige, corretamente, uma
+`--runtime-root` observável dentro da imagem final: valor presente no JSON não substitui
+recomputação no runtime vivo.
 
 ---
 
@@ -86,29 +90,27 @@ caminho executável.
 
 ---
 
-## PORTÃO 3 — parada do consumidor Telegram do Managed · **ABERTO**
+## PORTÃO 3 — fencing do consumidor Telegram do Managed · **ABERTO — H8**
 
-**Estado: NÃO RESOLVIDO. É o único bloqueio externo que resta.**
+**Estado: NÃO SATISFEITO.** A rodada humana foi recebida, mas não estabeleceu os campos
+obrigatórios do contrato. `UNKNOWN` continua `UNKNOWN`; silêncio não virou `NO` e
+ambiguidade não virou autorização.
 
-A UI da Hostinger mostra `Telegram · Conectado · Redefinir`, mas a semântica exata de
-parar, reiniciar e reverter não foi provada.
+O que a descoberta local prova é somente isto: o gateway estava rodando, o Telegram
+estava configurado e logs históricos mostravam retry/reinício de polling. Ela não prova
+conectividade atual, exclusividade, parada durável nem política do supervisor externo.
 
-A cutover exige **exatamente um consumidor** do bot. Nunca os dois pollers ao mesmo
-tempo. Para isso é preciso um mecanismo **suportado** de parar o poller do Managed, e
-nenhum foi observado.
+A via **Managed → VPS** está fechada enquanto não existir fencing positivo do consumidor
+antigo. Reset, Disconnect, remoção informal de variável e ausência de erro 409 não são
+substitutos. Os únicos caminhos arquiteturalmente possíveis passam a ser:
 
-Candidatos, nenhum verificado:
+1. uma capacidade suportada e posteriormente documentada pela Hostinger; ou
+2. decomissionamento/expiração observada do Managed mais prova positiva de cessação; ou
+3. rotação controlada do token como *break-glass*, com autorização separada e rollback.
 
-- desabilitar a plataforma Telegram em `/data/config.yaml` — depende de existir a chave,
-  e o `config.yaml` atual **não tem seção `plugins`**;
-- remover a credencial do bot do `/data/.env` do Managed — impede autenticar, mas o
-  comportamento do gateway sem credencial não foi observado (recusa limpa? laço de
-  reinício?);
-- parar o container Managed pelo painel da Hostinger — o mais simples e o mais
-  provável, e precisa ser confirmado como suportado e reversível.
+Nenhum desses caminhos está autorizado por este documento.
 
-A pergunta a responder é uma só: **qual mecanismo suportado para o poller do Managed, de
-forma comprovável e reversível?**
+A regra de segurança não mudou: **Nunca os dois** consumidores em paralelo.
 
 ---
 
@@ -195,6 +197,31 @@ com a credencial do Telegram ausente, registrando sem fazer polling — ou abort
 
 ---
 
+## Candidato G3V — observabilidade mínima sem reabrir a A4
+
+O candidato derivado do checkpoint
+`c3f6abceb4953dbb924ce12250909e48823a5cfb` mantém Hermes **0.20.4** e os bytes
+congelados de `adapter.py`/`compat.py`. A alteração fica na casca implantável e no novo
+`telemetry.py`; atualizar Hermes e migrar infraestrutura na mesma mudança continua
+proibido.
+
+O journal local append-only usa `/data/creditum_hermes_runtime/telemetry/v1/events.jsonl`
+e emite somente:
+
+- `telegram_consumer_connect_attempt`, antes de entregar controle ao `connect` já
+  governado;
+- `telegram_update_admitted`, depois da admissão A4 e antes do sumidouro/entrega.
+
+Cada processo recebe `runtime_instance_id`; cada instância de adaptador recebe
+`consumer_id`. Não entram token, conteúdo de mensagem, chat, usuário, telefone, prompt
+nem resposta de modelo. Falha de persistência é *fail-closed*: impede a conexão ou o
+efeito a jusante correspondente.
+
+**Limite explícito:** esses eventos não afirmam `poller_started`, conexão saudável,
+`getUpdates` bem-sucedido, commit de offset nem exclusividade global. Um Managed antigo
+sem instrumentação continua invisível. Portanto G3V melhora a atribuição de evidência,
+mas não satisfaz G3 nem o contrato de poller único sozinho.
+
 ## Cadeia de arranque governada
 
 ```
@@ -230,7 +257,8 @@ quatro bloqueios estiverem abertos.
 
 ### Fase 0 — provisionar (§20)
 
-VPS Hostinger com Docker e Compose; filesystem persistente; firewall **sem porta de
+Provisionar uma **nova** VPS Hostinger — a VPS conhecida foi observada como destruída —
+com Docker e Compose; filesystem persistente; firewall **sem porta de
 entrada** (o Telegram é saída); acesso SSH do operador; `/etc/creditum/hermes.env` com
 0600 e dono do operador; política de reinício; backup do volume.
 
@@ -253,8 +281,9 @@ arquivo em log.
 
 ### Fase 3 — staging, sem tocar no bot (§13)
 
-Container sobe, portão da a6 aprova, plugin descoberto e registrado, **sem consumidor
-Telegram de produção**. Bloqueado pelo portão 4.
+Container sobe, portão da a6 aprova, plugin descoberto e registrado, **sem credencial e
+sem consumidor Telegram de produção**. O portão 4 está fechado; ainda faltam alvo VPS,
+imagem candidata final e autorização específica de qualificação.
 
 ### Fase 4 — injeção de falha (§15)
 
@@ -277,11 +306,11 @@ Nove recusas, cada uma com **contagem de processo do gateway = 0** como evidênc
 > **`G3_NOT_PROVEN` → NENHUM POLLER DE PRODUÇÃO DA VPS SOBE.**
 >
 > Este é o portão de ativação, e nenhum artefato local pode permitir pulá-lo. Enquanto
-> o mecanismo suportado de parar o poller do Managed não estiver provado e reversível,
-> a etapa 2 abaixo não tem como ser executada — e sem a 2 provada, a 4 é proibida.
+> o fencing positivo do poller do Managed não estiver provado, a etapa 2 abaixo não
+> tem como ser executada — e sem a 2 provada, a 4 é proibida.
 
 1. VPS pronta, consumidor Telegram da VPS **inativo**;
-2. parar o consumidor do Managed pelo mecanismo suportado — bloqueado pelo portão 3;
+2. aplicar o caminho de fencing previamente aprovado — hoje bloqueado pelo portão 3;
 3. **provar** que o poller antigo parou;
 4. só então ativar o consumidor da VPS;
 5. **provar** exatamente um consumidor.
@@ -290,12 +319,13 @@ Nenhuma mensagem de teste nesta fase.
 
 ### Fase 6 — rollback, desenhado antes de ser preciso (§14)
 
-**Antes da cutover:** falha na VPS → parar a VPS. O Managed segue intacto e ativo. Custo
-zero, porque nada foi tirado dele.
+**Antes da cutover:** falha na VPS → parar a VPS. O Managed segue sem alteração.
 
-**Depois da cutover:** parar o gateway/Telegram da VPS → **provar** que o poller da VPS
-parou → reativar o Managed → **provar** que ele é o único consumidor. Nunca os dois. E
-nada na origem foi destruído, o que é o que torna este rollback possível.
+**Depois da cutover:** o rollback depende do caminho de fencing aprovado. Não se pode
+mais presumir “reativar o Managed”, porque parada/retomada suportada não foi confirmada.
+Antes de qualquer corte deve existir um ponto de retorno testado que: pare e prove a
+cessação da VPS, restaure uma única credencial/instância autorizada e prove novamente a
+cardinalidade um. Se esse ponto não existir, a cutover permanece proibida.
 
 ---
 

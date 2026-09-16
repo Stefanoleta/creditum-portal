@@ -55,14 +55,14 @@
   ],
   "governed_artifact_hashes": {
     "note": "Preenchidos por scripts/seal-runtime-manifest.py a partir dos arquivos governados. Nulo significa não selado, e o build recusa.",
-    "Dockerfile": "91e39e2217c066f4f4951f8b932c20b794eb2924254a9e4fae37d924a3f7f4ab",
+    "Dockerfile": "3cea2b2ab2b186e0d974f92489b36c861eef44bca96b0ca109fa1f3c85e418c0",
     "prestart-gate.sh": "3b40870cb1d79321eade5ee42db04f7c8539fb42aa4b8ed60412fe827bf12001",
     "compose.yaml": "a305b7ee72474c9cf332b25879f29637c16454099ad0b24f2cba0b1c94e63242"
   },
   "contains_secrets": false,
   "network_used_by_manifest": "nenhuma",
   "plugin_artifact": {
-    "note": "As entradas de que o artefato de 7 arquivos e o manifesto de implantação da a6 são reproduzidos. Antes da a8-r4 a casca e o montador viviam fora do controle de versão e o manifesto revisado embutia caminhos de scratchpad da máquina de quem montou — o que o tornava válido contra aqueles bytes e irreprodutível em qualquer outra máquina.",
+    "note": "As entradas de que o artefato de 8 arquivos e o manifesto de implantação da a6 são reproduzidos. O oitavo arquivo é telemetry.py, acrescentado no candidato G3V sem alterar os bytes congelados da A4. Antes da a8-r4 a casca e o montador viviam fora do controle de versão e o manifesto revisado embutia caminhos de scratchpad da máquina de quem montou — o que o tornava válido contra aqueles bytes e irreprodutível em qualquer outra máquina.",
     "assembler": "deploy/vps/assemble-plugin-artifact.py",
     "shell_source": "deploy/vps/plugin-src",
     "package_source": "bridge/creditum_hermes_telegram",
@@ -78,17 +78,18 @@
         "/opt/hermes-agent/.hermes/plugins"
       ]
     },
-    "file_count": 7,
+    "file_count": 8,
     "files": {
-      "__init__.py": "251cc88e88bedc214f351002d74c286e65c8bedfb6a2842259afaac83e05e893",
+      "__init__.py": "e6f635af2eb58b69ee47b726751561c6607677d7d4a1519530616a406a081e26",
       "creditum_hermes_telegram/__init__.py": "93d1313c1dd72613115043c185efef00438ec03bba95eb0560b210f1bdd10788",
       "creditum_hermes_telegram/adapter.py": "24f42cabe98dd86f51be4495fd74681398f22a0e88acde83d254af3a21c5f63f",
       "creditum_hermes_telegram/compat.py": "159d032d667408a7b2a313ab5164241115922243c1206f0de8647d2f3461c779",
       "creditum_hermes_telegram/ingress.py": "e6ae04a759558b2156b65eda0777d85253693e04f72b791ec2a9adb760140ed9",
       "creditum_hermes_telegram/planning.py": "c8062978d95cd2b506ef52ba0f7652bf629607accc2a37f70931c1f4dd785a2a",
+      "creditum_hermes_telegram/telemetry.py": "c967144553731db1bb876cbeef369a7f342d4976e75e0c75a8ee09c7b5692a90",
       "plugin.yaml": "d16d8f7370dcc476377393be35f7169bfe743a38ce2aa36827ae3deef891902a"
     },
-    "a6_manifest_sha256": "182a977b2f94d499911ee33a555c983a39ac6445dea821fe2badf11a7d6a7ca1",
+    "a6_manifest_sha256": "5aeba04e9222651d1eeb9d06982dfc201191ed772ab3ff7cadf4612376e35672",
     "a6_manifest_sha256_note": "Selado por seal-runtime-manifest.py --seal a partir da montagem real, com as entradas governadas acima. Mudou na a8-r4a porque o plugin.yaml passou a declarar v2, que é a verdade.",
     "a6_manifest_inputs_note": "source_commit é o CHECKPOINT CONGELADO da implementação governada da a4 que fornece o adapter/compat autoritativos — 32234255e03cdf90be6f865d623fe75e805213eb. Ele NÃO significa 'o commit que contém todas as entradas de empacotamento'. As entradas de empacotamento introduzidas na a8 são governadas por conta própria: caminho exato no repositório, bytes e hash em plugin_artifact.files, montador determinístico e o SHA final deste manifesto. Apontar source_commit para o commit que contém este manifesto seria proveniência circular — o documento provando a si mesmo — e é exatamente o que o teste test_A8R4A_source_commit_NAO_e_circular impede de voltar.",
     "a6_manifest_sha256_historical": "1766db9ffe83b15b7bd1f8781d82c4b0b48e9b5f87db7924bc81ae46be1d7d9e",
@@ -96,7 +97,7 @@
     "prestart_envelope_template": "scripts/prestart-gate.sh",
     "prestart_envelope_installed": "/opt/creditum/prestart-gate.sh",
     "prestart_envelope_binder": "deploy/vps/bind-prestart-envelope.py",
-    "prestart_envelope_note": "SAO DOIS ARTEFATOS DIFERENTES, e a distincao e o ponto. O TEMPLATE do repositorio (governed_artifact_hashes['prestart-gate.sh']) contem o sentinela __PREENCHER_NO_ARTEFATO__ de proposito: e envelope reutilizavel da a6, cego a qual artefato concreto vai carregar, e recusa com exit 3 enquanto nao for ligado. O INSTALADO e produto da a8: a construcao reconstroi os sete arquivos do plugin, reconstroi o manifesto da a6, exige que o SHA bata com a6_manifest_sha256 e substitui a ATRIBUICAO do sentinela — uma substituicao, provada. A COMPARACAO do guarda mantem o sentinela literal, porque e ela que faz o guarda funcionar; trocar as duas tornaria o teste sempre verdadeiro e a imagem recusaria em todo arranque. Portanto o hash de arquivo do template e do instalado NAO batem, e nao devem: exigir que batessem seria exigir que a ligacao nao tivesse acontecido. A autoridade do instalado e o SHA EMBUTIDO, conferido pelo --check contra o manifesto recomputado.",
+    "prestart_envelope_note": "SAO DOIS ARTEFATOS DIFERENTES, e a distincao e o ponto. O TEMPLATE do repositorio (governed_artifact_hashes['prestart-gate.sh']) contem o sentinela __PREENCHER_NO_ARTEFATO__ de proposito: e envelope reutilizavel da a6, cego a qual artefato concreto vai carregar, e recusa com exit 3 enquanto nao for ligado. O INSTALADO e produto da a8: a construcao reconstroi os oito arquivos do plugin, reconstroi o manifesto da a6, exige que o SHA bata com a6_manifest_sha256 e substitui a ATRIBUICAO do sentinela — uma substituicao, provada. A COMPARACAO do guarda mantem o sentinela literal, porque e ela que faz o guarda funcionar; trocar as duas tornaria o teste sempre verdadeiro e a imagem recusaria em todo arranque. Portanto o hash de arquivo do template e do instalado NAO batem, e nao devem: exigir que batessem seria exigir que a ligacao nao tivesse acontecido. A autoridade do instalado e o SHA EMBUTIDO, conferido pelo --check contra o manifesto recomputado.",
     "prestart_envelope_sha256_installed": null,
     "prestart_envelope_sha256_installed_note": "Nulo de proposito: o hash do arquivo instalado nao e autoridade. Ele muda sempre que o SHA da a6 muda, o que e o comportamento correto. O que se confere e o SHA embutido.",
     "prestart_envelope_build_arg": null,

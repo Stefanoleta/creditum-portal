@@ -28,7 +28,7 @@ da imagem, e o produto dessa ligação é OUTRO arquivo.
 
 ─── De onde vem o SHA ───────────────────────────────────────────────────────
 
-Da mesma reconstrução governada que prova o manifesto da a6: monta os sete
+Da mesma reconstrução governada que prova o manifesto da a6: monta os oito
 arquivos das fontes do repositório, reconstrói o manifesto com as entradas
 governadas e hasheia o resultado. Reusa `reproduz_artefato` e
 `reproduz_manifesto_a6` do selador — nada de segundo algoritmo para a mesma

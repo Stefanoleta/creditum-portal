@@ -6514,3 +6514,61 @@ novo **procura** por `gateway run` para falhar o job se o gateway subir. O guard
 encontrou a própria negação daquilo que guarda. Agora ele olha **comando por
 comando**, com continuações juntadas, e não o texto inteiro. Nove vezes nesta
 fase; a correção foi sempre a mesma, e sempre no guarda, nunca no que ele guarda.
+
+---
+
+## 42. D2E-G3V — arbitragem H8 e candidato observável, sem cutover
+
+### Arbitragem operacional
+
+A resposta humana da Hostinger não confirmou nenhum mecanismo persistente e
+reversível para parar o gateway, desabilitar somente o Telegram, impedir
+religamento automático, preservar estado e retomar. A classificação é **H8**;
+`G3 = NOT SATISFIED`, `G3B = NOT STARTED` e `FIRST LIVE = NO`.
+
+A descoberta local terminou em leitura: Hermes 0.20.4, gateway PID 13 em
+`docker (foreground)`, Telegram configurado e logs históricos de retry/reinício de
+polling. Esses fatos não estabelecem política do supervisor externo, conexão atual,
+polling atual nem exclusividade. A ausência de erro 409 também não prova um único
+consumidor.
+
+Na observação seguinte do hPanel, a VPS `srv1811891.hstgr.cloud` estava destruída e
+pendente de exclusão. A aplicação Managed Hermes seguia separada. Logo a migração
+agora tem dois bloqueios independentes: fencing do Managed e novo alvo VPS.
+
+### Decisão de versão
+
+O candidato G3V continua em Hermes **0.20.4**, no commit upstream e lock já
+governados. A atualização do Hermes fica numa qualificação posterior e isolada.
+Misturar mudança de versão, migração de estado, troca de supervisor e cutover do
+Telegram destruiria a atribuição de causa e ampliaria o rollback.
+
+### Instrumentação sem reabrir A4
+
+O primeiro desenho tocava `adapter.py`; o teste
+`test_A8R4A_os_bytes_congelados_da_a4_nao_mudaram` recusou corretamente. A correção
+não foi atualizar o hash esperado: os bytes A4 voltaram ao SHA-256 governado
+`24f42cabe98dd86f51be4495fd74681398f22a0e88acde83d254af3a21c5f63f`.
+
+A observabilidade passou para a casca do plugin e para o oitavo arquivo do artefato,
+`creditum_hermes_telegram/telemetry.py`. A casca envolve a fábrica já governada e
+dois pontos sem reimplementar admissão:
+
+1. persiste `telegram_consumer_connect_attempt` antes do `connect` A4/nativo;
+2. propaga a identidade da instância até o sumidouro e persiste
+   `telegram_update_admitted` depois da admissão A4 e antes de coleta/entrega.
+
+O journal é append-only, faz uma escrita por registro, `fsync`, modo 0600, recusa
+symlink e caminho controlado por ambiente, e não recebe conteúdo de mensagem,
+credencial ou identificador pessoal. A falha é fechada.
+
+### O que a telemetria não prova
+
+`connect_attempt` não significa `poller_started`; `update_admitted` não significa
+recebido do Telegram, commit de offset ou efeito concluído. Um Managed não
+instrumentado permanece invisível. A telemetria dá atribuição local por
+`runtime_instance_id`/`consumer_id`; fencing e cardinalidade global continuam sendo
+portões externos.
+
+O artefato passa a ter oito arquivos, o manifesto A6 é novamente derivado da montagem
+real, e o resselamento não autoriza build, deploy, restart, Telegram ou produção.

@@ -111,7 +111,7 @@ FROM ghcr.io/astral-sh/uv@sha256:b46b03ddfcfbf8f547af7e9eaefdf8a39c8cebcba7c9885
 # sobrepunha o ENTRYPOINT. O selo dava PASS sobre uma autoridade que não estava
 # ligada ao caminho executável.
 #
-# Este estágio reconstrói os sete arquivos do plugin, reconstrói o manifesto da
+# Este estágio reconstrói os oito arquivos do plugin, reconstrói o manifesto da
 # a6, exige que o SHA bata com o governado e só então substitui a ATRIBUIÇÃO do
 # sentinela. Uma substituição, provada: a comparação do guarda permanece intacta.
 #

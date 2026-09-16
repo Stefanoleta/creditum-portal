@@ -131,27 +131,49 @@ def audita_via_de_registro(artefato: pathlib.Path) -> list[str]:
         if not alvo.is_file():
             return [f"{alvo.name}: ausente no artefato"]
 
+    funcoes_da_via: list[tuple[pathlib.Path, str, ast.AST]] = []
     for alvo in (casca, a4):
         arv = ast.parse(alvo.read_text(encoding="utf-8"))
-        fn = _funcao(arv, "register")
+        fn = next((n for n in arv.body
+                   if isinstance(n, ast.FunctionDef) and n.name == "register"), None)
         if fn is None:
             achados.append(f"{alvo.name}: sem `register`")
             continue
+        funcoes_da_via.append((alvo, "register", fn))
+        if alvo == casca:
+            contexto = next((n for n in arv.body
+                             if isinstance(n, ast.ClassDef)
+                             and n.name == "_ContextoInstrumentado"), None)
+            if contexto is None:
+                achados.append("__init__.py: sem `_ContextoInstrumentado`")
+            else:
+                for nome in ("__init__", "register_platform"):
+                    metodo = next((n for n in contexto.body
+                                   if isinstance(n, ast.FunctionDef)
+                                   and n.name == nome), None)
+                    if metodo is None:
+                        achados.append(
+                            f"__init__.py:_ContextoInstrumentado sem `{nome}`")
+                    else:
+                        funcoes_da_via.append(
+                            (alvo, f"_ContextoInstrumentado.{nome}", metodo))
+
+    for alvo, rotulo, fn in funcoes_da_via:
         for n in ast.walk(fn):
             if isinstance(n, ast.Call):
                 f = n.func
                 nome = (f.id if isinstance(f, ast.Name)
                         else f.attr if isinstance(f, ast.Attribute) else None)
                 if nome in PROIBIDAS_NA_VIA:
-                    achados.append(f"{alvo.name}:register chama {nome}()")
+                    achados.append(f"{alvo.name}:{rotulo} chama {nome}()")
             if isinstance(n, ast.ImportFrom) and n.module:
                 base = n.module.split(".")[0]
                 if base in PROIBIDOS_IMPORT:
-                    achados.append(f"{alvo.name}:register importa {base}")
+                    achados.append(f"{alvo.name}:{rotulo} importa {base}")
             if isinstance(n, ast.Import):
                 for al in n.names:
                     if al.name.split(".")[0] in PROIBIDOS_IMPORT:
-                        achados.append(f"{alvo.name}:register importa {al.name}")
+                        achados.append(f"{alvo.name}:{rotulo} importa {al.name}")
 
     # O contexto do plugin é uma fachada com muita autoridade. A via de registro
     # toca EXATAMENTE `register_platform` nele — provado estruturalmente, e não por
