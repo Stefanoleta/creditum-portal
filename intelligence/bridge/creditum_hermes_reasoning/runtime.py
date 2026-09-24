@@ -135,6 +135,7 @@ def governed_cwd_ok(cwd: object) -> bool:
 APPROVED_PROVIDER = "openai-codex"
 APPROVED_MODEL = "gpt-5.6-luna"
 APPROVED_API_MODE = "codex_responses"
+APPROVED_HERMES_VERSION = "0.21.3"
 
 #: As chaves de material de execução aprovadas. Fechado, e derivado de OBSERVAÇÃO.
 #:
@@ -423,6 +424,7 @@ class ApprovedRuntimeBinding:
 #:     hermes_cli.config.load_config()  →  config["model"]["default"]
 HERMES_RUNTIME_MODULE = "hermes_cli.runtime_provider"
 HERMES_CONFIG_MODULE = "hermes_cli.config"
+HERMES_PACKAGE_MODULE = "hermes_cli"
 
 
 #: Identificador ASCII conservador. A ÚNICA forma que um nome de tipo pode ter.
@@ -599,6 +601,19 @@ def resolve_approved_runtime_binding() -> ApprovedRuntimeBinding:
 
     Esta função não tem parâmetro nenhum. Não há o que injetar.
     """
+    # A versão precisa vir do pacote instalado. O resolvedor de credenciais não a
+    # devolve; aceitar um fallback faria o fingerprint declarar outro runtime.
+    hermes_mod = _import_producao(HERMES_PACKAGE_MODULE)
+    versao = _chamada_selada(
+        RuntimeDefect.RUNTIME_INCOMPATIBLE, getattr, hermes_mod, "__version__", None
+    )
+    if type(versao) is not str or versao != APPROVED_HERMES_VERSION:
+        raise RuntimeRefusal(
+            RuntimeDefect.RUNTIME_INCOMPATIBLE,
+            f"hermes esperado {APPROVED_HERMES_VERSION}",
+        )
+
+
     provider_mod = _import_producao(HERMES_RUNTIME_MODULE)
     config_mod = _import_producao(HERMES_CONFIG_MODULE)
 
@@ -635,7 +650,7 @@ def resolve_approved_runtime_binding() -> ApprovedRuntimeBinding:
 
     return ApprovedRuntimeBinding(
         _issuer=_EMISSOR,
-        hermes_version=_texto_governado(resolvido.get("hermes_version"), "0.20.4"),
+        hermes_version=APPROVED_HERMES_VERSION,
         acp_version=_texto_governado(resolvido.get("acp_version"), "0.9.0"),
         provider=APPROVED_PROVIDER,
         model=modelo,
