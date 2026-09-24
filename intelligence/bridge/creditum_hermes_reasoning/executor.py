@@ -46,6 +46,8 @@ from typing import Any, Callable, Mapping
 from .codex import (
     CodexDefect,
     CodexRefusal,
+    POLICY_ID,
+    POLICY_VERSION,
     PrecallProbeComplete,
     GovernedResponseTypes,
     enforce_execution_controls,
@@ -55,6 +57,7 @@ from .codex import (
     enforce_final_request,
     governed_user_payload,
     parse_reasoning_envelope,
+    resolve_production_governed_response_types,
     request_fingerprint,
     user_payload_hash,
     verify_sdk_surface,
@@ -74,6 +77,8 @@ MODE_LIVE = "LIVE"
 RESPONSE_POLICY_NOT_APPROVED = "LIVE_RESPONSE_POLICY_NOT_APPROVED"
 #: A política sintética dos testes: resposta com UM bloco textual, forma declarada.
 RESPONSE_POLICY_SYNTHETIC = "SYNTHETIC_TEST_ONLY"
+#: A política estrutural c6, ligada aos tipos exatos do SDK de produção.
+RESPONSE_POLICY_APPROVED = f"{POLICY_ID}@{POLICY_VERSION}"
 
 #: O veredito que a execução viva pode alcançar do lado Python. NÃO é sucesso.
 #:
@@ -190,9 +195,9 @@ class TrustedSdkProvider:
     #: blocos `output_text` de TODOS os itens `message`, e que `response.output` pode
     #: trazer raciocínio, chamadas de ferramenta, itens MCP e aprovações.
     #:
-    #: Ou seja: a superfície está observada, mas a regra de "qual é a resposta final"
-    #: NÃO está aprovada. Um provedor de produção carrega isso escrito, para que a
-    #: ambiguidade não possa ser esquecida entre uma fase e outra.
+    #: A política aprovada exige uma mensagem concluída, de fase final quando
+    #: declarada, com um único bloco textual. Tipos de produção são selados antes
+    #: da construção do cliente; a política sintética só vale para testes.
     response_policy: str = RESPONSE_POLICY_NOT_APPROVED
 
     def __post_init__(self) -> None:
@@ -376,15 +381,8 @@ class CreditumCodexReasoningExecutor:
         if type(provedor) is not TrustedSdkProvider:
             raise ExecutorRefusal(ExecutorDefect.SDK_PROVIDER_NOT_TRUSTED, "não selado")
 
-        # ─── A ambiguidade da c4, transformada em recusa ─────────────────────
-        #
-        # O provedor de produção existe e está selado. O que NÃO existe é uma regra
-        # aprovada de "qual é a resposta final" — `output_text` agrega vários blocos,
-        # e `output` pode trazer itens que não são resposta.
-        #
-        # Sem essa regra, chamar o provider produziria bytes que ninguém sabe ler como
-        # resultado. Recusar aqui é o que impede a pergunta de ser esquecida.
-        if provedor.response_policy != RESPONSE_POLICY_SYNTHETIC:
+        # Só a política estrutural aprovada ou a sintética de teste atravessa.
+        if provedor.response_policy not in (RESPONSE_POLICY_APPROVED, RESPONSE_POLICY_SYNTHETIC):
             raise ExecutorRefusal(
                 ExecutorDefect.LIVE_RESPONSE_POLICY_NOT_APPROVED, provedor.response_policy
             )
@@ -398,6 +396,18 @@ class CreditumCodexReasoningExecutor:
             client_class=provedor.client_class,
             create_callable=provedor.create_descriptor,
         )
+
+        # Produção sela os tipos reais do SDK ANTES de construir um cliente capaz de
+        # rede. Os tipos injetados no construtor pertencem só aos testes sintéticos.
+        response_types = (
+            resolve_production_governed_response_types()
+            if provedor.response_policy == RESPONSE_POLICY_APPROVED
+            else self._response_types
+        )
+        if type(response_types) is not GovernedResponseTypes:
+            raise CodexRefusal(
+                CodexDefect.RESPONSE_TYPES_NOT_AVAILABLE, safe_type_name(response_types)
+            )
 
         evidencia = ExecutionEvidence(
             mode=MODE_LIVE,
@@ -490,11 +500,7 @@ class CreditumCodexReasoningExecutor:
             del causa
             raise ExecutorRefusal(ExecutorDefect.PROVIDER_CALL_FAILED, tipo) from None
 
-        if type(self._response_types) is not GovernedResponseTypes:
-            raise CodexRefusal(
-                CodexDefect.RESPONSE_TYPES_NOT_AVAILABLE, safe_type_name(self._response_types)
-            )
-        extraido = extract_governed_response_text(resposta, types=self._response_types)
+        extraido = extract_governed_response_text(resposta, types=response_types)
         evidencia.reasoning_item_count = extraido.reasoning_item_count
         evidencia.compaction_item_count = extraido.compaction_item_count
         envelope = parse_reasoning_envelope(extraido.text)
@@ -585,6 +591,5 @@ def resolve_production_trusted_sdk_provider() -> TrustedSdkProvider:
         client_class=cliente,
         responses_resource_class=recurso,
         create_descriptor=descritor,
-        # A superfície está provada. A regra de leitura da RESPOSTA não está.
-        response_policy=RESPONSE_POLICY_NOT_APPROVED,
+        response_policy=RESPONSE_POLICY_APPROVED,
     )
