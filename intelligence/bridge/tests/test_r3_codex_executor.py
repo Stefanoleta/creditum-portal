@@ -780,6 +780,11 @@ class EstruturaDesconhecida(unittest.TestCase):
             extraido = extrai(Resposta(itens=[Item([Bloco(JSON_OK)], phase=fase)]))
             self.assertEqual(extraido.text, JSON_OK)
 
+        mensagem_sem_campo = Item([Bloco(JSON_OK)])
+        del mensagem_sem_campo.phase
+        extraido = extrai(Resposta(itens=[mensagem_sem_campo]))
+        self.assertEqual(extraido.text, JSON_OK)
+
     def test_tipo_de_item_desconhecido_e_recusado(self) -> None:
         with self.assertRaises(CodexRefusal) as ctx:
             # 3.1d-c6: a mensagem tem classe aprovada, mas DECLARA outro tipo. Classe
