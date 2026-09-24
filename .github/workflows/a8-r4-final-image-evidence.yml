@@ -144,10 +144,16 @@ jobs:
       - name: nenhum gateway, nenhum poller
         run: |
           set -euo pipefail
-          docker run --rm --network none \
-            --entrypoint /bin/sh creditum-hermes:a8-r4-final-evidence -c \
-            'ps ax; ps ax | grep -v grep | grep -E "hermes .*run|gateway|polling" && exit 2 || echo "nenhum processo de gateway ou poller"'
-          echo "nenhum conteiner de evidencia executou o ENTRYPOINT governado"
+          # Inspecionar pelo daemon do host: a imagem slim nao traz ps.
+          CID=$(docker run -d --network none --entrypoint /bin/sleep creditum-hermes:a8-r4-final-evidence 60)
+          trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
+          docker top "$CID" -eo pid,args | tee processos.txt
+          test "$(wc -l < processos.txt)" -ge 2
+          if grep -E 'hermes .*run|gateway|polling' processos.txt; then
+            echo "PROCESSO_DE_GATEWAY_OU_POLLER" >&2
+            exit 2
+          fi
+          echo "nenhum processo de gateway ou poller no conteiner de evidencia"
 
       # ─── o ENTRYPOINT REAL, sem sobreposicao ────────────────────────────
       #
