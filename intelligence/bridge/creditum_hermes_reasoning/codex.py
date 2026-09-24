@@ -91,6 +91,7 @@ class CodexDefect:
     RESPONSE_MESSAGE_COUNT_INVALID = "RESPONSE_MESSAGE_COUNT_INVALID"
     RESPONSE_MESSAGE_ROLE_INVALID = "RESPONSE_MESSAGE_ROLE_INVALID"
     RESPONSE_MESSAGE_NOT_COMPLETED = "RESPONSE_MESSAGE_NOT_COMPLETED"
+    RESPONSE_MESSAGE_PHASE_INVALID = "RESPONSE_MESSAGE_PHASE_INVALID"
     RESPONSE_CONTENT_COUNT_INVALID = "RESPONSE_CONTENT_COUNT_INVALID"
     RESPONSE_CONTENT_NOT_APPROVED = "RESPONSE_CONTENT_NOT_APPROVED"
     RESPONSE_OUTPUT_TEXT_INVALID = "RESPONSE_OUTPUT_TEXT_INVALID"
@@ -597,6 +598,7 @@ KNOWN_MESSAGE_STATUSES = ("in_progress", "completed", "incomplete")
 
 APPROVED_MESSAGE_TYPE = "message"
 APPROVED_MESSAGE_ROLE = "assistant"
+APPROVED_MESSAGE_PHASE = "final_answer"
 APPROVED_TEXT_BLOCK_TYPE = "output_text"
 APPROVED_REFUSAL_BLOCK_TYPE = "refusal"
 
@@ -788,9 +790,10 @@ def extract_governed_response_text(
       7. exatamente 1 mensagem         RESPONSE_MESSAGE_COUNT_INVALID
       8. `type` e `role` da mensagem   RESPONSE_MESSAGE_ROLE_INVALID
       9. `status` da mensagem          RESPONSE_MESSAGE_NOT_COMPLETED
-     10. exatamente 1 bloco            RESPONSE_CONTENT_COUNT_INVALID
-     11. bloco: texto ou recusa        MODEL_REFUSED / RESPONSE_CONTENT_NOT_APPROVED
-     12. texto exato e não vazio       RESPONSE_OUTPUT_TEXT_INVALID / _EMPTY
+     10. fase final ou ausente         RESPONSE_MESSAGE_PHASE_INVALID
+     11. exatamente 1 bloco            RESPONSE_CONTENT_COUNT_INVALID
+     12. bloco: texto ou recusa        MODEL_REFUSED / RESPONSE_CONTENT_NOT_APPROVED
+     13. texto exato e não vazio       RESPONSE_OUTPUT_TEXT_INVALID / _EMPTY
 
     A ordem é fixa de propósito: a MESMA resposta malformada devolve SEMPRE o mesmo
     defeito. Deixar a iteração escolher o veredito faria dois operadores lerem duas
@@ -887,7 +890,17 @@ def extract_governed_response_text(
             f"status={safe_label(mstatus, KNOWN_MESSAGE_STATUSES)}",
         )
 
-    # 10. Exatamente um bloco. Dois blocos são duas respostas.
+    # 10. O SDK 2.24.0 expõe `phase` opcional. Se presente, `commentary` é
+    #     intermediária e nunca pode virar resposta final. Ausência é aceita porque
+    #     o campo é opcional, mas só existe UMA mensagem concluída nesta política.
+    fase = _atributo(mensagem, "phase")
+    if fase is not None and (type(fase) is not str or fase != APPROVED_MESSAGE_PHASE):
+        raise CodexRefusal(
+            CodexDefect.RESPONSE_MESSAGE_PHASE_INVALID,
+            f"phase={safe_label(fase, ('commentary', APPROVED_MESSAGE_PHASE))}",
+        )
+
+    # 11. Exatamente um bloco. Dois blocos são duas respostas.
     blocos = _atributo(mensagem, "content")
     if type(blocos) is not list or len(blocos) != 1:
         raise CodexRefusal(
@@ -897,7 +910,7 @@ def extract_governed_response_text(
     bloco = blocos[0]
     classe_bloco = type(bloco)
 
-    # 11. Recusa: DESFECHO controlado. Sem detalhe, sem texto, sem log. O campo
+    # 12. Recusa: DESFECHO controlado. Sem detalhe, sem texto, sem log. O campo
     #     `refusal` não é lido — a identidade da classe já identificou o desfecho, e
     #     dereferenciar o payload só criaria a chance de vazá-lo.
     if classe_bloco is types.output_refusal:
@@ -905,7 +918,7 @@ def extract_governed_response_text(
     if classe_bloco is not types.output_text:
         raise CodexRefusal(CodexDefect.RESPONSE_CONTENT_NOT_APPROVED, safe_type_name(bloco))
 
-    # 12. Texto exato, preservado byte a byte.
+    # 13. Texto exato, preservado byte a byte.
     texto = _texto_governado_de_bloco(bloco, types)
     return ExtractedResponseText(
         text=texto, reasoning_item_count=reasoning, compaction_item_count=compaction
