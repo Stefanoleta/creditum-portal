@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import sys
 
-from .codex import PrecallProbeComplete
+from .codex import PrecallProbeComplete, resolve_production_governed_response_types
 from .contract import (
     RUNTIME_ID,
     RUNTIME_VERSION,
@@ -145,6 +145,15 @@ def main(argv: list[str] | None = None) -> int:
         _log(f"SDK de produção não selado: {r.defect} — {r.detail}")
         return _recusa(r.defect)
 
+    # A política de resposta só é declarada pronta quando as seis classes EXATAS do
+    # SDK instalado também foram seladas. Esta leitura não constrói cliente nem chama
+    # o provedor.
+    try:
+        response_types = resolve_production_governed_response_types()
+    except CodexRefusal as r:
+        _log(f"tipos de resposta não selados: {r.defect} — {r.detail}")
+        return _recusa(r.defect)
+
     run = GovernedReasoningRun(
         contract=contrato,
         binding=binding,
@@ -154,7 +163,9 @@ def main(argv: list[str] | None = None) -> int:
         live_authorization=None,
     )
 
-    executor = CreditumCodexReasoningExecutor(sdk_provider=provedor)
+    executor = CreditumCodexReasoningExecutor(
+        sdk_provider=provedor, response_types=response_types
+    )
     veredito = "PRECALL_PROBE_REFUSED"
     try:
         executor.precall_probe(run)
