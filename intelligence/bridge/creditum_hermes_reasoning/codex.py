@@ -893,7 +893,7 @@ def extract_governed_response_text(
     # 10. O SDK 2.24.0 expõe `phase` opcional. Se presente, `commentary` é
     #     intermediária e nunca pode virar resposta final. Ausência é aceita porque
     #     o campo é opcional, mas só existe UMA mensagem concluída nesta política.
-    fase = _atributo(mensagem, "phase")
+    fase = getattr(mensagem, "phase", None)
     if fase is not None and (type(fase) is not str or fase != APPROVED_MESSAGE_PHASE):
         raise CodexRefusal(
             CodexDefect.RESPONSE_MESSAGE_PHASE_INVALID,
