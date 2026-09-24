@@ -15,6 +15,10 @@ from __future__ import annotations
 import os
 import pathlib
 import unittest
+from types import SimpleNamespace
+from unittest import mock
+
+import creditum_hermes_reasoning.runtime as runtime_module
 
 
 
@@ -248,6 +252,34 @@ if __name__ == "__main__":
 
 
 class AutoridadeDeRuntime(unittest.TestCase):
+    def test_versao_do_hermes_divergente_recusa_antes_da_configuracao(self) -> None:
+        with mock.patch.object(runtime_module, "_import_producao", return_value=SimpleNamespace(__version__="0.20.4")) as importar:
+            with self.assertRaises(RuntimeRefusal) as ctx:
+                resolve_approved_runtime_binding()
+        self.assertEqual(ctx.exception.defect, RuntimeDefect.RUNTIME_INCOMPATIBLE)
+        importar.assert_called_once_with(runtime_module.HERMES_PACKAGE_MODULE)
+
+    def test_versao_ausente_recusa(self) -> None:
+        with mock.patch.object(runtime_module, "_import_producao", return_value=SimpleNamespace()):
+            with self.assertRaises(RuntimeRefusal) as ctx:
+                resolve_approved_runtime_binding()
+        self.assertEqual(ctx.exception.defect, RuntimeDefect.RUNTIME_INCOMPATIBLE)
+
+    def test_versao_verificada_entra_no_vinculo_sem_fallback(self) -> None:
+        modulos = {
+            runtime_module.HERMES_PACKAGE_MODULE: SimpleNamespace(__version__="0.21.3"),
+            runtime_module.HERMES_CONFIG_MODULE: SimpleNamespace(load_config=lambda: {"model": {"default": MODEL}}),
+            runtime_module.HERMES_RUNTIME_MODULE: SimpleNamespace(resolve_runtime_provider=lambda **_: {
+                "provider": PROVIDER, "api_mode": APPROVED_API_MODE,
+                "base_url": TEST_FAKE_BASE_URL, "api_key": TEST_FAKE_SECRET,
+                "hermes_version": "0.20.4",
+            }),
+        }
+        with mock.patch.object(runtime_module, "_import_producao", side_effect=modulos.__getitem__):
+            vinculo = resolve_approved_runtime_binding()
+        self.assertEqual(vinculo.hermes_version, "0.21.3")
+        self.assertNotIn(TEST_FAKE_SECRET, repr(vinculo))
+
     def test_D_E_credencial_e_base_url_forjadas_sao_recusadas(self) -> None:
         # Mesmo com TODOS os campos de identidade combinando, o vínculo forjado cai:
         # o portão passou a exigir PROCEDÊNCIA, não consistência.
