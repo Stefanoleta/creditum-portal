@@ -17,6 +17,7 @@ import sys
 import traceback
 import types
 import unittest
+from unittest import mock
 
 from creditum_hermes_reasoning.codex import (
     CREATE_EXECUTION_CONTROL_FIELDS,
@@ -42,8 +43,10 @@ from creditum_hermes_reasoning.executor import (  # noqa: F401
     MODE_PRECALL_PROBE,
     VERDICT_MODEL_OUTPUT_UNVALIDATED,
     CreditumCodexReasoningExecutor,
+    ExecutorDefect,
     ExecutorRefusal,
     GovernedReasoningRun,
+    RESPONSE_POLICY_APPROVED,
     TrustedSdkProvider,
     UntrustedReasoningEnvelope,
 )
@@ -104,8 +107,8 @@ class Item:
     #: 3.1d-c6: a mensagem passou a declarar `role` e `status`, porque a política
     #: governada agora os confere — um `Response` concluído não desculpa uma mensagem
     #: não concluída.
-    def __init__(self, blocos, tipo="message", papel="assistant", status="completed"):
-        self.type, self.content, self.role, self.status = tipo, blocos, papel, status
+    def __init__(self, blocos, tipo="message", papel="assistant", status="completed", phase=None):
+        self.type, self.content, self.role, self.status, self.phase = tipo, blocos, papel, status, phase
 
 
 class Recusa:
@@ -766,6 +769,17 @@ class VivoComClienteFalso(unittest.TestCase):
 
 
 class EstruturaDesconhecida(unittest.TestCase):
+    def test_fase_commentary_nao_e_resposta_final(self) -> None:
+        for fase in ("commentary", "desconhecida", 7):
+            with self.assertRaises(CodexRefusal) as ctx:
+                extrai(Resposta(itens=[Item([Bloco(JSON_OK)], phase=fase)]))
+            self.assertEqual(ctx.exception.defect, CodexDefect.RESPONSE_MESSAGE_PHASE_INVALID)
+
+    def test_fase_final_ou_ausente_com_uma_mensagem_concluida(self) -> None:
+        for fase in ("final_answer", None):
+            extraido = extrai(Resposta(itens=[Item([Bloco(JSON_OK)], phase=fase)]))
+            self.assertEqual(extraido.text, JSON_OK)
+
     def test_tipo_de_item_desconhecido_e_recusado(self) -> None:
         with self.assertRaises(CodexRefusal) as ctx:
             # 3.1d-c6: a mensagem tem classe aprovada, mas DECLARA outro tipo. Classe
@@ -1262,7 +1276,7 @@ class EvidenciaNaoMENTE(unittest.TestCase):
 
         preparar(resposta_com(JSON_OK))
         executor = CreditumCodexReasoningExecutor(
-            sdk_provider=provedor(client_class=ClienteIndisponivel)
+            sdk_provider=provedor(client_class=ClienteIndisponivel), response_types=tipos()
         )
         with self.assertRaises(RuntimeError):
             executor.execute_live(run(live_authorization=live_authorization_for_tests()))
@@ -1641,3 +1655,50 @@ class FronteiraDaChamadaAoProvedor(unittest.TestCase):
         self.assertEqual(executor.evidence.verdict, "PROVIDER_CALL_FAILED")
         self.assertEqual(executor.evidence.provider_calls, 1)
         self.assertFalse(executor.evidence.model_call_completed)
+
+class PoliticaDeRespostaDeProducao(unittest.TestCase):
+    def _provedor(self, policy: str = RESPONSE_POLICY_APPROVED) -> TrustedSdkProvider:
+        return issue_trusted_sdk_provider_for_tests(
+            version=EXPECTED_SDK_VERSION,
+            client_class=ClienteFalso,
+            responses_resource_class=RecursoFalso,
+            create_descriptor=RecursoFalso.create,
+            response_policy=policy,
+        )
+
+    def test_politica_nao_aprovada_recusa_antes_do_cliente(self) -> None:
+        preparar(resposta_com(JSON_OK))
+        executor = CreditumCodexReasoningExecutor(sdk_provider=self._provedor("NAO_APROVADA"))
+        with self.assertRaises(ExecutorRefusal) as ctx:
+            executor.execute_live(run(live_authorization=live_authorization_for_tests()))
+        self.assertEqual(ctx.exception.defect, ExecutorDefect.LIVE_RESPONSE_POLICY_NOT_APPROVED)
+        self.assertEqual(CONSTRUCOES, [])
+
+    def test_tipos_reais_indisponiveis_recusam_antes_do_cliente(self) -> None:
+        preparar(resposta_com(JSON_OK))
+        executor = CreditumCodexReasoningExecutor(
+            sdk_provider=self._provedor(), response_types=tipos()
+        )
+        with mock.patch(
+            "creditum_hermes_reasoning.executor.resolve_production_governed_response_types",
+            side_effect=CodexRefusal(CodexDefect.RESPONSE_TYPES_NOT_AVAILABLE),
+        ):
+            with self.assertRaises(CodexRefusal) as ctx:
+                executor.execute_live(run(live_authorization=live_authorization_for_tests()))
+        self.assertEqual(ctx.exception.defect, CodexDefect.RESPONSE_TYPES_NOT_AVAILABLE)
+        self.assertEqual(CONSTRUCOES, [])
+        self.assertEqual(chamadas(), [])
+
+    def test_politica_aprovada_usa_resolvedor_selado(self) -> None:
+        preparar(resposta_com(JSON_OK))
+        executor = CreditumCodexReasoningExecutor(sdk_provider=self._provedor())
+        with mock.patch(
+            "creditum_hermes_reasoning.executor.resolve_production_governed_response_types",
+            return_value=tipos(),
+        ) as resolver:
+            envelope = executor.execute_live(
+                run(live_authorization=live_authorization_for_tests())
+            )
+        resolver.assert_called_once_with()
+        self.assertEqual(envelope.verdict, VERDICT_MODEL_OUTPUT_UNVALIDATED)
+        self.assertEqual(len(chamadas()), 1)
