@@ -1,0 +1,203 @@
+# D2E-A8-R4F — laboratório descartável de BUILD + EVIDÊNCIA da imagem final.
+#
+# Isto NÃO é produção, NÃO é a VPS futura, NÃO é cutover do Telegram e NÃO é
+# FIRST LIVE. O Managed Hermes da Hostinger não é tocado por nada aqui.
+#
+# Existe por um motivo só: a máquina de desenvolvimento é um Mac Intel sem Docker,
+# e a prova que o regate exige é a imagem final DE VERDADE — não uma fixture, não
+# um diretório reconstruído. Um runner Linux gratuito constrói e inspeciona.
+#
+# ─── Segredos: ZERO ───────────────────────────────────────────────────────────
+#
+# Nenhum `secrets.` aparece neste arquivo. O build clona fonte pública e baixa
+# imagens públicas fixadas por dígito; a evidência roda com a rede DESLIGADA.
+# Se algum dia isto precisar de um segredo, deixou de ser evidência de runtime
+# imutável e passou a ser outra coisa.
+#
+# ─── Nada de programa dentro de YAML ─────────────────────────────────────────
+#
+# A lógica de evidência mora em scripts GOVERNADOS do repositório
+# (`verify-final-image.py`, `runtime-inventory.py`, `seal-runtime-manifest.py`).
+# Bytes que só existem no CI não são revisáveis nem testáveis, e a a8 passou
+# rodadas estabelecendo que entrada de build tem de ser fonte governada.
+name: a8-r4 final image evidence
+
+on:
+  workflow_dispatch:
+
+# Só leitura. Não escreve no repositório, não publica pacote, não cria release,
+# não empurra imagem para registro nenhum.
+permissions:
+  contents: read
+
+jobs:
+  evidencia:
+    # Versão FIXA, não `ubuntu-latest`: runner móvel é autoridade móvel, e este
+    # arquivo existe para não ter nenhuma.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      # Fixado por COMMIT, não por tag. `v7` é ponteiro que se move; commit não.
+      # Resolvido no repositório oficial actions/checkout, tag v7.0.1.
+      - name: checkout do commit de evidencia
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          # O token do runner não fica no workspace. Nada aqui precisa dele, e
+          # credencial que sobra é credencial que vaza.
+          persist-credentials: false
+
+      - name: ambiente do runner
+        run: |
+          set -euo pipefail
+          echo "runner: $(uname -s) $(uname -m)"
+          docker version --format 'docker client {{.Client.Version}} / server {{.Server.Version}}'
+          echo "commit de evidencia: ${GITHUB_SHA}"
+
+      # As autoridades vêm do MANIFESTO GOVERNADO, não escritas de novo aqui.
+      - name: autoridades governadas, lidas do manifesto
+        run: |
+          set -euo pipefail
+          cd intelligence
+          python3 -B deploy/vps/ci-evidence-env.py >> "$GITHUB_ENV"
+          echo "autoridades carregadas do manifesto governado"
+
+      - name: o selo recusa antes de a imagem existir
+        run: |
+          set -euo pipefail
+          cd intelligence
+          if python3 -B deploy/vps/seal-runtime-manifest.py --check; then
+            echo "RECUSA_ESPERADA_NAO_OCORREU" >&2
+            exit 1
+          fi
+          echo "sem --runtime-root o --check recusou, como deve"
+
+      - name: build da imagem final governada
+        run: |
+          set -euo pipefail
+          docker build \
+            --file intelligence/deploy/vps/Dockerfile \
+            --build-arg "HERMES_COMMIT=${HERMES_COMMIT}" \
+            --build-arg "HERMES_LOCK_SHA256=${HERMES_LOCK_SHA256}" \
+            --tag creditum-hermes:a8-r4-final-evidence \
+            intelligence
+          IMG=$(docker image inspect creditum-hermes:a8-r4-final-evidence --format '{{.Id}}')
+          echo "IMAGE_ID=${IMG}" >> "$GITHUB_ENV"
+          echo "image id: ${IMG}"
+
+      - name: identidade da imagem e o ENTRYPOINT que NAO sera executado
+        run: |
+          set -euo pipefail
+          docker image inspect creditum-hermes:a8-r4-final-evidence \
+            --format 'entrypoint governado: {{.Config.Entrypoint}}'
+          docker image inspect creditum-hermes:a8-r4-final-evidence \
+            --format 'repodigests: {{if .RepoDigests}}{{.RepoDigests}}{{else}}nenhum - imagem LOCAL, nunca empurrada{{end}}'
+
+      # ─── daqui para baixo, TODA execucao usa --network none ────────────────
+      #
+      # A imagem CONSTROI com rede (clone da fonte, imagens OCI, wheels do lock).
+      # A EVIDENCIA nao: se o selo precisasse de rede para dar PASS, ele nao
+      # estaria medindo o que esta dentro da imagem.
+      - name: evidencia dentro da imagem final
+        run: |
+          set -euo pipefail
+          docker run --rm --network none \
+            --volume "${PWD}/intelligence:/repo:ro" --workdir /repo \
+            --entrypoint /opt/venv/bin/python \
+            creditum-hermes:a8-r4-final-evidence \
+            -B deploy/vps/verify-final-image.py \
+               --runtime-root /opt/hermes-agent \
+               --manifest /opt/creditum/runtime-manifest.json
+
+      - name: inventario governado, recomputado dentro da imagem
+        run: |
+          set -euo pipefail
+          docker run --rm --network none \
+            --volume "${PWD}/intelligence:/repo:ro" --workdir /repo \
+            --entrypoint /opt/venv/bin/python \
+            creditum-hermes:a8-r4-final-evidence \
+            -B deploy/vps/runtime-inventory.py --hermes-root /opt/hermes-agent \
+            | tee inventario.txt
+          OBS=$(awk '/RUNTIME_INVENTORY_SHA256/ {print $2}' inventario.txt)
+          echo "observado: ${OBS}"
+          echo "esperado:  ${INVENTARIO_ESPERADO}"
+          test "${OBS}" = "${INVENTARIO_ESPERADO}"
+          echo "INVENTARIO_OBSERVADO=${OBS}" >> "$GITHUB_ENV"
+
+      - name: selo completo contra a imagem final
+        run: |
+          set -euo pipefail
+          docker run --rm --network none \
+            --volume "${PWD}/intelligence:/repo:ro" --workdir /repo \
+            --entrypoint /opt/venv/bin/python \
+            creditum-hermes:a8-r4-final-evidence \
+            -B deploy/vps/seal-runtime-manifest.py --check \
+               --runtime-root /opt/hermes-agent \
+               --installed-entrypoint /opt/creditum/prestart-gate.sh | tee selo.txt
+          grep -q SELADO selo.txt
+          A6=$(awk '/manifesto a6/ {print $3}' selo.txt | tail -1)
+          echo "manifesto a6 observado: ${A6}"
+          echo "manifesto a6 esperado:  ${A6_ESPERADO}"
+          test "${A6}" = "${A6_ESPERADO}"
+          echo "A6_OBSERVADO=${A6}" >> "$GITHUB_ENV"
+
+      - name: nenhum gateway, nenhum poller
+        run: |
+          set -euo pipefail
+          docker run --rm --network none \
+            --entrypoint /bin/sh creditum-hermes:a8-r4-final-evidence -c \
+            'ps ax; ps ax | grep -v grep | grep -E "hermes .*run|gateway|polling" && exit 2 || echo "nenhum processo de gateway ou poller"'
+          echo "nenhum conteiner de evidencia executou o ENTRYPOINT governado"
+
+      # ─── o ENTRYPOINT REAL, sem sobreposicao ────────────────────────────
+      #
+      # Este passo existe porque o defeito da a8-r4g sobreviveu a varias rodadas:
+      # TODA execucao de evidencia sobrepunha o ENTRYPOINT, entao ninguem nunca
+      # exercitou o caminho de arranque normal. O que nao e exercitado nao e
+      # provado.
+      #
+      # A condicao invalida e controlada e verdadeira: nao ha /data montado, entao
+      # o manifesto que o portao exige nao existe. O portao roda, verifica, recusa
+      # e sai != 0 — ANTES de qualquer `hermes gateway run`. Sem rede, sem token,
+      # sem credencial, sem estado de producao.
+      - name: ENTRYPOINT REAL executa e recusa antes do gateway
+        run: |
+          set -uo pipefail
+          set +e
+          docker run --rm --network none \
+            creditum-hermes:a8-r4-final-evidence > entrypoint.txt 2>&1
+          CODIGO=$?
+          set -e
+          echo "exit do ENTRYPOINT real: ${CODIGO}"
+          cat entrypoint.txt
+          test "${CODIGO}" -ne 0
+          # O portao chegou a rodar a verificacao da a6 — nao morreu no sentinela.
+          if grep -q PRESTART_MANIFEST_SHA_NOT_PINNED entrypoint.txt; then
+            echo "ENVELOPE_NAO_LIGADO: o template cru foi instalado" >&2
+            exit 1
+          fi
+          grep -qE "PRESTART_GATE_FAILED|MANIFEST" entrypoint.txt
+          # E o gateway nunca subiu.
+          if grep -qE "gateway run|Application started|polling" entrypoint.txt; then
+            echo "GATEWAY_SUBIU" >&2
+            exit 1
+          fi
+          echo "ENTRYPOINT real: executou, recusou, gateway nao subiu"
+
+      - name: sumario de evidencia legivel por maquina
+        run: |
+          set -euo pipefail
+          cd intelligence
+          python3 -B deploy/vps/ci-evidence-summary.py \
+            --inventory "${INVENTARIO_OBSERVADO}" \
+            --a6 "${A6_OBSERVADO}" \
+            --evidence-commit "${GITHUB_SHA}" \
+            --image-id "${IMAGE_ID}" \
+            --run-id "${GITHUB_RUN_ID}" \
+            --runner ubuntu-24.04 | tee evidencia.json
+          {
+            echo '## A8-R4 - evidencia da imagem final'
+            echo '```json'
+            cat evidencia.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
